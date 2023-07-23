@@ -1,0 +1,13 @@
+running: True
+
+plot_size: 77000000000
+plot_directories:
+    - /mnt/intelRock/
+destination_directories:
+    - /mnt/disk01
+destination_suffix: plotC5
+obsolete_folder:
+    - plotOG
+    - .
+max_concurrent: 5
+rsync_bw_limit: 0
