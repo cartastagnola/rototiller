@@ -117,6 +117,7 @@ async def findPlotsA(sources, plots_queue):
     for source in sources:
         for plot in Path(source).glob("*.plot"):
             if plot in plots_archive:
+                print(plot)
                 continue
             await plots_queue.put(plot)
             plots_archive.append(plot)
@@ -151,6 +152,7 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
 
     # IF there is free space, lets fill first
     print("replant starting...")
+    error = "EE_"
     try:
         if not dest_queue.empty():
             dest_root = await dest_queue.get()
@@ -164,6 +166,7 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
                 plot_size = plot.stat().st_size
                 print(f'plot size {plot_size}')
                 dest = dest_root.joinpath(dest_suffix)
+                error = error + str(dest) + str(plot)
                 if not dest.exists():
                     dest.mkdir(exist_ok=False)
 
@@ -182,6 +185,14 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
                     if there are old plots that can be canceled it will be pick up again.")
     except Exception as e:
         print(f"something wrong with the replant: {e}")
+        with open(error, "w") as f:
+            f.write(error)
+            f.write("error")
+            f.write(e)
+            f.write("END")
+            f.close()
+        await plots_queue.put(plot)
+        await dest_queue.put(dest_root)
     except KeyboardInterrupt:
         print("who stoppped my replant?")
         await plots_queue.put(plot)
@@ -198,7 +209,7 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
 
 async def movePlotA(plot, destination):
     """Move a file from source to destination directory."""
-    cmd = f"rsync -v --preallocate --whole-file --bwlimit={bwlimit} --remove-source-files {plot} {destination}"
+    cmd = f"ionice -c 3 rsync -v --preallocate --whole-file --bwlimit={bwlimit} --remove-source-files {plot} {destination}"
     #cmd = f"mv -v {plot} {destination}"
     print()
     print(f"MOVING {plot}")
@@ -226,10 +237,23 @@ async def movePlotA(plot, destination):
 
         if proc.returncode != 0:
             print(f"ERROR CODE {proc.returncode}")
+            with open(cmd, "w") as f:
+                f.write(cmd)
+                f.write("error")
+                f.write(f"ERROR CODE {proc.returncode}")
+                f.write("END")
+                f.close()
         if proc.returncode == 0:
             print(f"Finished the move to {destination} in {finish - start} seconds.")
     except Exception as e:
         print(f'ERROR {e} in movePlotA')
+          
+        with open(cmd, "w") as f:
+            f.write(cmd)
+            f.write("error")
+            f.write(e)
+            f.write("END")
+            f.close()
 
 async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_concurrent):
     print("inside the obsolete oblivion")
@@ -362,6 +386,10 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
         if plots_queue.qsize() < max_concurrent:
             print("checking for new plots")
             await findPlotsA(sources, plots_queue)
+        else:
+            print("plots queue is greater then max_concurrent")
+            print(plots_queue.qsize(), " queue size")
+            print(max_concurrent, "max concurrent")
 
         # check if we capped
         if len(tasks) == max_concurrent or dest_queue.empty() or plots_queue.empty():
