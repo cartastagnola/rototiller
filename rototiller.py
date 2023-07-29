@@ -94,6 +94,7 @@ async def logging(message):
         print("I am logging\n")
 
 logging("iamworking")
+logging("iamworking")
 
 def findPlots(sources):
     for source in sources:
