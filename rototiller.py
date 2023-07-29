@@ -24,6 +24,7 @@ plot_size = 42000000 # byte
 is_running = False
 max_concurrent = 1
 bwlimit = 100000
+configPath = 'config.yaml'
 
 # global to keep track of all the plots moved, so i can check if i placed already in the queue.
 # we can eliminate by using some os call when new files arrive
@@ -38,7 +39,7 @@ info_move_active = []
 info_delete_active = []
 
 # Load YAML data
-with open('configPlotter.yaml', 'r') as file:
+with open(configPath, 'r') as file:
     data = yaml.safe_load(file)
 
 is_running = data['running']
@@ -49,6 +50,9 @@ dest_suffix = data['destination_suffix']
 obsolete_dir = data['obsolete_folder']
 max_concurrent = data['max_concurrent']
 bwlimit = data['rsync_bw_limit']
+
+# Load logging file
+loggingPath = 'debugRoto.log'
 
 # i should check that dest suffix is not in obsolete dir to avoid problems
 
@@ -80,6 +84,16 @@ print(dest_suffix)
 
 def printCmd(sources, destinations):
     click.echo(f"I am running with plotting source: {sources} and destination: {destinations}")
+
+log_lock = asyncio.Lock()
+async def logging(message):
+    str_message = str(message) + '\n'
+    async with log_lock:
+        with open(loggingPath, 'a') as logFile:
+            logFile.write(str_message)
+        print("I am logging\n")
+
+logging("iamworking")
 
 def findPlots(sources):
     for source in sources:
@@ -136,22 +150,22 @@ async def evaluateDestinations(destinations, dest_queue, obsolete_queue, obsolet
                         size = await get_dir_size_noSub(path_folder)
                         if size != 0:
                             await obsolete_queue.put(path)
-                            print(f"The disk: {path} is full, but it can be emptied of {size / unit['factor']} {unit['size']}")
+                            await logging(f"The disk: {path} is full, but it can be emptied of {size / unit['factor']} {unit['size']}")
                             break
                     else:
                         obsolete_folders_number -= 1
-                        print(f"The disk: {path} has no subfolder {folder}")
+                        await logging(f"The disk: {path} has no subfolder {folder}")
                         if obsolete_folders_number == 0:
-                            print(f"The disk: {path} is full.")
+                            await logging(f"The disk: {path} is full.")
            else:
-                print(f"The disk: {path} is full.")
+                await logging(f"The disk: {path} is full.")
         else:
             await dest_queue.put(path)
 
 async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
 
     # IF there is free space, lets fill first
-    print("replant starting...")
+    await logging("replant starting...")
     error = "EE_"
     try:
         if not dest_queue.empty():
@@ -164,7 +178,7 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
             else:
                 plot = await plots_queue.get()
                 plot_size = plot.stat().st_size
-                print(f'plot size {plot_size}')
+                await logging(f'plot size {plot_size}')
                 dest = dest_root.joinpath(dest_suffix)
                 error = error + str(dest) + str(plot)
                 if not dest.exists():
@@ -172,19 +186,19 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
 
                 if freeSpace(dest) > plot_size:
                     # move
-                    print(f"replant: moving to this destination: {dest}")
+                    await logging(f"replant: moving to this destination: {dest}")
                     await movePlotA(plot, dest)
-                    print(f"plot moved to {dest}")
+                    await logging(f"plot moved to {dest}")
                     await dest_queue.put(dest_root)
                 else:
                     # here something should happen? like it exit from the queue, and then
                     # it will be pick up again if it is eligible to deleto old plots?
                     await plots_queue.put(plot)
                     await obsolete_queue.put(dest_root)
-                    print(f"The {dest_root} destination is full, the destination will be dropped,\
+                    await logging(f"The {dest_root} destination is full, the destination will be dropped,\
                     if there are old plots that can be canceled it will be pick up again.")
     except Exception as e:
-        print(f"something wrong with the replant: {e}")
+        await logging(f"something wrong with the replant: {e}")
         with open(error, "w") as f:
             f.write(error)
             f.write("error")
@@ -194,7 +208,7 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
         await plots_queue.put(plot)
         await dest_queue.put(dest_root)
     except KeyboardInterrupt:
-        print("who stoppped my replant?")
+        await logging("who stoppped my replant pressing a key?")
         await plots_queue.put(plot)
         await dest_queue.put(dest_root)
         pass
@@ -211,32 +225,23 @@ async def movePlotA(plot, destination):
     """Move a file from source to destination directory."""
     cmd = f"ionice -c 3 rsync -v --preallocate --whole-file --bwlimit={bwlimit} --remove-source-files {plot} {destination}"
     #cmd = f"mv -v {plot} {destination}"
-    print()
-    print(f"MOVING {plot}")
-    print()
-    print(f"to {destination}")
-
+    await logging(f"MOVING {plot}")
+    await logging(f"to {destination}")
 
     try:
-        print('first')
         info_move_active.append(cmd)
         proc = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        print('first')
         start = datetime.now()
-        print('first comunicate')
         stdout, stderr = await proc.communicate()
-        print('first date and time')
         finish = datetime.now()
-        print('seondfirst')
         info_move_active.remove(cmd)
-        print('seondfirst end')
 
         if proc.returncode != 0:
-            print(f"ERROR CODE {proc.returncode}")
+            await logging(f"ERROR CODE {proc.returncode}")
             with open(cmd, "w") as f:
                 f.write(cmd)
                 f.write("error")
@@ -244,9 +249,9 @@ async def movePlotA(plot, destination):
                 f.write("END")
                 f.close()
         if proc.returncode == 0:
-            print(f"Finished the move to {destination} in {finish - start} seconds.")
+            await logging(f"Finished the move to {destination} in {finish - start} seconds.")
     except Exception as e:
-        print(f'ERROR {e} in movePlotA')
+        await logging(f'ERROR {e} in movePlotA')
           
         with open(cmd, "w") as f:
             f.write(cmd)
@@ -263,7 +268,7 @@ async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_
         for folder in obsolete_folders:
             path_folder = path.joinpath(folder)
             if path_folder.exists():
-                print(f'the plot folder is {path_folder}')
+                await logging(f'the plot folder is {path_folder}')
                 with os.scandir(path_folder) as files:
                     count = 0
                     for entry in files:
@@ -275,18 +280,16 @@ async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_
                                 print(entry)
                                 file_path = entry.path
                                 print(file_path)
-                                print()
                                 print("DELETING")
-                                print()
                                 info_delete_active.append(file_path)
                                 await asyncio.sleep(0)  # Allow other tasks to run
                                 os.remove(file_path)
                                 print("file deleted")
                             except Exception as e:
-                                print(f'an error happend deleting {file_path}')
-                                print(f'the exception is: {e}')
+                                await logging(f'an error happend deleting {file_path}')
+                                await logging(f'the exception is: {e}')
                             finally:
-                                await asyncio.sleep(15)
+                                await asyncio.sleep(5)
                                 print("obsolete oblivion awaited")
                                 info_delete_active.remove(file_path)
                                 count += 1
@@ -294,11 +297,11 @@ async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_
                                     print("breaked the oblivion")
                                     break
                     if count != 0:
-                        print('added a new disk into the destination queue')
+                        await logging('added a new disk into the destination queue')
                         await dest_queue.put(path)
 
 async def updateConfig():
-    with open('configPlotter.yaml', 'r') as file:
+    with open(configPath, 'r') as file:
         data = yaml.safe_load(file)
 
     return data['running']
@@ -334,9 +337,12 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
         print("checking update config")
         is_running = await updateConfig()
 
-        # clear the terminal
-        if False:
+        # DEBUGGING: clear the terminal
+        # create a config variable for debugging the interface? so there is only
+        # one place to change
+        if True:
             os.system('cls' if os.name == 'nt' else 'clear')
+
         print()
         print(f'Dest queue:     {dest_queue.qsize()}')
         print(f'Obsolete queue: {obsolete_queue.qsize()}')
@@ -376,15 +382,16 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
                     if task.done():
                         d_tasks.remove(task)
             except Exception as e:
-                print(f"something WRONG by creating free space: {e}")
+                await logging(f"something WRONG by creating free space: {e}")
             except KeyboardInterrupt:
-                print("who enlighed my oblivion?")
+                await logging("who enlighed my oblivion?")
             finally:
-                print("new free space here... maybe")
+                await logging("new free space here... maybe")
 
         # check for new plots
         if plots_queue.qsize() < max_concurrent:
             print("checking for new plots")
+            await logging("logging in the main")
             await findPlotsA(sources, plots_queue)
         else:
             print("plots queue is greater then max_concurrent")
