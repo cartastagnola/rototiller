@@ -87,7 +87,8 @@ def printCmd(sources, destinations):
 
 log_lock = asyncio.Lock()
 async def logging(message):
-    str_message = str(message) + '\n'
+    timestamp = datetime.now().isoformat(timespec='seconds')
+    str_message = timestamp + ' - ' + str(message) + '\n'
     async with log_lock:
         with open(loggingPath, 'a') as logFile:
             logFile.write(str_message)
