@@ -12,12 +12,6 @@ import yaml
 
 import click
 
-# globals
-plots_dir = []
-destination_dir = []
-obsolete_dir = []
-dest_suffix = '.'
-
 plots = []
 #plot_size = 70000000000 # byte
 plot_size = 42000000 # byte
@@ -38,19 +32,6 @@ unit = {'size' : sel_unit, 'factor' : space_unit_size[sel_unit]}
 info_move_active = []
 info_delete_active = []
 
-# Load YAML data
-with open(configPath, 'r') as file:
-    data = yaml.safe_load(file)
-
-is_running = data['running']
-plot_size = data['plot_size']
-plots_dir = data['plot_directories']
-destination_dir =data['destination_directories']
-dest_suffix = data['destination_suffix']
-obsolete_dir = data['obsolete_folder']
-max_concurrent = data['max_concurrent']
-bwlimit = data['rsync_bw_limit']
-
 # Load logging file
 loggingPath = 'debugRoto.log'
 
@@ -68,27 +49,48 @@ loggingPath = 'debugRoto.log'
 #destination_dir.append("/mnt/sm487_03")
 #
 
-print(is_running)
-print(plots_dir)
-print(plot_size)
-print(destination_dir)
-print(dest_suffix)
+#
+#@click.command()
+#@click.option('--sources',
+#              prompt='plotting directories',
+#              help='the list of plotting directories or a path to a file.')
+#@click.option('--destinations',
+#              prompt='destination directories',
+#              help='the list of the final directories for plots or a path to a file.')
+#
+#def printCmd(sources, destinations):
+#    click.echo(f"I am running with plotting source: {sources} and destination: {destinations}")
 
-@click.command()
-@click.option('--sources',
-              prompt='plotting directories',
-              help='the list of plotting directories or a path to a file.')
-@click.option('--destinations',
-              prompt='destination directories',
-              help='the list of the final directories for plots or a path to a file.')
+class ConfigParam:
+    def __init__(self):
+        self.is_running = False
+        self.plot_size = 0
+        self.plots_dir = []
+        self.destination_dir = []
+        self.dest_suffix = ''
+        self.obsolete_dir = []
+        self.max_concurrent = 1
+        self.bwlimit = 0
 
-def printCmd(sources, destinations):
-    click.echo(f"I am running with plotting source: {sources} and destination: {destinations}")
+def loadYamlConfig(configPath, config):
+    """Load YAML data. """
+    with open(configPath, 'r') as file:
+        data = yaml.safe_load(file)
+
+    config.is_running = data['running']
+    config.plot_size = data['plot_size']
+    config.plots_dir = data['plot_directories']
+    config.destination_dir =data['destination_directories']
+    config.dest_suffix = data['destination_suffix']
+    config.obsolete_dir = data['obsolete_folder']
+    config.max_concurrent = data['max_concurrent']
+    config.bwlimit = data['rsync_bw_limit']
+
 
 log_lock = asyncio.Lock()
 async def logging(message):
     timestamp = datetime.now().isoformat(timespec='seconds')
-    str_message = timestamp + ' - ' + str(message) + '\n'
+    str_message = timestamp + ' ' + str(message) + '\n'
     async with log_lock:
         with open(loggingPath, 'a') as logFile:
             logFile.write(str_message)
@@ -302,13 +304,10 @@ async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_
                         await logging('added a new disk into the destination queue')
                         await dest_queue.put(path)
 
-async def updateConfig():
-    with open(configPath, 'r') as file:
-        data = yaml.safe_load(file)
+async def updateConfig(configPath, config):
+    loadYamlConfig(configPath, config)
 
-    return data['running']
-
-async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_folders, is_running=True):
+async def main(config):
     # get the loop
     loop = asyncio.get_running_loop()
 
@@ -316,8 +315,8 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
     dest_queue = asyncio.Queue()
     obsolete_queue = asyncio.Queue()
     plots_queue = asyncio.Queue()
-    await evaluateDestinations(destinations, dest_queue, obsolete_queue, obsolete_folders)
-    await findPlotsA(sources, plots_queue)
+    await evaluateDestinations(config.destination_dir, dest_queue, obsolete_queue, config.obsolete_dir)
+    await findPlotsA(config.plots_dir, plots_queue)
 
     print(f'Dest queue {dest_queue}')
     print()
@@ -334,15 +333,15 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
     d_tasks = []
 
 
-    while is_running:
+    while config.is_running:
 
         print("checking update config")
-        is_running = await updateConfig()
+        await updateConfig(configPath, config)
 
         # DEBUGGING: clear the terminal
         # create a config variable for debugging the interface? so there is only
         # one place to change
-        if True:
+        if False:
             os.system('cls' if os.name == 'nt' else 'clear')
 
         print()
@@ -369,14 +368,14 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
 
         # delete plots
         print("the bool value")
-        print(obsolete_queue.qsize() != 0 and dest_queue.qsize() <= max_concurrent)
+        print(obsolete_queue.qsize() != 0 and dest_queue.qsize() <= config.max_concurrent)
         print(obsolete_queue.qsize())
         print(plots_queue.qsize())
-        if obsolete_queue.qsize() != 0 and dest_queue.qsize() <= max_concurrent:
+        if obsolete_queue.qsize() != 0 and dest_queue.qsize() <= config.max_concurrent:
             try:
                 # should i check here also the number of free disk?
-                task = asyncio.create_task(deleteObsoletePlots(obsolete_queue, obsolete_folders,
-                                                            dest_queue, max_concurrent))
+                task = asyncio.create_task(deleteObsoletePlots(obsolete_queue, config.obsolete_dir,
+                                                            dest_queue, config.max_concurrent))
                 d_tasks.append(task)
 
                 # Remove completed tasks
@@ -391,17 +390,17 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
                 await logging("new free space here... maybe")
 
         # check for new plots
-        if plots_queue.qsize() < max_concurrent:
+        if plots_queue.qsize() < config.max_concurrent:
             print("checking for new plots")
             await logging("logging in the main")
-            await findPlotsA(sources, plots_queue)
+            await findPlotsA(plots_dir, plots_queue)
         else:
             print("plots queue is greater then max_concurrent")
             print(plots_queue.qsize(), " queue size")
-            print(max_concurrent, "max concurrent")
+            print(config.max_concurrent, "max concurrent")
 
         # check if we capped
-        if len(tasks) == max_concurrent or dest_queue.empty() or plots_queue.empty():
+        if len(tasks) == config.max_concurrent or dest_queue.empty() or plots_queue.empty():
             print("lest rest hoping something will happen")
             print(f'plots queue: size {plots_queue.qsize()} and emptyness {plots_queue.empty()}')
             # Remove completed tasks
@@ -412,8 +411,8 @@ async def main(sources, destinations, dest_suffix, max_concurrent, obsolete_fold
             continue
         try:
 
-            print(f"Tasks running: {len(tasks)} of {max_concurrent}")
-            task = asyncio.create_task(replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue))
+            print(f"Tasks running: {len(tasks)} of {config.max_concurrent}")
+            task = asyncio.create_task(replantPlots(dest_queue, config.dest_suffix, obsolete_queue, plots_queue))
             tasks.append(task)
 
             # Remove completed tasks
@@ -472,14 +471,25 @@ def checkSourceAndDestination():
     return 0
 
 if __name__ == '__main__':
-    sources = plots_dir
-    destinations = destination_dir
-    destinations = destination_dir
-    obsolete_folders = obsolete_dir
-    is_running = is_running
+
+    # initialize the conf
+    config = ConfigParam()
+    loadYamlConfig(configPath, config)
+    print(config.is_running)
+    print(config.plots_dir)
+    print(config.plot_size)
+    print(config.destination_dir)
+    print(config.dest_suffix)
+
+    sources = config.plots_dir
+    destinations = config.destination_dir
+    obsolete_folders = config.obsolete_dir
+    is_running = config.is_running
 
 
-    asyncio.run(main(sources, destinations, dest_suffix, max_concurrent, obsolete_folders, is_running))
+    #asyncio.run(main(sources, destinations, dest_suffix, max_concurrent, obsolete_folders, is_running))
+    #asyncio.run(main(plots_dir, destination_dir, dest_suffix, max_concurrent, obsolete_dir, is_running))
+    asyncio.run(main(config))
 
 
 
