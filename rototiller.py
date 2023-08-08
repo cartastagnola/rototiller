@@ -313,6 +313,9 @@ async def main(config):
     # get the loop
     loop = asyncio.get_running_loop()
 
+    # global
+    global info_move_active
+
     # init the queue
     dest_queue = asyncio.Queue()
     obsolete_queue = asyncio.Queue()
@@ -369,10 +372,6 @@ async def main(config):
         print("_________real time logs_________")
 
         # delete plots
-        print("the bool value")
-        print(obsolete_queue.qsize() != 0 and dest_queue.qsize() <= config.max_concurrent)
-        print(obsolete_queue.qsize())
-        print(plots_queue.qsize())
         if obsolete_queue.qsize() != 0 and dest_queue.qsize() <= config.max_concurrent:
             try:
                 # should i check here also the number of free disk?
@@ -472,7 +471,13 @@ def checkSourceAndDestination():
     # check that or the paths or the files with tha path are given at startup
     return 0
 
+
+
 if __name__ == '__main__':
+
+
+    #createFakePlots()
+    #exit()
 
     # initialize the conf
     config = ConfigParam()
@@ -504,7 +509,6 @@ if __name__ == '__main__':
     findPlots(sources)
 
     ## create plots
-    #createFakePlots()
 
     print(plots)
 
