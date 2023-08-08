@@ -85,19 +85,20 @@ def loadYamlConfig(configPath, config):
     config.obsolete_dir = data['obsolete_folder']
     config.max_concurrent = data['max_concurrent']
     config.bwlimit = data['rsync_bw_limit']
+    config.debugging = data['debugging']
 
 
 log_lock = asyncio.Lock()
-async def logging(message):
+async def logging(*args):
     timestamp = datetime.now().isoformat(timespec='seconds')
-    str_message = timestamp + ' ' + str(message) + '\n'
+    str_message = timestamp + ' '
+    for arg in args:
+        str_message += str(arg)
+    str_message += '\n'
+
     async with log_lock:
         with open(loggingPath, 'a') as logFile:
             logFile.write(str_message)
-        print("I am logging\n")
-
-logging("iamworking")
-logging("iamworking")
 
 def findPlots(sources):
     for source in sources:
@@ -135,7 +136,7 @@ async def findPlotsA(sources, plots_queue):
     for source in sources:
         for plot in Path(source).glob("*.plot"):
             if plot in plots_archive:
-                print(plot)
+                await logging(plot)
                 continue
             await plots_queue.put(plot)
             plots_archive.append(plot)
@@ -149,7 +150,7 @@ async def evaluateDestinations(destinations, dest_queue, obsolete_queue, obsolet
                 obsolete_folders_number = len(obsolete_folders)
                 for folder in obsolete_folders:
                     path_folder = path.joinpath(folder)
-                    print(path_folder)
+                    await logging(path_folder)
                     if path_folder.exists():
                         size = await get_dir_size_noSub(path_folder)
                         if size != 0:
@@ -175,10 +176,10 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
         if not dest_queue.empty():
             dest_root = await dest_queue.get()
             #if not dest_root.is_mount():
-            #    print(f"The {dest_root} destination is not mounted, the destination will be dropped")
+            #    await logging(f"The {dest_root} destination is not mounted, the destination will be dropped")
             #    return 0
             if False:
-                print("not possible I am printed")
+                await logging("not possible I am printed")
             else:
                 plot = await plots_queue.get()
                 plot_size = plot.stat().st_size
@@ -265,9 +266,9 @@ async def movePlotA(plot, destination):
             f.close()
 
 async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_concurrent):
-    print("inside the obsolete oblivion")
+    await logging("inside the obsolete oblivion")
     while dest_queue.qsize() < max_concurrent or obsolete_queue.empty() != False:
-        print("inside the while delete")
+        await logging("inside the while delete")
         path = Path(await obsolete_queue.get())
         for folder in obsolete_folders:
             path_folder = path.joinpath(folder)
@@ -277,28 +278,28 @@ async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_
                     count = 0
                     for entry in files:
                         if entry.is_file() and Path(entry.name).suffix == '.plot':
-                            print("inside")
-                            print(entry.name)
+                            await logging("inside")
+                            await logging(entry.name)
                             try:
-                                print("plot to delete is:")
-                                print(entry)
+                                await logging("plot to delete is:")
+                                await logging(entry)
                                 file_path = entry.path
-                                print(file_path)
-                                print("DELETING")
+                                await logging(file_path)
+                                await logging("DELETING")
                                 info_delete_active.append(file_path)
                                 await asyncio.sleep(0)  # Allow other tasks to run
                                 os.remove(file_path)
-                                print("file deleted")
+                                await logging("file deleted")
                             except Exception as e:
                                 await logging(f'an error happend deleting {file_path}')
                                 await logging(f'the exception is: {e}')
                             finally:
                                 await asyncio.sleep(5)
-                                print("obsolete oblivion awaited")
+                                await logging("obsolete oblivion awaited")
                                 info_delete_active.remove(file_path)
                                 count += 1
                                 if freeSpace(path) > (2 * plot_size):
-                                    print("breaked the oblivion")
+                                    await logging("breaked the oblivion")
                                     break
                     if count != 0:
                         await logging('added a new disk into the destination queue')
@@ -318,12 +319,12 @@ async def main(config):
     await evaluateDestinations(config.destination_dir, dest_queue, obsolete_queue, config.obsolete_dir)
     await findPlotsA(config.plots_dir, plots_queue)
 
-    print(f'Dest queue {dest_queue}')
-    print()
-    print(f'obsolete queue {obsolete_queue}')
-    print()
-    print("plots archive")
-    print(plots_archive)
+    await logging(f'Dest queue {dest_queue}')
+    await logging("")
+    await logging(f'obsolete queue {obsolete_queue}')
+    await logging("")
+    await logging("plots archive")
+    await logging(plots_archive)
 
     terminal_size = os.get_terminal_size()
     start_time = time.time()
@@ -335,13 +336,13 @@ async def main(config):
 
     while config.is_running:
 
-        print("checking update config")
+        await logging("checking update config")
         await updateConfig(configPath, config)
 
         # DEBUGGING: clear the terminal
         # create a config variable for debugging the interface? so there is only
         # one place to change
-        if False:
+        if not config.debugging:
             os.system('cls' if os.name == 'nt' else 'clear')
 
         print()
@@ -391,18 +392,18 @@ async def main(config):
 
         # check for new plots
         if plots_queue.qsize() < config.max_concurrent:
-            print("checking for new plots")
+            await logging("checking for new plots")
             await logging("logging in the main")
-            await findPlotsA(plots_dir, plots_queue)
+            await findPlotsA(config.plots_dir, plots_queue)
         else:
-            print("plots queue is greater then max_concurrent")
-            print(plots_queue.qsize(), " queue size")
-            print(config.max_concurrent, "max concurrent")
+            await logging("plots queue is greater then max_concurrent")
+            await logging(plots_queue.qsize(), " queue size")
+            await logging(config.max_concurrent, "max concurrent")
 
         # check if we capped
         if len(tasks) == config.max_concurrent or dest_queue.empty() or plots_queue.empty():
-            print("lest rest hoping something will happen")
-            print(f'plots queue: size {plots_queue.qsize()} and emptyness {plots_queue.empty()}')
+            await logging("lest rest hoping something will happen")
+            await logging(f'plots queue: size {plots_queue.qsize()} and emptyness {plots_queue.empty()}')
             # Remove completed tasks
             for task in tasks:
                 if task.done():
@@ -411,8 +412,8 @@ async def main(config):
             continue
         try:
 
-            print(f"Tasks running: {len(tasks)} of {config.max_concurrent}")
-            task = asyncio.create_task(replantPlots(dest_queue, config.dest_suffix, obsolete_queue, plots_queue))
+            await logging(f"Tasks running: {len(tasks)} of {config.max_concurrent}")
+            task = asyncio.create_task(replantPlots(dest_queue, config.dest_suffix, obsolete_queue, plots_queue, config.bwlimit))
             tasks.append(task)
 
             # Remove completed tasks
@@ -424,24 +425,24 @@ async def main(config):
             await asyncio.sleep(1)
 
         except Exception as e:
-            print(f"something wrong in the main loop: {e}")
+            await logging(f"something wrong in the main loop: {e}")
         except KeyboardInterrupt:
-            print("who stoppped my replant?")
+            await logging("who stoppped my replant?")
         finally:
-            print("main loop done, take some time")
+            await logging("main loop done, take some time")
             await asyncio.sleep(10)
 
 
         await asyncio.sleep(5)
-    print("ASPETTO FINE  TASK")
+    await logging("ASPETTO FINE  TASK")
     # Wait for the tasks to complete
     await asyncio.gather(*tasks)
     await asyncio.gather(*d_tasks)
 
-    print("esco dal giro")
+    await logging("esco dal giro")
     # Close the loop waiting for all the tasks
     loop.stop()
-    print("uscito dal giro")
+    await logging("uscito dal giro")
 
 
 def createFakePlots():
