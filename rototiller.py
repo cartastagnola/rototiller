@@ -167,7 +167,7 @@ async def evaluateDestinations(destinations, dest_queue, obsolete_queue, obsolet
         else:
             await dest_queue.put(path)
 
-async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
+async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue, bwlimit):
 
     # IF there is free space, lets fill first
     await logging("replant starting...")
@@ -192,7 +192,7 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
                 if freeSpace(dest) > plot_size:
                     # move
                     await logging(f"replant: moving to this destination: {dest}")
-                    await movePlotA(plot, dest)
+                    await movePlotA(plot, dest, bwlimit)
                     await logging(f"plot moved to {dest}")
                     await dest_queue.put(dest_root)
                 else:
@@ -226,12 +226,13 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue):
     #
     return 0
 
-async def movePlotA(plot, destination):
+async def movePlotA(plot, destination, bwlimit):
     """Move a file from source to destination directory."""
     cmd = f"ionice -c 3 rsync -v --preallocate --whole-file --bwlimit={bwlimit} --remove-source-files {plot} {destination}"
     #cmd = f"mv -v {plot} {destination}"
     await logging(f"MOVING {plot}")
     await logging(f"to {destination}")
+    global info_move_active
 
     try:
         info_move_active.append(cmd)
