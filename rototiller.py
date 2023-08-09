@@ -9,6 +9,7 @@ import asyncio
 from datetime import datetime
 import time
 import yaml
+from pynput import keyboard
 
 import click
 
@@ -309,12 +310,34 @@ async def deleteObsoletePlots(obsolete_queue, obsolete_folders, dest_queue, max_
 async def updateConfig(configPath, config):
     loadYamlConfig(configPath, config)
 
+class UiState:
+    def __init__(self):
+        self.faceController = 'none'
+
+# it is an hack to make it considering other input other then the key
+def on_press(key, uiState):
+    print(uiState.faceController, " from the inside")
+    try:
+        if key.char == 'm':
+            uiState.faceController = 'moving'
+            print("set ui to moving")
+        if key.char == 'a':
+            uiState.faceController = 'analytics'
+            print("set ui to analytics")
+    except:
+        print("no valid Key")
+
 async def main(config):
     # get the loop
     loop = asyncio.get_running_loop()
 
-    # global
+    # global (it is not necessary)
     global info_move_active
+    uiState = UiState()
+
+    # listen to the keyboard
+    listener = keyboard.Listener(on_press=lambda event: on_press(event, uiState=uiState))
+    listener.start()
 
     # init the queue
     dest_queue = asyncio.Queue()
@@ -343,32 +366,40 @@ async def main(config):
         await logging("checking update config")
         await updateConfig(configPath, config)
 
+
         # DEBUGGING: clear the terminal
         # create a config variable for debugging the interface? so there is only
         # one place to change
         if not config.debugging:
             os.system('cls' if os.name == 'nt' else 'clear')
 
-        print()
-        print(f'Dest queue:     {dest_queue.qsize()}')
-        print(f'Obsolete queue: {obsolete_queue.qsize()}')
-        print(f'Plots queue:    {plots_queue.qsize()}')
-        print()
-        print(f'Number of full disks with old plots: {obsolete_queue.qsize()}')
-        print()
-        print(f"Terminal width: {terminal_size.columns} characters")
-        print(f"Terminal height: {terminal_size.lines} lines")
-        print()
-        print(f'Time elapsed: {time.time() - start_time}')
-        print("Active moving")
-        for i in info_move_active:
-            print(i)
-        print("Active deleting")
-        for i in info_delete_active:
-            print(i)
-        start_time = time.time()
-        print()
-        print(f'is running: {is_running}')
+        # interface
+        print("the face controller is on: ", uiState.faceController)
+        if uiState.faceController == "moving":
+            print()
+            print(f'Dest queue:     {dest_queue.qsize()}')
+            print(f'Obsolete queue: {obsolete_queue.qsize()}')
+            print(f'Plots queue:    {plots_queue.qsize()}')
+            print()
+            print(f'Number of full disks with old plots: {obsolete_queue.qsize()}')
+            print()
+            print(f"Terminal width: {terminal_size.columns} characters")
+            print(f"Terminal height: {terminal_size.lines} lines")
+            print()
+            print(f'Time elapsed: {time.time() - start_time}')
+            print("Active moving")
+            for i in info_move_active:
+                print(i)
+            print("Active deleting")
+            for i in info_delete_active:
+                print(i)
+            start_time = time.time()
+            print()
+            print(f'is running: {is_running}')
+        elif uiState.faceController == "analitycs":
+            print("analytics")
+        else:
+            print("press m to watch moving plot, a for disks analitics")
         print("_________real time logs_________")
 
         # delete plots
