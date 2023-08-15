@@ -114,6 +114,9 @@ def movePlot(plot, destination):
 def freeSpace(path):
     return shutil.disk_usage(path).free
 
+def totalSpace(path):
+    return shutil.disk_usage(path).total
+
 # find folder space
 async def get_dir_size(path):
     total = 0
@@ -141,6 +144,35 @@ async def findPlotsA(sources, plots_queue):
                 continue
             await plots_queue.put(plot)
             plots_archive.append(plot)
+
+class MountingPoint():
+    def __init__():
+        self.path = ''
+        self.name = ''
+        self.size = 0
+        self.freeSpace = 0 # byte i think
+        self.occupiedSpace = 0
+        self.directories = []
+        self.nplots = 0
+        self.nfiles = 0
+        # self.ndirs = 0 get the dim of directories
+
+class MountingPointDir():
+    def __init__():
+        self.name = 'none'
+        self.path = ''
+        self.size = 0
+        self.nplots = 0
+        self.nfiles = 0
+
+async def analyzeMountingPoint(paths):
+    mountingPoints = []
+    for path in mountingPoints:
+        mp = MountingPoints()
+        mp.path = Path(path) # consider to do this when importing the yaml
+        mp.name = mp.name
+        mp.size = totalSpace(mp.path)
+        mp.freeSpace = freeSpace(mp.path)
 
 async def evaluateDestinations(destinations, dest_queue, obsolete_queue, obsolete_folders=None):
     # shuld i add the ability to rescan ?
