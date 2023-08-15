@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime
 import time
 import yaml
-from pynput import keyboard
+from sshkeyboard import listen_keyboard, stop_listening
 
 import click
 
@@ -315,15 +315,33 @@ class UiState:
         self.faceController = 'none'
 
 # it is an hack to make it considering other input other then the key
-def on_press(key, uiState):
+#def on_press(key, uiState):
+async def on_press(key):
     print(uiState.faceController, " from the inside")
+    print(key)
+    print("printed key char")
     try:
-        if key.char == 'm':
+        if key == 'm':
             uiState.faceController = 'moving'
             print("set ui to moving")
-        if key.char == 'a':
+        if key == 'a':
             uiState.faceController = 'analytics'
             print("set ui to analytics")
+        if key == 'v':
+            uiState.faceController = 'variables'
+            print("set ui to analytics")
+        #if uiState.faceController == "variables":
+        #    if key == 'q':
+        #        stop_listening()
+        #        print("change the q")
+        #        newq = input("Entere new concurent plots transfer valure: ")
+        #        print("new input is:", newq)
+        #        listen_keyboardd(on_press=on_press)
+        #    if key == 'w':
+        #        newq = input("Entere new banwith limit for plot transfer: ")
+        #        print("new input is:", newq)
+        #        print("change the bandwith")
+
     except:
         print("no valid Key")
 
@@ -333,11 +351,6 @@ async def main(config):
 
     # global (it is not necessary)
     global info_move_active
-    uiState = UiState()
-
-    # listen to the keyboard
-    listener = keyboard.Listener(on_press=lambda event: on_press(event, uiState=uiState))
-    listener.start()
 
     # init the queue
     dest_queue = asyncio.Queue()
@@ -356,10 +369,8 @@ async def main(config):
     terminal_size = os.get_terminal_size()
     start_time = time.time()
 
-
     tasks = []
     d_tasks = []
-
 
     while config.is_running:
 
@@ -502,13 +513,20 @@ def checkSourceAndDestination():
     # check that or the paths or the files with tha path are given at startup
     return 0
 
-
-
 if __name__ == '__main__':
 
 
     #createFakePlots()
     #exit()
+
+    # thread for UI
+    uiState = UiState()
+
+    # import
+    import threading
+    # listen to the keyboard
+    ui_thread = threading.Thread(target=listen_keyboard, args=(on_press,), daemon=True)
+    ui_thread.start()
 
     # initialize the conf
     config = ConfigParam()
