@@ -417,7 +417,10 @@ async def main(config):
             os.system('cls' if os.name == 'nt' else 'clear')
 
         # interface
-        print("the face controller is on: ", uiState.faceController)
+        print("the face controller is on: ", uiState.faceController, end="")
+        print("Screens: 'a' analytics, 'm' plot transfers, 'v' variables", end="")
+        print(" Thats all for now!")
+
         if uiState.faceController == "moving":
             print()
             print(f'Dest queue:     {dest_queue.qsize()}')
@@ -441,6 +444,10 @@ async def main(config):
             print(f'is running: {is_running}')
         elif uiState.faceController == "analitycs":
             print("analytics")
+        elif uiState.faceController == "variables":
+            print("variables")
+            print(f"concurrent plots: {config.max_concurrent}. To change it press q.")
+            print(f"band limit: {config.bwlimit} bytes. To change it press w.")
         else:
             print("press m to watch moving plot, a for disks analitics")
         print("_________real time logs_________")
