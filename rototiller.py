@@ -174,7 +174,7 @@ async def analyzeMountingPoint(paths):
         mp.size = totalSpace(mp.path)
         mp.freeSpace = freeSpace(mp.path)
 
-async def evaluateDestinations(destinations, dest_queue, obsolete_queue, obsolete_folders=None):
+async def evaluateDestinations(destinations, plot_size, dest_queue, obsolete_queue, obsolete_folders=None):
     # shuld i add the ability to rescan ?
     for path in destinations:
         path = Path(path)
@@ -388,7 +388,7 @@ async def main(config):
     dest_queue = asyncio.Queue()
     obsolete_queue = asyncio.Queue()
     plots_queue = asyncio.Queue()
-    await evaluateDestinations(config.destination_dir, dest_queue, obsolete_queue, config.obsolete_dir)
+    await evaluateDestinations(config.destination_dir, config.plot_size, dest_queue, obsolete_queue, config.obsolete_dir)
     await findPlotsA(config.plots_dir, plots_queue)
 
     await logging(f'Dest queue {dest_queue}')
@@ -516,6 +516,8 @@ async def main(config):
 
         await asyncio.sleep(5)
     await logging("ASPETTO FINE  TASK")
+    # stop sshkeyboard
+    stop_listening()
     # Wait for the tasks to complete
     await asyncio.gather(*tasks)
     await asyncio.gather(*d_tasks)
