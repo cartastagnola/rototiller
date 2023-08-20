@@ -237,14 +237,15 @@ async def replantPlots(dest_queue, dest_suffix, obsolete_queue, plots_queue, bwl
                     if there are old plots that can be canceled it will be pick up again.")
     except Exception as e:
         await logging(f"something wrong with the replant: {e}")
-        with open(error, "w") as f:
+        await plots_queue.put(plot)
+        await dest_queue.put(dest_root)
+        with open('error_log', 'a') as f:
+            f.write(datetime.now().isoformat(timespec='seconds'))
             f.write(error)
             f.write("error")
             f.write(e)
             f.write("END")
             f.close()
-        await plots_queue.put(plot)
-        await dest_queue.put(dest_root)
     except KeyboardInterrupt:
         await logging("who stoppped my replant pressing a key?")
         await plots_queue.put(plot)
