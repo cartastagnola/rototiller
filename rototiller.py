@@ -494,7 +494,7 @@ async def main(config):
             print()
             print(f'is running: {is_running}')
         elif uiState.faceController == "analytics":
-            print("Analytics")
+            print("Analytics, use j and k to navigate through the mounting point")
             print()
             ndir = len(mountingPointsStats)
             print(ui_var, "uivar")
