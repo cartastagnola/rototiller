@@ -394,6 +394,7 @@ async def on_press(key):
     print(uiState.faceController, " from the inside")
     print(key)
     print("printed key char")
+    global ui_var
     try:
         if key == 'm':
             uiState.faceController = 'moving'
@@ -404,6 +405,11 @@ async def on_press(key):
         if key == 'v':
             uiState.faceController = 'variables'
             print("set ui to variables")
+        if uiState.faceController == "analytics":
+            if key == 'j':
+                ui_var += 8
+            if key == 'k':
+                ui_var -= 8
         #if uiState.faceController == "variables":
         #    if key == 'q':
         #        stop_listening()
@@ -419,8 +425,8 @@ async def on_press(key):
     except:
         print("no valid Key")
 
-def sizeToMb(size):
-    return size / (1024**2)
+def sizeToTb(size):
+    return round(size / (1024**4), 2)
 
 async def main(config):
     # get the loop
@@ -490,17 +496,20 @@ async def main(config):
         elif uiState.faceController == "analytics":
             print("Analytics")
             print()
-            for hdd in mountingPointsStats:
-                print(hdd.path)
-                print(hdd.name)
-                print(hdd.size / (1024**4), 'TB')
-                print(hdd.freeSpace / (1024**4), 'TB')
-                print("n dirs: ", len(hdd.directories))
-                print(hdd.nPlots, "number of plots")
-                print(hdd.nFiles, "number of files")
+            ndir = len(mountingPointsStats)
+            print(ui_var, "uivar")
+            startRange = ui_var % ndir
+            endRange = ((startRange + ui_var) % ndir) if ui_var > ndir else ndir
+            for hdd in mountingPointsStats[startRange:endRange]:
+                print("mount point: ", end='')
+                print(hdd.path, end='')
+                print("hdd size: ", round(hdd.size / (1024**4), 2), 'TB ', end='')
+                print("free space: ", round(hdd.freeSpace / (1024**4), 2), 'TB ', end='')
+                print("n dirs: ", len(hdd.directories), "; ", "number of plots; ", hdd.nPlots, "; ", end='')
+                print("number of files: ", hdd.nFiles)
                 for entry in hdd.directories:
                     print("   ", entry.path, end=" ")
-                    print("size: ", sizeToMb(entry.size), "; ", end=" ")
+                    print("size: ", sizeToTb(entry.size), "; ", end=" ")
                     print("n. pltos: ", entry.nPlots, "; ", end=" ")
                     print("n. files: ", entry.nFiles)
                 print()
@@ -625,6 +634,8 @@ if __name__ == '__main__':
 
     # import
     import threading
+    #ui variables
+    ui_var = 0
     # listen to the keyboard
     ui_thread = threading.Thread(target=listen_keyboard, args=(on_press,), daemon=True)
     ui_thread.start()
