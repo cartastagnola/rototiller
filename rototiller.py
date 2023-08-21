@@ -146,33 +146,74 @@ async def findPlotsA(sources, plots_queue):
             plots_archive.append(plot)
 
 class MountingPoint():
-    def __init__():
+    def __init__(self):
         self.path = ''
         self.name = ''
         self.size = 0
         self.freeSpace = 0 # byte i think
         self.occupiedSpace = 0
         self.directories = []
-        self.nplots = 0
-        self.nfiles = 0
+        self.nPlots = 0
+        self.nFiles = 0
         # self.ndirs = 0 get the dim of directories
 
 class MountingPointDir():
-    def __init__():
-        self.name = 'none'
+    def __init__(self):
         self.path = ''
+        self.name = 'none'
         self.size = 0
-        self.nplots = 0
-        self.nfiles = 0
+        self.nPlots = 0
+        self.nFiles = 0
+
+# TODO move on yaml
+ignoreFolders = ['lost+found','.Trash-1000']
+async def get_dir_name_size_nFiles(path, mountingPointDir_list):
+    path = Path(path)
+    print(path)
+    mpd = MountingPointDir()
+    mpd.path = path
+    mpd.name = path.name
+    total = 0
+    nFiles = 0
+    nPlots = 0
+    for entry in path.glob('*'):
+        print(entry, " entry")
+        if entry.is_file():
+            print("entry is a file")
+            total += entry.stat().st_size
+            nFiles += 1
+            if entry.suffix == '.plot':
+                nPlots += 1
+        elif entry.is_dir() and not entry.name in ignoreFolders:
+            await get_dir_name_size_nFiles(entry, mountingPointDir_list)
+    mpd.size = total
+    mpd.nFiles = nFiles
+    mpd.nPlots = nPlots
+    mountingPointDir_list.append(mpd)
+
+def sumPlotsAndFiles(mountingPointDir_list):
+    nPlots = 0
+    nFiles = 0
+    for mpd in mountingPointDir_list:
+        nPlots += mpd.nPlots
+        nFiles += mpd.nFiles
+    return nPlots, nFiles
 
 async def analyzeMountingPoint(paths):
     mountingPoints = []
-    for path in mountingPoints:
-        mp = MountingPoints()
+    for path in paths:
+        mp = MountingPoint()
         mp.path = Path(path) # consider to do this when importing the yaml
-        mp.name = mp.name
+        mp.name = mp.path.name
         mp.size = totalSpace(mp.path)
         mp.freeSpace = freeSpace(mp.path)
+        # add subs
+        mountingPointDir_list = []
+        await get_dir_name_size_nFiles(path, mountingPointDir_list)
+        mp.directories = mountingPointDir_list
+        mp.nPlots, mp.nFiles = sumPlotsAndFiles(mp.directories)
+        mountingPoints.append(mp)
+    return mountingPoints
 
 async def evaluateDestinations(destinations, plot_size, dest_queue, obsolete_queue, obsolete_folders=None):
     # shuld i add the ability to rescan ?
@@ -362,7 +403,7 @@ async def on_press(key):
             print("set ui to analytics")
         if key == 'v':
             uiState.faceController = 'variables'
-            print("set ui to analytics")
+            print("set ui to variables")
         #if uiState.faceController == "variables":
         #    if key == 'q':
         #        stop_listening()
@@ -377,6 +418,9 @@ async def on_press(key):
 
     except:
         print("no valid Key")
+
+def sizeToMb(size):
+    return size / (1024**2)
 
 async def main(config):
     # get the loop
@@ -399,6 +443,8 @@ async def main(config):
     await logging("plots archive")
     await logging(plots_archive)
 
+    mountingPointsStats = await analyzeMountingPoint(config.destination_dir)
+
     terminal_size = os.get_terminal_size()
     start_time = time.time()
 
@@ -406,10 +452,8 @@ async def main(config):
     d_tasks = []
 
     while config.is_running:
-
         await logging("checking update config")
         await updateConfig(configPath, config)
-
 
         # DEBUGGING: clear the terminal
         # create a config variable for debugging the interface? so there is only
@@ -443,8 +487,23 @@ async def main(config):
             start_time = time.time()
             print()
             print(f'is running: {is_running}')
-        elif uiState.faceController == "analitycs":
-            print("analytics")
+        elif uiState.faceController == "analytics":
+            print("Analytics")
+            print()
+            for hdd in mountingPointsStats:
+                print(hdd.path)
+                print(hdd.name)
+                print(hdd.size / (1024**4), 'TB')
+                print(hdd.freeSpace / (1024**4), 'TB')
+                print("n dirs: ", len(hdd.directories))
+                print(hdd.nPlots, "number of plots")
+                print(hdd.nFiles, "number of files")
+                for entry in hdd.directories:
+                    print("   ", entry.path, end=" ")
+                    print("size: ", sizeToMb(entry.size), "; ", end=" ")
+                    print("n. pltos: ", entry.nPlots, "; ", end=" ")
+                    print("n. files: ", entry.nFiles)
+                print()
         elif uiState.faceController == "variables":
             print("variables")
             print(f"concurrent plots: {config.max_concurrent}. To change it press q.")
@@ -512,10 +571,10 @@ async def main(config):
             await logging("who stoppped my replant?")
         finally:
             await logging("main loop done, take some time")
-            await asyncio.sleep(10)
+            await asyncio.sleep(1)
 
 
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
     await logging("ASPETTO FINE  TASK")
     # stop sshkeyboard
     stop_listening()
