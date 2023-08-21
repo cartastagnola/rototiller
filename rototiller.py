@@ -498,8 +498,9 @@ async def main(config):
             print()
             ndir = len(mountingPointsStats)
             print(ui_var, "uivar")
-            startRange = ui_var % ndir
-            endRange = ((startRange + ui_var) % ndir) if ui_var > ndir else ndir
+            startRange = ui_var
+            # 8 is the number of disks dispalyed
+            endRange = ((startRange + ui_var) % ndir) if not 8 > ndir else ndir 
             for hdd in mountingPointsStats[startRange:endRange]:
                 print("mount point: ", end='')
                 print(hdd.path, end='')
@@ -509,7 +510,7 @@ async def main(config):
                 print("number of files: ", hdd.nFiles)
                 for entry in hdd.directories:
                     print("   ", entry.path, end=" ")
-                    print("size: ", sizeToTb(entry.size), "; ", end=" ")
+                    print("size: ", sizeToTb(entry.size), " TB; ", end=" ")
                     print("n. pltos: ", entry.nPlots, "; ", end=" ")
                     print("n. files: ", entry.nFiles)
                 print()
