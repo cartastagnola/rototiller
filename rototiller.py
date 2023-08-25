@@ -167,12 +167,14 @@ class MountingPointDir():
 
 # TODO move on yaml
 ignoreFolders = ['lost+found','.Trash-1000']
-async def get_dir_name_size_nFiles(path, mountingPointDir_list):
+async def get_dir_name_size_nFiles(path, root, mountingPointDir_list):
+    """get size and number of plots per directories. Path: name of the root dir;
+    root: if it is the root; mountingPointDir_list: ref of a list of the subdirectories"""
     path = Path(path)
     print(path)
     mpd = MountingPointDir()
     mpd.path = path
-    mpd.name = path.name
+    mpd.name = 'root' if root else path.name
     total = 0
     nFiles = 0
     nPlots = 0
@@ -185,7 +187,7 @@ async def get_dir_name_size_nFiles(path, mountingPointDir_list):
             if entry.suffix == '.plot':
                 nPlots += 1
         elif entry.is_dir() and not entry.name in ignoreFolders:
-            await get_dir_name_size_nFiles(entry, mountingPointDir_list)
+            await get_dir_name_size_nFiles(entry, False, mountingPointDir_list)
     mpd.size = total
     mpd.nFiles = nFiles
     mpd.nPlots = nPlots
@@ -209,7 +211,7 @@ async def analyzeMountingPoint(paths):
         mp.freeSpace = freeSpace(mp.path)
         # add subs
         mountingPointDir_list = []
-        await get_dir_name_size_nFiles(path, mountingPointDir_list)
+        await get_dir_name_size_nFiles(path, True, mountingPointDir_list)
         mp.directories = mountingPointDir_list
         mp.nPlots, mp.nFiles = sumPlotsAndFiles(mp.directories)
         mountingPoints.append(mp)
@@ -498,22 +500,34 @@ async def main(config):
             print()
             ndir = len(mountingPointsStats)
             print(ui_var, "uivar")
-            startRange = ui_var
+            startRange = ui_var % ndir
             # 8 is the number of disks dispalyed
-            endRange = ((startRange + ui_var) % ndir) if not 8 > ndir else ndir 
+            endRange = ((startRange + 8) % ndir) if 8 < ndir else ndir
             for hdd in mountingPointsStats[startRange:endRange]:
                 print("mount point: ", end='')
-                print(hdd.path, end='')
+                print(hdd.path, end='; ')
                 print("hdd size: ", round(hdd.size / (1024**4), 2), 'TB ', end='')
                 print("free space: ", round(hdd.freeSpace / (1024**4), 2), 'TB ', end='')
                 print("n dirs: ", len(hdd.directories), "; ", "number of plots; ", hdd.nPlots, "; ", end='')
                 print("number of files: ", hdd.nFiles)
                 for entry in hdd.directories:
-                    print("   ", entry.path, end=" ")
+                    print("   ", entry.name, end="\t")
                     print("size: ", sizeToTb(entry.size), " TB; ", end=" ")
                     print("n. pltos: ", entry.nPlots, "; ", end=" ")
                     print("n. files: ", entry.nFiles)
                 print()
+            # total sum for folder
+            directories = {}
+            for hdd in mountingPointsStats:
+                for entry in hdd.directories:
+                    if entry.name in directories:
+                        directories[entry.name] += entry.size
+                    else:
+                        directories[entry.name] = entry.size
+            print("the total")
+            for key in directories:
+                print(key, " ", sizeToTb(directories[key]))
+
         elif uiState.faceController == "variables":
             print("variables")
             print(f"concurrent plots: {config.max_concurrent}. To change it press q.")
