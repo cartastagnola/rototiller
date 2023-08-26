@@ -452,6 +452,7 @@ async def main(config):
     await logging(plots_archive)
 
     mountingPointsStats = await analyzeMountingPoint(config.destination_dir)
+    statsCount = 0
 
     terminal_size = os.get_terminal_size()
     start_time = time.time()
@@ -462,6 +463,13 @@ async def main(config):
     while config.is_running:
         await logging("checking update config")
         await updateConfig(configPath, config)
+
+        # update stats
+        if statsCount == 1000:
+            statsCount = 0
+            mountingPointsStats = await analyzeMountingPoint(config.destination_dir)
+        else:
+            statsCount += 1
 
         # DEBUGGING: clear the terminal
         # create a config variable for debugging the interface? so there is only
