@@ -77,7 +77,7 @@ def loadYamlConfig(configPath, config):
     """Load YAML data. """
     with open(configPath, 'r') as file:
         data = yaml.safe_load(file)
-
+        # TODO why it is workig? data is out of scope for the config part
     config.is_running = data['running']
     config.plot_size = data['plot_size']
     config.plots_dir = data['plot_directories']

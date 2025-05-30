@@ -35,20 +35,21 @@ def writeLoggerToFile(logger: AsyncLogger, string: str):
         f.write(f"NEW SESSION {timestamp}\n")
         f.write("///////////////////////////////\n\n\n")
 
+    print("starting logger...")
     while True:
-        print("started logger and running")
         if not logger.queue.empty():
-            print("queue not empty")
             try:
-                log_entry = logger.queue.get(timeout=0.1)  # Process log entries if available
-                with open(logger.log_file, "a") as f:
-                    f.write(log_entry + "\n")
-                logger.queue.task_done()
+                while not logger.queue.empty():
+                    log_entry = logger.queue.get(timeout=0.1)  # Process log entries if available
+                    with open(logger.log_file, "a") as f:
+                        f.write(log_entry + "\n")
+                    logger.queue.task_done()
             except queue.Empty:
                 continue  # No log entry, check again until stop event is set
         else:
-            print("queue empty")
+            pass
         time.sleep(1)
+
 
 def launchLoggerThread(logger: AsyncLogger, string: str):
     loop_thread = threading.Thread(target=writeLoggerToFile, args=(logger, string), daemon=True)

@@ -25,7 +25,16 @@ for font in Path(custom_fonts_path).glob("*"):
 fonts.sort()
 
 possibleFont = ['cyberlarge', 'cybersmall', 'chunky', 'contessa', 'cosmike', 'doh', 'linux', 'rectangles']
-possibleFont = ['mono9', 'cybersmall', 'future', 'mono9', 'smmono9', 'doom', 'ogre', 'smblock', 'pagga', 'emboss']
+possibleFont = ['mono9', 'cybersmall', 'future', 'smmono9', 'doom', 'ogre', 'smblock', 'pagga', 'emboss', 'bigchief', 'bigfig', 'bigascii9', 'bigascii12' ]
+
+# load all fig
+directory_path = custom_fonts_path
+files = os.listdir(directory_path)
+# Remove extensions
+stripped_names = [os.path.splitext(file)[0] for file in files if os.path.isfile(os.path.join(directory_path, file))]
+possibleFont = sorted(stripped_names)
+
+possibleFont = ['starwars', 'standard', 'smblock', 'small', 'pagga', 'dos_rebel', 'chunky', 'big', 'doom']
 fonts = possibleFont
 
 def load_custom_fonts(path):
@@ -140,7 +149,7 @@ def loadFontFTL(filePath, font):
         font.maxLength = int(header[3])
         font.oldLayout = int(header[4])
         font.commentLines = int(header[5])
-        font.smushMode = int(header[4]) #for doom, this is the smush value...
+        font.smushMode = int(header[4])  # for doom, this is the smush value...
         commentLines = font.commentLines
         while commentLines > 0:
             lines.pop(0)
@@ -200,16 +209,6 @@ def loadFontFTL(filePath, font):
                 fChar.chars += clean_charLine
 
 
-        #while True:
-        #    if lines[n][-1] == '@':
-        #        break
-        #    n += 1
-
-        #char = lines[n][-1]
-        #while True:
-        #    if file[n][-1] == file[n][-2]:
-        #        font.charsDic[char] = file[n][0;-2]
-        #    font.charsDic[char] = file[n][0;-1]
 def sizeText(text, font: Font):
     "return the size of the text using a figlet font"
     y = font.height
@@ -217,7 +216,6 @@ def sizeText(text, font: Font):
     for c in text:
         x += font.fChars[ord(c)].width
     return x, y
-
 
 
 def renderFont(text, font):
@@ -410,14 +408,15 @@ def menu(stdscr):
 
         # Rendering title
         try:
-            stdscr.addstr(5, 0, f.renderText("1 - Wallet w W a l l e t"))
+            stdscr.addstr(5, 0, f.renderText("1 - Wallet w W a l l e t hdd analytics "))
             #stdscr.addstr(10, 0, f.renderText("2 - harvester analytics"))
-            stdscr.addstr(15, 0, f.renderText("3 - hdd analytics h d d a n l y t i c s"))
+            stdscr.addstr(15, 0, f.renderText("3 - xch / XCH - CHIA chia "))
             curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
             #stdscr.addstr(20, 0, f.renderText("4 - move interface"))
             f = pyfiglet.Figlet(font=fonts[ff], width=230)
+            font = pyfiglet.FigletFont(fonts[ff])
             stdscr.addstr(25, 10, f.renderText(fonts[ff]))
-            stdscr.addstr(35, 0, fonts[ff])
+            stdscr.addstr(35, 0, f"name: {fonts[ff]} height: {font.height}")
         except:
             stdscr.addstr(5, 0, "not working")
             stdscr.addstr(15, 0, fonts[ff])

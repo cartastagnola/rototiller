@@ -1,6 +1,12 @@
 # from rototiller
 config.yaml
 test.py
+*.json
+*.db
+
+# project settings
+.projectile
+.flake8
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

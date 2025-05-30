@@ -150,31 +150,37 @@ class Point():
 
 
 # help function for draw line
-
 import math
+
 
 def ipart(x):
     return math.floor(x)
 
+
 def iround(x):
     return ipart(x + 0.5)
+
 
 # fractional part of x
 def fpart(x):
     return x - ipart(x)
 
+
 def rfpart(x):
     return 1 - fpart(x)
+
 
 def plot(stdscr, screenState, x, y, color):
     """color=((r,g,b), (r,g,b))"""
     color = screenState.cursesColors.pairs[color]
     stdscr.addstr(y, x, u'\u2588', curses.color_pair(color))
 
+
 def colorFromBrightness(brightness, colors):
     scale = len(colors) - 1
     idx_brightness = int(brightness * scale)
     return (colors[idx_brightness], (0, 10, 45))
+
 
 def drawPoint(stdscr, screenState, point0, color_pair):
     """color_pair= index of the curses color"""
@@ -185,6 +191,7 @@ def drawPoint(stdscr, screenState, point0, color_pair):
         color = color_pair
 
     plot(stdscr, screenState, point0.x, point0.y, color)
+
 
 def drawPointBox(stdscr, screenState, point0, color_pair):
     """color_pair= index of the curses color"""
@@ -266,10 +273,9 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
         color0 = colors[0]
         #stdscr.addstr(32, 40, f"color0: {str(color0)}")
         color1 = colors[1]
+        color_bk = colors[1]
         #stdscr.addstr(33, 40, f"color1: {str(color1)}")
         #stdscr.addstr(34, 40, f"color: {str(curses.color_pair(color_pair))}")
-        print(color1)
-        print(color0)
 
         # create de gradations
         n_grad = 8
@@ -295,7 +301,7 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
                 color_idx = addCustomColor(c, screenState.cursesColors)
                 addCustomColorTuple(
                     (color_idx,
-                    screenState.colors["background"]),
+                    color_bk),
                     screenState.cursesColors)
         except Exception as e:
             print("lie mei")
@@ -338,10 +344,7 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
 
         height, width = stdscr.getmaxyx()
 
-        print("hei")
-        print(height, width)
         buffer_size = (width, height * 2)
-        print(buffer_size)
         image_buffer = [None] * (buffer_size[0] * buffer_size[1])
 
         def change_pixel(buffer_size, image_buffer, x, y, color):
@@ -413,7 +416,7 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
         else:
             brightness = rfpart(y_end) * x_gap
             color = colorFromBrightness(brightness, grad)[0]
-            change_pixel(buffer_size, image_buffer, x_pixel1,  y_pixel1, color)
+            change_pixel(buffer_size, image_buffer, x_pixel1, y_pixel1, color)
 
             if point1.y < point0.y:
                 brightness = fpart(y_end) * x_gap
@@ -424,9 +427,7 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
                 color = colorFromBrightness(brightness, grad)[0]
                 change_pixel(buffer_size, image_buffer, x_pixel1, y_pixel1 - 1, color)
 
-
         # the loop
-
         coint04 = time.perf_counter()
         if steep:
             for x in range(x_pixel0 + 0, x_pixel1 - 0):
@@ -460,11 +461,8 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
                 #stdscr.addstr(48, 40, f"form: {x_pixel0 + 1}, {x_pixel1 - 1}")
 
         coint05 = time.perf_counter()
-        c_black_almost = customColors_findByValue(custom_colors, screenState.colors["background"])
-        print(c_black_almost)
-        print("erm")
         addSubPixel_fromDic(stdscr, screenState, image_buffer,
-                            buffer_size, c_black_almost)
+                            buffer_size, color_bk)
 
         coint06 = time.perf_counter()
 
@@ -893,17 +891,16 @@ def drawLine2pts_subpixel(stdscr, point1, point2):
                         pixelComposer[cc] = (1, 1)
                         stdscr.addstr(Y + cc[1], X + cc[0], u'\u2588')
 
-def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days):
+
+def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days, P_color=None):
     """data_prices: list of prices; data_timestamps: list of timestamps refered to the prices
     days: number of days of the graph"""
     coint01 = time.perf_counter()
     points_per_day = 3
     total_points = days * points_per_day
     height, width = stdscr.getmaxyx()
-    end = int(time.time()) * 1000 # * 1000 not needed useing history from offers
+    end = int(time.time()) * 1000  # * 1000 not needed useing history from offers
     start = end - int(datetime.timedelta(days=days).total_seconds()) * 1000
-    print("len")
-    print(len(data_prices))
     end_price = data_prices[-1]
     start_price = data_prices[0]
     unit_time = datetime.timedelta(days=1).total_seconds() * 1000 / points_per_day
@@ -912,7 +909,7 @@ def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days):
     # at the moment it keeps one price for unit time
     time_group = {}
     for p, t in zip(data_prices, data_timestamps):
-        time_group[(t - start)  // unit_time] = p
+        time_group[(t - start) // unit_time] = p
 
     min_price = min(data_prices)
     max_price = max(data_prices)
@@ -920,7 +917,6 @@ def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days):
     unit_price = 1
     if delta_price != 0:
         unit_price = (height - 1) / delta_price
-
 
     coint02 = time.perf_counter()
 
@@ -950,7 +946,7 @@ def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days):
             last_price = int((end_price - min_price) * unit_price)
             if last_price >= height - 1:
                 last_price -= 1
-            line_points.append(Point(width - 1, last_price ))
+            line_points.append(Point(width - 1, last_price))
             # ok, now you can test by drawing points
             for p in line_points:
                 print(p)
@@ -958,6 +954,8 @@ def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days):
 
             color_pair = ((255, 0, 255), (1, 1, 1))
             color_pair_idx = addCustomColorTuple_FAST(color_pair, screenState.cursesColors)
+            if P_color is not None:
+                color_pair_idx = P_color
             point0 = line_points[0]
             for i in range(1, len(line_points)):
                 point1 = line_points[i]
