@@ -35,8 +35,9 @@ from CONFtiller import (
 import DEBUGtiller as DEBUGtiller
 import ELEMENTStiller as ELEMENTS
 import WDBtiller as WDB
+import DEXtiller as DEX
 from RPCtiller import call_rpc_node
-from binarysearch import binary_search_l
+from UTILITYtiller import binary_search_l
 
 sys.path.append('/home/boon/gitRepos/')
 import dex as dex
@@ -545,8 +546,8 @@ def fetch_coin_data(data_lock, coins_data, tail):
                 logging(server_logger, "DEBUG", f"fetching CAT's data with tail: {tail}, already recorded")
                 return
 
-        current_price = dex.get_current_price_from_tail(tail)
-        historic_price, historic_timestamp = dex.getHistoricPriceFromTail(tail, 7)
+        current_price = DEX.get_current_price_from_tail(tail)
+        historic_price, historic_timestamp = DEX.getHistoricPriceFromTail(tail, 7)
         end = datetime.now()
         begin = int((end - timedelta(days=7)).timestamp())
         conn = sqlite3.connect(DB_WDB)
@@ -882,7 +883,7 @@ def fetch_cat_assets():
     now = datetime.now().timestamp()
     if (now - last_update) > min_time_elapsed:
         # insert the chia asset on
-        cats_data = dex.fetch_all_CAT_names_from_spacescan()
+        cats_data = DEX.fetch_all_CAT_names_from_spacescan()
 
     if cats_data:
         for cat in cats_data:
@@ -1068,7 +1069,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                     tail = balance['asset_id']  # it is the tail...
                     cat_wallet.data = tail
                     #print(f'cata wallet data: ', cat_wallet.data)
-                    cat_name_sym = dex.fetchDexiNameFromTail(cat_wallet.data)
+                    cat_name_sym = DEX.fetchDexiNameFromTail(cat_wallet.data)
                     #print(f"dexi data: ", cat_name_sym)
                     # fetch prices from dexi
                     WDB.insert_asset(conn, cat_wallet.data,
@@ -1102,7 +1103,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                     cat_wallet = WalletState()
                     balance = 999
                     cat_wallet.data = cat_tail
-                    dexi_name = dex.fetchDexiNameFromTail(cat_wallet.data)
+                    dexi_name = DEX.fetchDexiNameFromTail(cat_wallet.data)
                     cat_wallet.name = dexi_name['name']
                     cat_wallet.ticker = dexi_name['symbol']
                     cat_wallet.confirmed_wallet_balance = 111
@@ -1345,12 +1346,12 @@ def screen_dex(stdscr, keyboardState, screenState: ScreenState, figlet=False):
 # init fingletfont
 DOOM_FONT = UItext.Font()
 # import Path or do something else
-pathA = Path("/home/boon/gitRepos/pyfiglet/pyfiglet/fonts-standard/doom.flf")
+pathA = Path("figlet_fonts/doom.flf")
 UItext.loadFontFTL(pathA, DOOM_FONT)
 
 FUTURE_FONT = UItext.Font()
 # import Path or do something else
-pathA = Path("/home/boon/gitRepos/pyfiglet/pyfiglet/fonts-standard/future.tlf")
+pathA = Path("figlet_fonts/future.tlf")
 UItext.loadFontFTL(pathA, FUTURE_FONT)
 
 SMALL_FONT = UItext.Font()
@@ -1700,12 +1701,12 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
     ######################### graph ##################33333333
     if False:
         #for cat in cat_test.keys():
-        #    a = dex.fetchDexiNameFromTail(cat)
+        #    a = DEX.fetchDexiNameFromTail(cat)
         #    print(a)
-        #    dex.getHistoricPriceFromTail(cat, 7)
+        #    DEX.getHistoricPriceFromTail(cat, 7)
         print(cat_test.keys())
         cat = list(cat_test.keys())[0]
-        #prices, timestamp = dex.getHistoricPriceFromTail(cat, 7)
+        #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
         #UIgraph.drawPriceGraph(stdscr, screenState, prices, timestamp, 7)
         y0 = 2
         for i in range(7):
@@ -1724,14 +1725,14 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
                 timestamp = [coin_data.current_price_date]
             debug_win.addstr(y0,70, f"the cat is: {cat}")
             debug_win.addstr(y0 + 1,70, f"len: {len(prices)}; time {timestamp[0]} and prices; {prices[0]}")
-            #prices, timestamp = dex.getHistoricPriceFromTail(cat, 7)
+            #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
             UIgraph.drawPriceGraph(graph_win, screenState, prices, timestamp, 7)
             y0 += 6
 
         #graph_win = stdscr.subwin(10, 20, 8, 30)
         #graph_win.bkgd(' ', curses.color_pair(screenState.colorPairs["test_red"]))
         #cat = list(cat_test.keys())[0]
-        #prices, timestamp = dex.getHistoricPriceFromTail(cat, 7)
+        #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
         #UIgraph.drawPriceGraph(graph_win, screenState, prices, timestamp, 7)
 
 
@@ -2904,7 +2905,7 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState):
                 timestamp = [chia_coins_data.current_price_date]
             #wallet_win.addstr(pos.y, 10, f"the cat is: {prices}")
             #debug_win.addstr(y0 + 1,70, f"len: {len(prices)}; time {timestamp[0]} and prices; {prices[0]}")
-            #prices, timestamp = dex.getHistoricPriceFromTail(cat, 7)
+            #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
             C_soft_background = screenState.colors["tab_soft"]
             C_dark_background = screenState.colors["tab_dark"]
             C_graph = UIgraph.addCustomColorTuple(
@@ -3138,7 +3139,7 @@ for n, i in enumerate(dumbList):
 def ft_standar_number_format(num, sig_digits, max_size):
     """Function to format a number. It gives None for the color info"""
     if isinstance(num, float):
-        num = dex.format_and_round_number(num, sig_digits, max_size)
+        num = DEX.format_and_round_number(num, sig_digits, max_size)
         return str(num), None
     return str(num), None
 
@@ -3146,7 +3147,7 @@ def ft_standar_number_format(num, sig_digits, max_size):
 def ft_percentage_move(move, color_up, color_down):
     """Function to format price variation"""
     if isinstance(move, float) or isinstance(move, int):
-        move_str = dex.format_and_round_number(move * 100, 3, 4)
+        move_str = DEX.format_and_round_number(move * 100, 3, 4)
         if move < 0:
             return f"{str(move_str)}%", color_down
         return f"{str(move_str)}%", color_up
@@ -3246,7 +3247,7 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
         for u in col:
             if isinstance(u, float):
                 #if u > 1:
-                u = dex.format_and_round_number(u, 5, 10)
+                u = DEX.format_and_round_number(u, 5, 10)
                 col_str.append(str(u))
             else:
                 col_str.append(str(u))
