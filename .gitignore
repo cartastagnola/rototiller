@@ -7,6 +7,10 @@ test.py
 # project settings
 .projectile
 .flake8
+*.code-workspace
+media/
+garbage/
+tests/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

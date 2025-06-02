@@ -28,10 +28,10 @@ import UItext as UItext
 import UIgraph as UIgraph
 import LOGtiller as LOGtiller
 from CONFtiller import (
-        server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_WDB,
-        XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO,
-        config, self_hostname, full_node_rpc_port, wallet_rpc_port,
-        DEFAULT_ROOT_PATH)
+    server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_WDB,
+    XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO,
+    config, self_hostname, full_node_rpc_port, wallet_rpc_port,
+    DEFAULT_ROOT_PATH)
 import DEBUGtiller as DEBUGtiller
 import ELEMENTStiller as ELEMENTS
 import WDBtiller as WDB
@@ -39,15 +39,13 @@ import DEXtiller as DEX
 from RPCtiller import call_rpc_node
 from UTILITYtiller import binary_search_l
 
-sys.path.append('/home/boon/gitRepos/')
-import dex as dex
 
 #### global for debugging
 DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
 DEBUG_TEXT = 'mempty'
 
 #### NCURSES CONFIG #####
-# set the esc delay to 25 milliseconds (the defaul is 1 sec)
+# set the esc delay to 25 milliseconds
 # by default curses use one seconds
 os.environ.setdefault('ESCDELAY', '25')
 
