@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import sqlite3
 import csv
+from collections import deque
 
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Union, Callable
@@ -250,6 +251,8 @@ class KeyboardState:
     moveDown: bool = False
     moveLeft: bool = False
     moveRight: bool = False
+    yank: bool = False
+    paste: bool = False
     mouse: bool = False
     enter: bool = False
     esc: bool = False
@@ -276,6 +279,7 @@ class ScreenState:
     scope_exec_args: List  # args that are used when executing scope.exec_child
     screen_data: Dict[str, str]  # it should be a dic of lists of anything
     coins_data: Dict[str, CoinPriceData]
+    roto_clipboard: deque
 
     def __init__(self):
         self.init = False
@@ -297,6 +301,11 @@ class ScreenState:
         self.screen_data = {}
         self.coins_data = {}
 
+        # init copy
+        self.roto_clipboard = deque(maxlen=5)
+        self.scopes['copy'] = None
+        self.scopes['paste'] = None
+
 
 class Scope():
     gen_id = 0
@@ -317,10 +326,13 @@ class Scope():
         self.exec = None  # funcion executed when activated
         self.exec_own = None  # to rename to exec
         self.exec_init = None  # to swapp with .exec
+        self.exec_esc = None  # used when exiting
         self.screen = screen_handler
         # add the variable that keep the info of what screen to print
         Scope.gen_id += 1
         screenState.scopes[name] = self
+        # default esc behaviuor
+        self.exec_esc = exit_scope
 
     ### consider to move this logic in each elements, should be more flexible
     def update(self):
@@ -334,13 +346,16 @@ class Scope():
 
     def update_no_sub(self, row_count, circular=True):
         """Update the counter using an arbitrary number: row_count"""
-        if circular:
-            self.cursor = self.cursor % row_count
+        if row_count == 0:
+            pass
         else:
-            if self.cursor < 0:
-                self.cursor = 0
-            elif self.cursor >= row_count:
-                self.cursor = row_count - 1
+            if circular:
+                self.cursor = self.cursor % row_count
+            else:
+                if self.cursor < 0:
+                    self.cursor = 0
+                elif self.cursor >= row_count:
+                    self.cursor = row_count - 1
 
     # ONGOING change.........
     # exec_child is not right as name, better exec_when pressed, if there are
@@ -414,8 +429,9 @@ def open_coin_wallet(scope: Scope, screenState: ScreenState, tail):
 
 
 def exit_scope(scope: Scope, screen_state: ScreenState, *args):
-    screen_state.activeScope = scope.parent_scope
-
+    if scope.parent_scope:
+        screen_state.activeScope = scope.parent_scope
+        return scope.parent_scope
 
 # to remove it as global
 tickers = 0
@@ -460,8 +476,6 @@ def convert_historic_price_to_currency(historic_timestamp_ref_coin, historic_pri
         #    u += 1
 
         u = binary_search_l(historic_timestamp_ref_coin, i)
-        print("u: ", u)
-        print(f" len ref coin timestamp: {len_ref_coin_ts}")
         if u >= len_ref_coin_ts - 1:
             u = len_ref_coin_ts - 1
         elif abs(i - historic_timestamp_ref_coin[u]) < abs(i - historic_timestamp_ref_coin[u + 1]):
@@ -549,8 +563,6 @@ def fetch_coin_data(data_lock, coins_data, tail):
         end = datetime.now()
         begin = int((end - timedelta(days=7)).timestamp())
         conn = sqlite3.connect(DB_WDB)
-        for pp in range(len(historic_timestamp)):
-            print(historic_timestamp[pp], ' ', historic_price[pp], ' ', tail)
 
         for price, ts in zip(historic_price, historic_timestamp):
             WDB.insert_price(conn, tail, ts, price, XCH_CUR)
@@ -964,7 +976,6 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                 logged_finger = asyncio.run(call_rpc_wallet('get_logged_in_fingerprint'))
                 if logged_finger != finger:
                     result = asyncio.run(call_rpc_wallet('log_in', fingerprint=finger))
-                    print(result)
 
                 #time.sleep(15)
 
@@ -1063,7 +1074,6 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                         logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
                         traceback.print_exc()
 
-                    print(balance)
                     tail = balance['asset_id']  # it is the tail...
                     cat_wallet.data = tail
                     #print(f'cata wallet data: ', cat_wallet.data)
@@ -1666,7 +1676,6 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
             print("aaaaaa")
             print(e)
             traceback.print_exc()
-        print("full char  done")
         deltaP = UIgraph.Point(5,5)
         deltaP = UIgraph.Point(0,0)
         p_bug = UIgraph.Point(58,12)
@@ -1675,7 +1684,6 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
                                             pt4 + deltaP, screenState.colorPairs['body'])
             #UIgraph.drawLine2pts(debug_win, pt3, pt4)
         except Exception as e:
-            print("aaaaaaaaaa sub")
             print(e)
             traceback.print_exc()
 
@@ -2421,10 +2429,15 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
 
     menu_actions = ['contemplate', 'receive', 'send', 'manage']
     pos += UIgraph.Point(0,2)
-    menu_actions_button: Scope = ELEMENTS.create_button_menu(stdscr, screenState, main_scope,
-                                                             "action menu", menu_actions.copy(),
-                                                             pos)
-    active_action = menu_actions[menu_actions_button.cursor]
+    pos_menu_actions_button = pos.deepcopy()
+
+    def menu_actions_button(only_init):
+        return ELEMENTS.create_button_menu(stdscr, screenState, main_scope,
+                                           "action menu", menu_actions.copy(),
+                                           pos_menu_actions_button, only_init)
+
+    menu_actions_scope: Scope = menu_actions_button(True)
+    active_action = menu_actions[menu_actions_scope.cursor]
 
     # pos += UIgraph.Point(0,3)
 
@@ -2433,11 +2446,15 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
             ELEMENTS.create_text(wallet_win, UIgraph.Point(20,30), "booeeee", P_text, True)
             pos_buttons = pos + UIgraph.Point(len("action menu: ") + len(active_action) + 8, 0)
             menu_coins = ['coin by coin', 'by address', 'by transaction']
-            menu_coins_button: Scope = ELEMENTS.create_button_menu(stdscr, screenState, main_scope,
-                                                                   "coin menu", menu_coins.copy(),
-                                                                   pos_buttons)
 
-            active_coin_view = menu_coins[menu_coins_button.cursor]
+            def menu_coins_button(only_init):
+                return ELEMENTS.create_button_menu(stdscr, screenState, main_scope,
+                                                   "coin menu", menu_coins.copy(),
+                                                   pos_buttons, only_init)
+
+            menu_coins_scope: Scope = menu_coins_button(True)
+
+            active_coin_view = menu_coins[menu_coins_scope.cursor]
 
             pos += UIgraph.Point(0,3)
 
@@ -2446,7 +2463,6 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
 
             match active_coin_view:
                 case 'coin by coin':
-                    print("by coin")
 
                     coins_table_legend = [
                         'coin id',
@@ -2540,9 +2556,6 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
 
                     if len(coin_wallet.coins) == 0:
                         addresses_table.append([' '] * len(addresses_table_legend))
-                    print("aa_")
-
-                    print(addresses_table)
 
                     ELEMENTS.create_tab(wallet_win,
                                         screenState,
@@ -2593,6 +2606,8 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
                     # Created at: 2025-01-09 12:01:20
                     pass
 
+            menu_coins_scope: Scope = menu_coins_button(False)
+
         case 'receive':
             #1 show last address
             text = "Last address: "
@@ -2605,15 +2620,15 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
             ELEMENTS.create_text(wallet_win, pos, text, P_col, True)
             pos_ins = pos + UIgraph.Point(len(text), 0)
             pre_text = "add address: "
-            ELEMENTS.create_prompt(wallet_win, screenState, main_scope, 'add', pos_ins,
+            ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'add', pos_ins,
                                    pre_text, P_col, True, False)
             pos_ins += UIgraph.Point(0,1)
             pre_text = "add amountt:  "
-            ELEMENTS.create_prompt(wallet_win, screenState, main_scope, 'amount', pos_ins,
+            ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'amount', pos_ins,
                                    pre_text, P_col, True, False)
             pos_ins += UIgraph.Point(0,1)
             pre_text = "add fee: "
-            ELEMENTS.create_prompt(wallet_win, screenState, main_scope, 'fee', pos_ins,
+            ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'fee', pos_ins,
                                    pre_text, P_col, True, False)
             pos_ins += UIgraph.Point(0,1)
             pass
@@ -2623,6 +2638,9 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
         case 'manage':
             pass
             # option to split or merge
+
+    menu_actions_scope: Scope = menu_actions_button(False)
+
 
 
     #send_button_text = "Send"
@@ -3806,22 +3824,14 @@ if True:
 # scope execution. Easier to change a scope behaviuor if needed.
 # EG: func_input_proces_visual, func_input_process_insert
 # and call it when the scope is active
-def process_keyboard(screen_state: ScreenState, keyboard_state: KeyboardState,
+def keyboard_processing(screen_state: ScreenState, keyboard_state: KeyboardState,
                      active_scope: Scope, key):
+
 
     if key == curses.KEY_ENTER or key == 10 or key == 13:
         keyboard_state.enter = True
     if key == 27:
         keyboard_state.esc = True
-
-    if keyboard_state.enter is True:
-        active_scope.exec_child(*screen_state.scope_exec_args)
-        return
-    if keyboard_state.esc is True:
-        # call back the old scope
-        if active_scope.parent_scope:
-            screen_state.activeScope = active_scope.parent_scope
-            return
 
     match active_scope.mode:
         case ScopeMode.INSERT:
@@ -3845,15 +3855,19 @@ def process_keyboard(screen_state: ScreenState, keyboard_state: KeyboardState,
                     active_scope.data['cursor'] -= 1
                 case curses.KEY_RIGHT:
                     active_scope.data['cursor'] += 1
-                case (- 1):
+                case 22:  # ctrl-v
+                    keyboard_state.paste = True
+                    print('key paste')
+                case (-1):
                     pass
                 case _:
                     idx = active_scope.data['cursor']
                     s = active_scope.data['prompt']
-                    active_scope.data['prompt'] = s[:idx] + chr(key) + s[idx + 1:]
+                    active_scope.data['prompt'] = s[:idx] + chr(key) + s[idx:]
                     active_scope.data['cursor'] += 1
 
         case ScopeMode.VISUAL:
+            print('visula')
 
             if key == ord('j') or key == curses.KEY_DOWN:
                 keyboard_state.moveDown = True
@@ -3865,18 +3879,36 @@ def process_keyboard(screen_state: ScreenState, keyboard_state: KeyboardState,
                 keyboard_state.moveRight = True
             if key == curses.KEY_MOUSE:
                 keyboard_state.mouse = True
+            if key == ord('y'):
+                keyboard_state.yank = True
+                print('key yank')
+            if key == ord('p'):
+                keyboard_state.paste = True
+                print('key paste')
 
-            # execution
-            if keyboard_state.moveUp:
-                active_scope.cursor -= 1
-                screen_state.selection = -1
-            if keyboard_state.moveDown:
-                active_scope.cursor += 1
-                screen_state.selection = 1
-            if keyboard_state.moveLeft:
-                active_scope.cursor_x -= 1
-            if keyboard_state.moveRight:
-                active_scope.cursor_x += 1
+
+def keyboard_execution(screen_state: ScreenState, keyboard_state: KeyboardState,
+                       active_scope: Scope):
+
+    if keyboard_state.enter is True:
+        active_scope.exec_child(*screen_state.scope_exec_args)
+        return
+    if keyboard_state.esc is True:
+        # exec_esc is not a method but a property
+        # should i create a method to call it?
+        active_scope.exec_esc(active_scope, *screen_state.scope_exec_args)
+        return
+
+    if keyboard_state.moveUp:
+        active_scope.cursor -= 1
+        screen_state.selection = -1
+    if keyboard_state.moveDown:
+        active_scope.cursor += 1
+        screen_state.selection = 1
+    if keyboard_state.moveLeft:
+        active_scope.cursor_x -= 1
+    if keyboard_state.moveRight:
+        active_scope.cursor_x += 1
 
 
 def interFace(stdscr):
@@ -3990,6 +4022,9 @@ def interFace(stdscr):
         screenState.colors["tab_soft"] = UIgraph.addCustomColor(
             (28, 36, 68),
             screenState.cursesColors)
+        screenState.colors["tab_softer"] = UIgraph.addCustomColor(
+            (38, 46, 78),
+            screenState.cursesColors)
         screenState.colors["tab_selected"] = UIgraph.addCustomColor(
             (244, 43, 3),
             screenState.cursesColors)
@@ -4083,6 +4118,9 @@ def interFace(stdscr):
             screenState.cursesColors)
         screenState.colorPairs["win_selected"] = UIgraph.addCustomColorTuple(
             (screenState.colors["yellow_bee"], screenState.colors["background"]),
+            screenState.cursesColors)
+        screenState.colorPairs["copy_banner"] = UIgraph.addCustomColorTuple(
+            (screenState.colors["white"], screenState.colors["tab_softer"]),
             screenState.cursesColors)
 
     except Exception as e:
@@ -4218,10 +4256,11 @@ def interFace(stdscr):
 
                 # screen selection
                 activeScope = screenState.activeScope
+                keyboard_processing(screenState, keyboardState, activeScope, key)
                 activeScope.screen(stdscr, keyboardState,
                                    screenState)
+                keyboard_execution(screenState, keyboardState, activeScope)
 
-                process_keyboard(screenState, keyboardState, activeScope, key)
 
             # html tables: https://www.w3.org/TR/xml-entity-names/026.html
 

@@ -5,6 +5,7 @@ import curses
 import json
 from pathlib import Path
 import traceback
+import copy
 
 import time
 import datetime
@@ -132,6 +133,9 @@ class Point():
         self.x = self.y
         self.y = a
 
+    def deepcopy(self):
+        return copy.deepcopy(self)
+
     def __add__(self, other):
         if not isinstance(other, Point):
             return NotImplemented
@@ -146,6 +150,7 @@ class Point():
         if not isinstance(other, int):
             return NotImplemented
         return Point(self.x * other, self.y * other)
+
 
 
 

@@ -11,10 +11,13 @@ from typing import List, Tuple, Dict, Union, Callable
 from datetime import datetime, timedelta
 
 from CONFtiller import ScopeMode
-from UItiller import Scope, activate_scope, screen_coin_wallet, ScreenState, activate_grandparent_scope, open_coin_wallet
+from UItiller import (
+    Scope, activate_scope, screen_coin_wallet, ScreenState, KeyboardState,
+    activate_grandparent_scope, open_coin_wallet, exit_scope)
 import DEBUGtiller as DEBUGtiller
+import PLATFORMtiller as PLAT
 
-# unicode box
+# unicode box u'\u25xx'
 ## light shade  u2591
 ## medium shade u2592
 ## dark shade   u2593
@@ -83,7 +86,7 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
                 max_dims[idx2] = len(u)
 
     if data_table_legend is not None:
-        # assert lenght legend == n_columns
+        # assert length legend == n_columns
         for idx, i in enumerate(data_table_legend):
             if len(i) > max_dims[idx]:
                 max_dims[idx] = len(i)
@@ -161,13 +164,50 @@ def recalcultate_first_and_last_element(scope, idx_first_element, col_len, rows_
     return idx_first_element, idx_last_element, select
 
 
-def create_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False):
+def create_text(stdscr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False, align: int = 0):
     """Create normal text."""
-    scr.attron(curses.color_pair(P_text_color))
+
+    stdscr.attron(curses.color_pair(P_text_color))
     if bold:
-        scr.attron(curses.A_BOLD)
-    scr.addstr(pos.y, pos.x, str(text))
-    scr.attroff(curses.A_BOLD)
+        stdscr.attron(curses.A_BOLD)
+    stdscr.addstr(pos.y, pos.x, str(text))
+    stdscr.attroff(curses.A_BOLD)
+
+
+def create_text_aligned(stdscr, margin: UIgraph.Point, text: str, P_text_color,
+                        bold: bool = False, align_h: int = 0, align_v: int = 0):
+    """Create normal text with align options, it does not support multi lines.
+    align_h: right=0, center=1, left=2
+    align_v: top=0, center=1, bottom=2
+    the margin.x is used as distance from the margin, both in align right and left
+    margin.y is used as distance from the top margin or lower margin"""
+
+    temp_vec = stdscr.getmaxyx()
+    box_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
+
+    text_len = len(text)
+
+    pos_x = None
+    pos_y = None
+
+    match align_h:
+        case 0:
+            pos_x = margin.x
+        case 1:
+            pos_x = int((box_dim.x - text_len) // 2)
+        case 2:
+            pos_x = box_dim.x - margin.x - text_len
+
+    match align_v:
+        case 0:
+            pos_y = margin.y
+        case 1:
+            pos_y = int((box_dim.y - 1) // 2)
+        case 2:
+            pos_y = box_dim.y - margin.y - 1
+
+    pos = UIgraph.Point(pos_x, pos_y)
+    create_text(stdscr, pos, text, P_text_color, bold)
 
 
 def create_blinking_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False):
@@ -191,7 +231,7 @@ def create_blinking_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold:
     scr.attroff(curses.A_REVERSE)
 
 
-def create_prompt(stdscr, screen_state: ScreenState, parent_scope: Scope, name: str,
+def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardState, parent_scope: Scope, name: str,
                   pos: UIgraph.Point, pre_text: str, P_text_color, bold: bool = False,
                   inverse_color: bool = False):
     """prompt text"""
@@ -264,6 +304,13 @@ def create_prompt(stdscr, screen_state: ScreenState, parent_scope: Scope, name: 
         else:
             cursor_pos = pos + UIgraph.Point(len(pre_text) + idx, 0)
             create_blinking_text(stdscr, cursor_pos, prompt[idx], P_text_color)
+
+    # if pasted
+    paste_scope = screen_state.scopes['paste']
+    if (keyboard_state.paste and scope_state) or screen_state.activeScope == paste_scope:
+        # create a new over scope where you can select the bit of info you want
+        create_paste_banner(stdscr, screen_state, scope, False)
+        print("bruner")
 
 
 def create_text_figlet(scr, pos: UIgraph.Point, figlet_font, text: str, P_text_color):
@@ -387,7 +434,7 @@ def create_tab(scr,
                size: UIgraph.Point,
                keyboardState,
                scope_activation_func,
-               active=False, # what is it?
+               active=False,  # what is it?
                multipleSelection=False,
                data_table_legend=None):
 
@@ -416,7 +463,8 @@ def create_tab(scr,
         data_table_color = transpose_table(data_table_color)
 
     ### assert the shape of the data
-    assert len(data_table_legend) == len(dataTable[0]), "legend data lenght differ from the data"
+    if data_table_legend:
+        assert len(data_table_legend) == len(dataTable[0]), "legend data length differ from the data"
 
     ### name
     tab_name = f"{parent_scope.id}_{tab_name}"
@@ -566,6 +614,7 @@ def create_tab(scr,
         # disable bold
         table.attroff(curses.A_BOLD)
 
+    current_selection_data = None
     ### data loop ###
     row = height_legend
     for data_row, data_idx in zip(
@@ -573,10 +622,14 @@ def create_tab(scr,
             idx_dataTable[idx_first_element:idx_last_element]):
 
         C_custom_bk = table_bk_colors[row % 2]
-        P_current_attron = curses.color_pair(table_color_pairs[row % 2]) # colling it P_... is misleading
+        P_current_attron = curses.color_pair(table_color_pairs[row % 2])  # colling it P_... is misleading
         if data_idx == select and tab_scope_is_active:
             P_current_attron = curses.color_pair(P_select)
             scope_exec_args.append(data_table_keys[data_idx] if data_table_keys else None)
+            current_selection_data = data_row
+        elif data_idx == select:
+            current_selection_data = data_row
+
 
         table.attron(P_current_attron)
         table.addstr(row, 0, ' ' * (x_tabSize))
@@ -659,6 +712,227 @@ def create_tab(scr,
         row += 1
     table.attroff(curses.A_BOLD)
 
+    # if yanked
+    copy_scope = screenState.scopes['copy']
+    print('yanking')
+    print(keyboardState.yank, ' yank')
+    print(tab_scope_is_active, ' tab scope')
+    if (keyboardState.yank and tab_scope_is_active) or screenState.activeScope == copy_scope:
+        # create a new over scope where you can select the bit of info you want
+        create_copy_banner(table, screenState, scope, current_selection_data, False)
+        print("burner")
+
+
+def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, only_init: bool):
+    ### name
+    tab_name = "paste"
+
+    ### init scope and add to paren
+    if screenState.scopes[tab_name] is None:
+        scope = Scope(tab_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope.main_scope
+        scope.exec = activate_scope
+        #parent_scope.sub_scopes[tab_name] = scope
+
+        # retrive text from the clipboard
+        os_clip = PLAT.read_clipboard()
+        data = [os_clip] + list(screenState.roto_clipboard)
+        scope.data['clipboard'] = data
+
+        def paste(scope: Scope, screenState: ScreenState):
+            prompt_scope = scope.parent_scope
+            clip = scope.data['clipboard'][scope.cursor]
+            idx = prompt_scope.data['cursor']
+            s = prompt_scope.data['prompt']
+            prompt_scope.data['prompt'] = s[:idx] + clip + s[idx:]
+            prompt_scope.data['cursor'] += len(clip)
+            screenState.activeScope = scope.parent_scope
+            screenState.scopes[tab_name] = None
+            return scope.parent_scope
+
+        scope.exec_own = paste
+
+        def deactivate_scope(scope: Scope, screenState: ScreenState):
+            scope = exit_scope(scope, screenState)
+            screenState.scopes[tab_name] = None
+
+        scope.exec_esc = deactivate_scope
+        screenState.activeScope = scope
+
+    scope: Scope = screenState.scopes[tab_name]
+    tab_scope_is_active = False
+    scope_exec_args = [screenState]
+    data = scope.data['clipboard']
+    if scope is screenState.activeScope:
+        scope.update_no_sub(len(data))
+        screenState.scope_exec_args = scope_exec_args
+        tab_scope_is_active = True
+
+    if only_init:
+        return scope
+
+    P_win_test = screenState.colorPairs["copy_banner"]  # change with a paste bannnnner
+    P_win_sel = screenState.colorPairs["up"]  # change with a paste bannnnner
+    temp_vec = stdscr.getmaxyx()
+    win_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
+    width = int(win_dim.x * 0.85)
+    height = 10
+    pos_x = (win_dim.x - width) // 2
+    pos_y = win_dim.y // 2 + height // 2
+
+    banner = stdscr.subwin(height, width, pos_y, pos_x)
+
+    temp_vec = banner.getmaxyx()
+    ban_dim = UIgraph.Point(width, height)
+    for i in range(height - 1):
+        create_text(banner, UIgraph.Point(0, i), ' ' * ban_dim.x, P_win_test, True)
+
+    p = UIgraph.Point(0,0)
+    create_text_aligned(banner, p, "PASTE", P_win_test, True, 1)
+
+    p += UIgraph.Point(0,2)
+
+    # formatting distance
+    max_length = 0
+    for i in data:
+        if len(i) > max_length:
+            max_length = len(i)
+
+    description_length = 15
+    space = 10
+    tot_length = max_length + description_length + space
+    margin = floor((width - tot_length) / 2)
+
+    selection = scope.cursor
+
+    for i, item in enumerate(data):
+        if i == 0:
+            first_item = 0
+            pre_fix = "System clipboard"
+            p_text = p + UIgraph.Point(0, 1)
+            create_text_aligned(banner, p_text, "/" * (max_length + description_length), P_win_test, True, 1)
+        else:
+            first_item = 1
+            pre_fix = "Roto clipboard"
+        if selection == i:
+            color_pair = P_win_sel
+        else:
+            color_pair = P_win_test
+        p_text = p + UIgraph.Point(margin, i + first_item)
+        create_text_aligned(banner, p_text, f"{1 + i} | {str(item)}", color_pair, True, 0)
+        create_text_aligned(banner, p_text, f"{pre_fix}", color_pair, True, 2)
+
+
+def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, data,
+                       only_init: bool):
+    ### name
+    tab_name = "copy"
+
+    ### init scope and add to paren
+    if screenState.scopes[tab_name] is None:
+        scope = Scope(tab_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope.main_scope
+        scope.exec = activate_scope
+        ## not added as sub-scope, or when i delete it, i should delete also from there?
+        # parent_scope.sub_scopes[tab_name] = scope 
+
+        #scope.data['copied_data'] = data.insert(0, 'all')  # element to select everything
+        data.insert(0, 'all')
+        scope.data['copied_data'] = data
+
+        def copy_to_clipboard(scope: Scope, screenState: ScreenState):
+            if scope.cursor_x == 0:
+                copied_item = str(scope.data['copied_data'])
+            else:
+                copied_item = scope.data['copied_data'][scope.cursor_x]
+            PLAT.write_clipboard(copied_item)
+            screenState.roto_clipboard.appendleft(copied_item)
+            screenState.activeScope = scope.parent_scope
+            screenState.scopes[tab_name] = None
+            return scope.parent_scope
+
+        scope.exec_own = copy_to_clipboard
+
+        def deactivate_scope(scope: Scope, screenState: ScreenState):
+            scope = exit_scope(scope, screenState)
+            screenState.scopes[tab_name] = None
+
+        scope.exec_esc = deactivate_scope
+        screenState.activeScope = scope
+
+    scope: Scope = screenState.scopes[tab_name]
+    tab_scope_is_active = False
+    scope_exec_args = [screenState]
+    data = scope.data['copied_data']  # to keep the data consistent
+    if scope is screenState.activeScope:
+        scope.update_no_sub(len(data))
+        screenState.scope_exec_args = scope_exec_args
+        tab_scope_is_active = True
+
+    if only_init:
+        return scope
+
+    P_win_test = screenState.colorPairs["test"]
+    P_win_test = screenState.colorPairs["copy_banner"]
+    temp_vec = stdscr.getmaxyx()
+    win_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
+    width = int(win_dim.x * 0.85)
+    height = 10
+    pos_x = (win_dim.x - width) // 2
+    pos_y = win_dim.y // 2 + height // 2
+
+    print(height, width, pos_y, pos_x)
+    print(win_dim.x, ' ', win_dim.y)
+    banner = stdscr.subwin(height, width, pos_y, pos_x)
+
+    temp_vec = banner.getmaxyx()
+    ban_dim = UIgraph.Point(width, height)
+    for i in range(4):
+        create_text(banner, UIgraph.Point(0, i), ' ' * ban_dim.x, P_win_test, True)
+
+    p = UIgraph.Point(0,0)
+    create_text_aligned(banner, p, "COPY", P_win_test, True, 1)
+
+
+    # add text alignment to the functions.... and then add the copy title
+    p = UIgraph.Point(0,2)
+    create_text_aligned(banner, p, str(data), P_win_test, True, 1)
+
+    # in line selector
+    # data should be already in the form of string
+    spacing = 3
+    separator = '|'
+
+    data_len = []
+    total_len = 0
+
+    for i in data:
+        data_len.append(len(i))
+        total_len += len(i) + spacing
+
+    if total_len < ban_dim.x:
+        pos_x = (ban_dim.x - total_len) // 2
+    else:
+        pos_x = 2
+        # TODO: implement logic to keep elements centererd on a multiline case
+
+    p = UIgraph.Point(pos_x, 4)
+    create_text(banner, p, separator, P_win_test, True)
+    p += UIgraph.Point(1,0)
+    for n, d in enumerate(data):
+        text = f" {d} {separator}"
+        if p.x + len(text) >= ban_dim.x:
+            p = UIgraph.Point(pos_x, p.y + 2)
+            # add also the separator at the beginning of the line
+        create_text(banner, p, text, P_win_test, True)
+        if scope.cursor_x == 0 or scope.cursor_x == n:
+            selection_len = len(text) - len(separator)
+            if scope.cursor_x == 0:
+                selection_len = len(text)
+            create_text(banner, p + UIgraph.Point(0,1), u'\u2580' * selection_len, P_win_test, True)
+        p += UIgraph.Point(len(text), 0)
 
 
 def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: str,
@@ -1330,12 +1604,25 @@ def normalize_menu_centered(menu_list: List, scope: Scope, max_up: int,
     return menu_list, selected, first_y_point
 
 
-def menu_select(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
+def menu_static(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
                 color_pair, color_pair_sel):
     """Create a menu at given coordinate. Point[y,x]"""
 
-    #selected = scope.data['selected']
-    #selected = scope.cursor
+    winDim = stdscr.getmaxyx()
+    selection = scope.cursor
+
+    for i, item in enumerate(menu):
+        if selection == i:
+            stdscr.attron(curses.color_pair(color_pair_sel) | curses.A_BOLD)
+        else:
+            stdscr.attron(curses.color_pair(color_pair) | curses.A_BOLD)
+        stdscr.addstr(point.y + i, point.x, str(item))
+
+
+### TODO: rename, stationary menu...
+def menu_select(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
+                color_pair, color_pair_sel):
+    """Create a menu at given coordinate. Point[y,x]"""
 
     winDim = stdscr.getmaxyx()
 
@@ -1367,24 +1654,14 @@ def menu_select(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
 
 
 def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
-                       name: str, menu: List[str], point: UIgraph.Point):
-    """A real menu button... """
+                       name: str, menu: List[str], point: UIgraph.Point, only_init: bool = False):
+    """A real menu button...
+    only_init: when """
 
     name_str = name
     name = f"{parent_scope.id}_{name}"
 
     if name not in screenState.scopes:
-        #scope = Scope(name, parent_scope.screen, screenState)
-        #scope.parent_scope = parent_scope
-        #parent_scope.sub_scopes[name] = scope
-
-        #def change_menu_value(scope: Scope, screenState: ScreenState):
-        #    pass
-        #    #### 
-        #    #scope.dict_values = "new value to pass to the function"
-        #    #return scope.parent_scope
-
-        ##scope.exec = change_button_bool
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
@@ -1392,21 +1669,16 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
         scope.cursor = 0
         parent_scope.sub_scopes[name] = scope
 
-#        # create a child to create another window
-#        # probably it should be something that we define outside
-#        # this function because it change every time
-        child_name = name + "temp_child"
-        child_scope = Scope(child_name, None, screenState)
-
-        child_scope.exec = activate_grandparent_scope
-
-        child_scope.parent_scope = scope
-
-        scope.sub_scopes[child_name] = child_scope
+        scope.exec_own = exit_scope
 
     scope = screenState.scopes[name]
     scope_is_active = False
     scope_exec_args = [screenState]
+
+    # in case the button needs to be rendered later
+    if only_init:
+        return scope
+
     if scope is screenState.activeScope:
         scope.update_no_sub(len(menu), False)
         screenState.scope_exec_args = scope_exec_args
@@ -1426,7 +1698,6 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
     # temp 
 
     prefix = name_str
-    print(scope.cursor)
     menu_selection = f"{prefix}: {menu[scope.cursor]}"
     space = 2
     length = len(menu_selection) + space * 2
