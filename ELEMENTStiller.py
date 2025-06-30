@@ -16,6 +16,7 @@ from UItiller import (
     activate_grandparent_scope, open_coin_wallet, exit_scope)
 import DEBUGtiller as DEBUGtiller
 import PLATFORMtiller as PLAT
+import WDBtiller as WDB
 
 # unicode box u'\u25xx'
 ## light shade  u2591
@@ -149,9 +150,10 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
     return x_col_dim, x_col_start
 
 
-def recalcultate_first_and_last_element(scope, idx_first_element, col_len, rows_number):
-    """calculate if the current index is in the range of visible rows, if not it 
-    correct the range of visible rows"""
+def recalcultate_first_and_last_element(scope, idx_first_element, col_len, rows_number, chunk_size=1):
+    """calculate if the current index is in the range of visible rows, if not it
+    correct the range of visible rows
+    chunk_size = when the data is loaded in chunks"""
     select = scope.cursor % col_len
     idx_last_element = idx_first_element + rows_number
     if select >= (idx_last_element):
@@ -436,7 +438,8 @@ def create_tab(scr,
                scope_activation_func,
                active=False,  # what is it?
                multipleSelection=False,
-               data_table_legend=None):
+               data_table_legend=None,
+               chunk_loader: WDB.DataChunkLoader = None):
 
     """Create a beautiful and shining tab
     dataTable: 2dim data list
@@ -444,6 +447,14 @@ def create_tab(scr,
     position: relative to the parent win
     size: if it fit in the parent win
     active: if we can select elements"""
+
+    ### should all the data be loaded using a data loader?
+    chunk_size = 1
+    chunk_idx = 0
+    if chunk_loader:
+        chunk_size = chunk_loader.chunk_size
+        dataTable, chunk_idx = chunk_loader.get_items_hot_chunks()
+
 
 
     ### make empty data_table_color if...
@@ -508,7 +519,7 @@ def create_tab(scr,
     x_tabSize = size.x
     y_tabSize = size.y
     if y_tabSize + pos_y + 1 > parent_win_dim.y:
-        y_tabSize = parent_win_dim.y - pos_y -1
+        y_tabSize = parent_win_dim.y - pos_y - 1
 
     height_low_bar = 1
     height_legend = 3

@@ -29,7 +29,7 @@ import UItext as UItext
 import UIgraph as UIgraph
 import LOGtiller as LOGtiller
 from CONFtiller import (
-    server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_WDB,
+    server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_WDB, SQL_TIMEOUT,
     XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO,
     config, self_hostname, full_node_rpc_port, wallet_rpc_port,
     DEFAULT_ROOT_PATH)
@@ -37,7 +37,7 @@ import DEBUGtiller as DEBUGtiller
 import ELEMENTStiller as ELEMENTS
 import WDBtiller as WDB
 import DEXtiller as DEX
-from RPCtiller import call_rpc_node
+from RPCtiller import call_rpc_node, call_rpc_daemon
 from UTILITYtiller import binary_search_l
 
 
@@ -422,7 +422,7 @@ def open_coin_wallet(scope: Scope, screenState: ScreenState, tail):
     new_name = f"{scope.parent_scope.name}_{tail}"
     new_scope = Scope(new_name, screen_coin_wallet, screenState)
     new_scope.parent_scope = scope.parent_scope
-    new_scope.data = tail
+    new_scope.data['tail'] = tail
     new_scope.exec = None
     screenState.activeScope = new_scope
     return new_scope
@@ -562,7 +562,7 @@ def fetch_coin_data(data_lock, coins_data, tail):
         historic_price, historic_timestamp = DEX.getHistoricPriceFromTail(tail, 7)
         end = datetime.now()
         begin = int((end - timedelta(days=7)).timestamp())
-        conn = sqlite3.connect(DB_WDB)
+        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
 
         for price, ts in zip(historic_price, historic_timestamp):
             WDB.insert_price(conn, tail, ts, price, XCH_CUR)
@@ -654,7 +654,7 @@ def fetch_btc_data(data_lock, coins_data):
         current_price = prices[-1]
         historic_timestamp = []
         historic_price = []
-        conn = sqlite3.connect(DB_WDB)
+        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
         for i in prices:
             ts = i[0]
             p = i[1]
@@ -718,7 +718,7 @@ def fetch_chia_data(data_lock, coins_data):
             current_price = prices[-1]
             historic_timestamp = []
             historic_price = []
-            conn = sqlite3.connect(DB_WDB)
+            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
             for i in prices:
                 ts = i[0]
                 p = i[1]
@@ -749,6 +749,21 @@ def fetch_chia_data(data_lock, coins_data):
         logging(server_logger, "DEBUG", f"Balance error. Exception: {e}")
         logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
         traceback.print_exc()
+
+
+def fetch_addresses(data_lock, fingerprint: int, pk_state_id: int):
+    """Fetch addresses for each fingerprints until the last FREE_ADD addresses are unused"""
+    ### to implement the logic to load until last unused
+    conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
+    non_observer = False
+    logging(server_logger, "DEBUG", "fetching addresses from daemon")
+    response = call_rpc_daemon("get_wallet_addresses", fingerprints=[fingerprint], index=0, count=1000, non_observer_derivation=non_observer)
+    adds = response[str(fingerprint)]
+    # pk_state_id = WDB.retrive_pk(conn, fingerprint)[0]
+
+    for a in adds:
+        WDB.insert_address(conn, pk_state_id, a['hd_path'], a['address'], non_observer)
+        logging(server_logger, "DEBUG", f"added adx with path {a['hd_path']} of finger: {fingerprint} to the db")
 
 
 def load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active):
@@ -886,7 +901,7 @@ def get_spendable_coin(wallet_id):
 
 def fetch_cat_assets():
 
-    conn = sqlite3.connect(DB_WDB)
+    conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
     last_update = WDB.retrive_table_timestamp(conn, 'asset_name')
     cats_data = None
     min_time_elapsed = 1 * 60 * 60
@@ -902,8 +917,10 @@ def fetch_cat_assets():
 
 
 # wallet fetcher
+# TODO: finger_list: List[int] is rendundant of fingers_state, List[FingerState]
 def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                  coins_data, count_server):
+    """Fetch wallet data."""
 
     logging(server_logger, "DEBUG", "wallet fetcher started.")
 
@@ -933,15 +950,14 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
 
             # get logged finger -> to place on a screen variable
             #screenState.active_pk = (False, asyncio.run(call_rpc_wallet('get_logged_in_fingerprint')))
-            conn = sqlite3.connect(DB_WDB)
+            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
             for finger in fingerprints:
                 if finger in fingers_list:
                     continue
                 else:
                     new_pk = PkState()
                     new_pk.fingerprint = finger
-                    key = asyncio.run(call_daemon_rpc("get_key",
-                                                      fingerprint=finger))['key']
+                    key = call_rpc_daemon("get_key", fingerprint=finger)
                     new_pk.pk = key["public_key"]
                     new_pk.label = key["label"]
                     fingers_list.append(finger)
@@ -949,10 +965,19 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
 
                     # store the fingerprints
                     logging(server_logger, "DEBUG", 'WDB insert PK starting')
+
                     try:
-                        WDB.insert_pk(conn, finger, key["label"], key["public_key"])
+                        pk_state_id = WDB.insert_pk(conn, finger, key["label"], key["public_key"])
                     except Exception as e:
                         logging(server_logger, "DEBUG", f'WDB insert_pk error: {e}')
+
+                    if pk_state_id:
+                        add_addresses_thread = threading.Thread(target=fetch_addresses,
+                                                                args=(data_lock,
+                                                                      finger,
+                                                                      pk_state_id),
+                                                                daemon=True)
+                        add_addresses_thread.start()
 
                     logging(server_logger, "DEBUG", 'WDB insert PK ended')
 
@@ -968,7 +993,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
         try:
             logging(server_logger, "DEBUG", 'loading wallet.\n\n')
 
-            conn = sqlite3.connect(DB_WDB)
+            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
             for finger in fingerprints:
 
                 pk_state_id = WDB.retrive_pk(conn, finger)[0]
@@ -2352,7 +2377,7 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
         except:
             print("cazzi amazzi")
             traceback.print_exc()
-    debug_win.refresh() # delete if not using newwin. It flickers...
+    debug_win.refresh()  # delete if not using newwin. It flickers...
 
 
 def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
@@ -2371,7 +2396,7 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
 
     active_scope: Scope = screenState.activeScope
     main_scope = active_scope.main_scope
-    tail = main_scope.data
+    tail = main_scope.data['tail']
 
     coin_wallet: WalletState = wallets[tail]
     pos = UIgraph.Point(0,0)
@@ -2610,9 +2635,28 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
 
         case 'receive':
             #1 show last address
+            # address | times used this asset | active coins | times used by any asset
+            # address | times used | active coins
             text = "Last address: "
             ELEMENTS.create_text(wallet_win, pos, text, P_col, True)
             pos += UIgraph.Point(0,1)
+
+            # load addresses using the chunkloader
+            # the addressses it could be shared with all other cats and xch...
+            # so what...?
+            if main_scope.data['addresses_loader'] is None:
+
+                conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
+                table_name = 'addresses'
+                chunk_size = height * 2  # to be sure to have at least 2 full screen of data
+                offset = 0  # start from 0
+                pk_state_id = WDB.retrive_pk(conn, screenState.active_pk)[0]
+                filters = {'pk_state_id': pk_state_id, 'hardened': False}
+                data_chunk_loader = WDB.DataChunkLoader(conn, table_name, chunk_size, offset, filters)
+                conn.close()
+
+            data_chunk_loader = main_scope.data['address_loader']
+
             #2 show all address
             pass
         case 'send':
@@ -2623,7 +2667,7 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
             ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'add', pos_ins,
                                    pre_text, P_col, True, False)
             pos_ins += UIgraph.Point(0,1)
-            pre_text = "add amountt:  "
+            pre_text = "add amount:  "
             ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'amount', pos_ins,
                                    pre_text, P_col, True, False)
             pos_ins += UIgraph.Point(0,1)
@@ -3930,7 +3974,7 @@ def interFace(stdscr):
 
         # load data from WDB
         # create the WDB or load the data
-        conn = sqlite3.connect(DB_WDB)
+        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
         WDB.create_wallet_db(conn)
         logging(server_logger, "DEBUG", f"WDB '{DB_WDB}' initialized successfully.")
         load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active)
@@ -4395,24 +4439,6 @@ async def call_rpc_fetch(method_name, *args, **kwargs):
         full_node_client.close()
         await full_node_client.await_closed()
 
-
-async def call_daemon_rpc(method_name, *args, **kwargs):
-
-    daemon = await connect_to_daemon_and_validate(DEFAULT_ROOT_PATH, config)
-
-    if daemon is None:
-        raise Exception("Failed to connect to chia daemon")
-
-    result = {}
-    try:
-        ws_request = daemon.format_request(method_name, kwargs)
-        ws_response = await daemon._get(ws_request)
-        result = ws_response["data"]
-    except Exception as e:
-        raise Exception(f"Request failed: {e}")
-    finally:
-        await daemon.close()
-    return result
 
 class StdOutWrapper:
     text = ""
