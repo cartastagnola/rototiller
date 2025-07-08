@@ -150,18 +150,17 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
     return x_col_dim, x_col_start
 
 
-def recalcultate_first_and_last_element(scope, idx_first_element, col_len, rows_number, chunk_size=1):
+def recalcultate_first_and_last_element(select, idx_first_element, rows_number):
     """calculate if the current index is in the range of visible rows, if not it
     correct the range of visible rows
     chunk_size = when the data is loaded in chunks"""
-    select = scope.cursor % col_len
     idx_last_element = idx_first_element + rows_number
     if select >= (idx_last_element):
         idx_last_element = select + 1
         idx_first_element = idx_last_element - rows_number
     elif idx_first_element > select:
-        idx_first_element = select % col_len
-        idx_last_element = (idx_first_element + rows_number) % col_len
+        idx_first_element = select
+        idx_last_element = (idx_first_element + rows_number)
 
     return idx_first_element, idx_last_element, select
 
@@ -178,7 +177,7 @@ def create_text(stdscr, pos: UIgraph.Point, text: str, P_text_color, bold: bool 
 
 def create_text_aligned(stdscr, margin: UIgraph.Point, text: str, P_text_color,
                         bold: bool = False, align_h: int = 0, align_v: int = 0):
-    """Create normal text with align options, it does not support multi lines.
+    """Create normal text with align options,
     align_h: right=0, center=1, left=2
     align_v: top=0, center=1, bottom=2
     the margin.x is used as distance from the margin, both in align right and left
@@ -187,29 +186,43 @@ def create_text_aligned(stdscr, margin: UIgraph.Point, text: str, P_text_color,
     temp_vec = stdscr.getmaxyx()
     box_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
 
-    text_len = len(text)
-
     pos_x = None
     pos_y = None
 
-    match align_h:
-        case 0:
-            pos_x = margin.x
-        case 1:
-            pos_x = int((box_dim.x - text_len) // 2)
-        case 2:
-            pos_x = box_dim.x - margin.x - text_len
+    text_array = []
+    if len(text) > box_dim.x:
+        while len(text) > box_dim.x:
+            text_array.append(text[:box_dim.x - 8])
+            text = text[box_dim.x:]
+        else:
+            text_array.append(text)
+    else:
+        text_array.append(text)
 
-    match align_v:
-        case 0:
-            pos_y = margin.y
-        case 1:
-            pos_y = int((box_dim.y - 1) // 2)
-        case 2:
-            pos_y = box_dim.y - margin.y - 1
+    for e, sub_text in enumerate(text_array):
+        print('deb')
+        print(sub_text)
+        print(e)
+        text_len = len(sub_text)
+        match align_h:
+            case 0:
+                pos_x = margin.x
+            case 1:
+                pos_x = int((box_dim.x - text_len) // 2)
+            case 2:
+                pos_x = box_dim.x - margin.x - text_len
 
-    pos = UIgraph.Point(pos_x, pos_y)
-    create_text(stdscr, pos, text, P_text_color, bold)
+        # TODO: add centering multiline text
+        match align_v:
+            case 0:
+                pos_y = margin.y
+            case 1:
+                pos_y = int((box_dim.y - 1) // 2)
+            case 2:
+                pos_y = box_dim.y - margin.y - 1
+
+        pos = UIgraph.Point(pos_x, pos_y)
+        create_text(stdscr, pos + UIgraph.Point(0,e), sub_text, P_text_color, bold)
 
 
 def create_blinking_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False):
@@ -448,35 +461,6 @@ def create_tab(scr,
     size: if it fit in the parent win
     active: if we can select elements"""
 
-    ### should all the data be loaded using a data loader?
-    chunk_size = 1
-    chunk_idx = 0
-    if chunk_loader:
-        chunk_size = chunk_loader.chunk_size
-        dataTable, chunk_idx = chunk_loader.get_items_hot_chunks()
-
-
-
-    ### make empty data_table_color if...
-    if data_table_color is None:
-        row = len(dataTable)
-        col = len(dataTable[0])
-        data_table_color = [list([None] * col) for _ in range(row)]
-
-
-    ### transpose if needed
-    # the shape of the data should be like this:
-    # [['DBX', '61.0000', '0.0041477', '-0.601%', '0.10754', '-0.601%', '0.25301', '6.55972'],
-    # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
-    # [...]]
-    if transpose:
-        dataTable = transpose_table(dataTable)
-        data_table_color = transpose_table(data_table_color)
-
-    ### assert the shape of the data
-    if data_table_legend:
-        assert len(data_table_legend) == len(dataTable[0]), "legend data length differ from the data"
-
     ### name
     tab_name = f"{parent_scope.id}_{tab_name}"
 
@@ -490,15 +474,66 @@ def create_tab(scr,
 
         scope.exec_own = scope_activation_func
 
+    ### end init scope stuff ####
+
+    ### transpose if needed
+    # the shape of the data should be like this:
+    # [['DBX', '61.0000', '0.0041477', '-0.601%', '0.10754', '-0.601%', '0.25301', '6.55972'],
+    # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
+    # [...]]
+    if transpose and dataTable:
+        if dataTable:
+            dataTable = transpose_table(dataTable)
+        if data_table_color:
+            data_table_color = transpose_table(data_table_color)
+
+    ### Manage dataloader
+    ### TODO: should all data be loaded using a loader?
     scope = screenState.scopes[tab_name]
     tab_scope_is_active = False
     scope_exec_args = [screenState]
+    chunk_size = 1
+    chunk_idx = 0
+    total_item_count = None
+    row_count = None
+    select = scope.cursor
+    if chunk_loader:
+        # ok, i get the scope.cursor and i load the 3 chunks...
+        chunk_size = chunk_loader.chunk_size
+        dataTable, first_idx = chunk_loader.get_items_hot_chunks()
+        total_item_count = chunk_loader.total_row_count
+        row_count = len(dataTable)
+        # update the offset in the loader
+        chunk_loader.update_offset(select)
+    else:
+        total_item_count = len(dataTable)
+        row_count = len(dataTable)
+    ### end
+
+    ### updatae scope
     if scope is screenState.activeScope:
-        scope.update_no_sub(len(dataTable))
+        scope.update_no_sub(total_item_count)
         screenState.scope_exec_args = scope_exec_args
         tab_scope_is_active = True
-
     ### end scope stuff ####
+
+    ### make empty data_table_color if...
+    if data_table_color is None:
+        row = len(dataTable)
+        col = len(dataTable[0])
+        data_table_color = [list([None] * col) for _ in range(row)]
+
+    def sisi(ll):
+        print(f"row: {len(ll)}, col: {len(ll[0])}")
+
+    print("debut traspose")
+    sisi(dataTable)
+    sisi(data_table_color)
+
+    ### assert the shape of the data
+    if data_table_legend:
+        assert len(data_table_legend) == len(dataTable[0]), "legend data length differ from the data"
+
 
     ### tab geometry
     ## get the dimensions and the position of the main window and calculate the pos
@@ -558,22 +593,35 @@ def create_tab(scr,
     idx_first_element = scope.data["idx_first_element"]
 
     # afterward
-    col_len = len(dataTable)
-    rows_number = y_tabSize - height_low_bar - height_legend
+    col_len = row_count
+    visible_row_count = y_tabSize - height_low_bar - height_legend
 
     ### recalculate firt and last element
-    idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(scope, idx_first_element, col_len, rows_number)
+    idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(select, idx_first_element, visible_row_count)
     #### update first element when window is resized
-    tab_length = idx_first_element - idx_last_element
-    if tab_length < rows_number:
-        idx_first_element = max(idx_first_element - (rows_number - tab_length), 0)
-        idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(scope, idx_first_element, col_len, rows_number)
-
-    count = 0
-    idx_dataTable = range(col_len)
+    tab_length = idx_last_element - idx_first_element
+    if tab_length < visible_row_count:
+        idx_first_element = max(idx_first_element - (visible_row_count - tab_length), 0)
+        idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(select, idx_first_element, visible_row_count)
 
     ### update first element
     scope.data["idx_first_element"] = idx_first_element
+
+    if chunk_loader:
+        idx_first_element -= first_idx
+        idx_last_element -= first_idx
+        select -= first_idx
+
+
+    if chunk_loader:
+        global DEBUG_OBJ
+        DEBUG_OBJ.text = (
+            f"first el: {idx_first_element} | last el: {idx_last_element} | scp.cur; {scope.cursor} | sel: {select} |"
+            f" c. off: {chunk_loader.current_offset} | c. arena id: {chunk_loader.main_chunk_pointer} |"
+            f" dataT len: {len(dataTable)} | first id {first_idx}"
+        )
+
+    count = 0
 
     ### max dim for the table
     max_table_width = parent_win_dim.x - position.x - 3  # CONST for borders
@@ -628,10 +676,10 @@ def create_tab(scr,
     current_selection_data = None
     ### data loop ###
     row = height_legend
-    for data_row, data_idx in zip(
-            dataTable[idx_first_element:idx_last_element],
-            idx_dataTable[idx_first_element:idx_last_element]):
+    sliced_dataTable = dataTable[idx_first_element:idx_last_element]
+    sliced_idx_dataTable = range(idx_first_element, idx_last_element)
 
+    for data_row, data_idx in zip(sliced_dataTable, sliced_idx_dataTable):
         C_custom_bk = table_bk_colors[row % 2]
         P_current_attron = curses.color_pair(table_color_pairs[row % 2])  # colling it P_... is misleading
         if data_idx == select and tab_scope_is_active:
@@ -688,22 +736,22 @@ def create_tab(scr,
     # idx_first_element
     # idx_last_element
 
-    #bar_dim = max(floor(rows_number / col_len * rows_number), 1)
-    steps = col_len - rows_number
+    #bar_dim = max(floor(visible_row_count / col_len * visible_row_count), 1)
+    steps = col_len - visible_row_count
     if steps > 0:
-        bar_dim = max(rows_number - steps, 1)
-        bar_pos = floor(idx_first_element / steps * min(steps, rows_number - 1))
+        bar_dim = max(visible_row_count - steps, 1)
+        bar_pos = floor(idx_first_element / steps * min(steps, visible_row_count - 1))
 
         #global DEBUG_OBJ
         #DEBUG_OBJ.text = (
         #    f"steps: {steps}, bar_dim: {bar_dim}, bar_pos: {bar_pos}"
-        #    f" rows_number: {rows_number}, tot_elem: {col_len}"
+        #    f" visible_row_count: {visible_row_count}, tot_elem: {col_len}"
         #    f" ratio idx/step: {idx_first_element / steps}"
         #)
 
         bar_row = height_legend
         table.attron(curses.color_pair(P_soft))
-        for i in range(rows_number):
+        for i in range(visible_row_count):
             if i == bar_pos:
                 table.attron(curses.color_pair(P_dark))
             elif i == (bar_pos + bar_dim):
@@ -725,13 +773,9 @@ def create_tab(scr,
 
     # if yanked
     copy_scope = screenState.scopes['copy']
-    print('yanking')
-    print(keyboardState.yank, ' yank')
-    print(tab_scope_is_active, ' tab scope')
     if (keyboardState.yank and tab_scope_is_active) or screenState.activeScope == copy_scope:
         # create a new over scope where you can select the bit of info you want
         create_copy_banner(table, screenState, scope, current_selection_data, False)
-        print("burner")
 
 
 def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, only_init: bool):
@@ -887,15 +931,27 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
 
     P_win_test = screenState.colorPairs["test"]
     P_win_test = screenState.colorPairs["copy_banner"]
+
     temp_vec = stdscr.getmaxyx()
     win_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
+    temp_vec = stdscr.getbegyx()
+    win_pos = UIgraph.Point(temp_vec[1], temp_vec[0])
+
     width = int(win_dim.x * 0.85)
     height = 10
     pos_x = (win_dim.x - width) // 2
-    pos_y = win_dim.y // 2 + height // 2
+    pos_y = win_pos.y + win_dim.y // 2 - height // 2
+
+
+    temp_vec = stdscr.getbegyx()
+    win_pos = UIgraph.Point(temp_vec[1], temp_vec[0])
 
     print(height, width, pos_y, pos_x)
-    print(win_dim.x, ' ', win_dim.y)
+    print('table dimension (x,y): ', win_dim.x, ' ', win_dim.y)
+    print('table position (x,y): ', win_pos.x, ' ', win_pos.y)
+    print('sub win dimension: ')
+    print('height, width, y,  x')
+    print(height, width, pos_y, pos_x)
     banner = stdscr.subwin(height, width, pos_y, pos_x)
 
     temp_vec = banner.getmaxyx()
@@ -950,11 +1006,12 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
                      dataTable, data_table_keys: List[str], data_table_color,
                      transpose: bool, pos: UIgraph.Point, size: UIgraph.Point,
                      keyboardState, tabName, row_height, sub_scope_activation, active=False, multipleSelection=False,
-                     data_table_legend=None, graph_data=None):
+                     data_table_legend=None, graph_data=None, is_singular_item_table=True):
     """Create a beautiful and shining tab
     dataTable: 2dim data list
     data_table_keys: key used when something is selected
-    active: if we can select elements"""
+    active: if we can select elements
+    singular: if it is a tab with only one item it is never active"""
 
     ### to rewrite and integrate with the normal create_tab, keep only the graphic part separeted
 
@@ -991,9 +1048,12 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
     tab_scope_is_active = False
     scope_exec_args = [screenState]
     if scope is screenState.activeScope:
-        scope.update_no_sub(len(dataTable[0]))
-        screenState.scope_exec_args = scope_exec_args
-        tab_scope_is_active = True
+        if is_singular_item_table:
+            screenState.activeScope = scope.parent_scope
+        else:
+            scope.update_no_sub(len(dataTable[0]))
+            screenState.scope_exec_args = scope_exec_args
+            tab_scope_is_active = True
 
     ### end scope stuff ####
 
@@ -1908,13 +1968,6 @@ def draw_rect(stdscr, point: UIgraph.Point, dim: UIgraph.Point, P_color):
         stdscr.addstr(point.y + i, point.x, u'\u2588' * dim.x)
 
 
-@dataclass
-class BlockState:
-    height: int
-    infused: bool
-    mempool: bool
-    transaction: bool
-    fullness: float
 
 
 def create_block_band(stdscr, screenState: ScreenState, parent_scope: Scope,
@@ -1947,6 +2000,11 @@ def create_block_band(stdscr, screenState: ScreenState, parent_scope: Scope,
 
     win_size = stdscr.getmaxyx()
     win_size = UIgraph.Point(win_size[1], win_size[0])
+
+    # current_height > show block data
+    # current height + 1 > show -s stuffs  (DEFAULT)
+    # current height + 2 > 1 memepool block
+    # current height + 3 > if it exists, show next memepool block
 
 
     # scrolling:

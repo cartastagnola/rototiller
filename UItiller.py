@@ -25,6 +25,10 @@ from chia.daemon.client import connect_to_daemon_and_validate
 from chia.types.blockchain_format.sized_bytes import bytes32, bytes48
 from chia.util.ints import uint16, uint32, uint64
 
+# load configuration
+from chia.util.config import load_config
+from chia.util.default_root import DEFAULT_ROOT_PATH
+
 import UItext as UItext
 import UIgraph as UIgraph
 import LOGtiller as LOGtiller
@@ -421,7 +425,7 @@ def activate_scope_and_set_pk(scope: Scope, screenState):
 def open_coin_wallet(scope: Scope, screenState: ScreenState, tail):
     new_name = f"{scope.parent_scope.name}_{tail}"
     new_scope = Scope(new_name, screen_coin_wallet, screenState)
-    new_scope.parent_scope = scope.parent_scope
+    new_scope.parent_scope = scope  # parent_scope
     new_scope.data['tail'] = tail
     new_scope.exec = None
     screenState.activeScope = new_scope
@@ -2644,18 +2648,41 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
             # load addresses using the chunkloader
             # the addressses it could be shared with all other cats and xch...
             # so what...?
-            if main_scope.data['addresses_loader'] is None:
-
+            if 'address_loader' not in main_scope.data:
                 conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
                 table_name = 'addresses'
-                chunk_size = height * 2  # to be sure to have at least 2 full screen of data
+                chunk_size = 10  # height * 2  # to be sure to have at least 2 full screen of data
                 offset = 0  # start from 0
-                pk_state_id = WDB.retrive_pk(conn, screenState.active_pk)[0]
+                finger = screenState.active_pk[0]
+                pk_state_id = WDB.retrive_pk(conn, finger)[0]
                 filters = {'pk_state_id': pk_state_id, 'hardened': False}
-                data_chunk_loader = WDB.DataChunkLoader(conn, table_name, chunk_size, offset, filters)
+                main_scope.data['address_loader'] = WDB.DataChunkLoader(conn, table_name, chunk_size, offset, filters=filters)
                 conn.close()
 
-            data_chunk_loader = main_scope.data['address_loader']
+            data_chunk_loader: WDB.DataChunkLoader = main_scope.data['address_loader']
+
+            ELEMENTS.create_tab(wallet_win,
+                                screenState,
+                                main_scope,
+                                "addresses",
+                                None,  # data_table => using chunk loader
+                                None,
+                                None,
+                                False,
+                                pos,
+                                UIgraph.Point(60,10),
+                                keyboardState,
+                                exit_scope,
+                                False,
+                                False,
+                                None,  # addresses_table_legend,
+                                data_chunk_loader)
+
+            # conn creation should be more logic inside the update, so i can be 
+            # created only when needed
+            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
+            data_chunk_loader.update_loader(conn)
+            conn.close()
 
             #2 show all address
             pass
@@ -3714,6 +3741,28 @@ def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
     screenState.scope_exec_args = [screenState]
     main_scope.update()
 
+    # load blockchain database
+    config = load_config(DEFAULT_ROOT_PATH, "config.yaml")
+    blockchain_db_path = config["full_node"]["database_path"]
+    sql_path_read_only = f"file:{blockchain_db_path}?mode=ro"
+
+    blockchain_state = call_rpc_node('get_blockchain_state')
+    heigh_last_block = blockchain_state['peak']['height']
+
+    print(sql_path_read_only)
+    # load blocks
+    if 'blocks_loader' not in main_scope.data:
+        conn = sqlite3.connect(sql_path_read_only, uri=True, timeout=SQL_TIMEOUT)
+        table_name = 'full_blocks'
+        chunk_size = 20  # height * 2  # to be sure to have at least 2 full screen of data
+        offset = heigh_last_block
+        sorting_column = 'height'
+        filters = {}
+        main_scope.data['blocks_loader'] = WDB.DataChunkLoader(conn, table_name, chunk_size, offset, filters, sorting_column)
+        conn.close()
+
+    data_chunk_loader: WDB.DataChunkLoader = main_scope.data['blocks_loader']
+
     global BLOCK_STATES
     if BLOCK_STATES is None:
         import random
@@ -3729,6 +3778,7 @@ def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
         BLOCK_STATES = block_states
 
     block_states = BLOCK_STATES  # only for testing
+
 
     if block_states is not None:
         ELEMENTS.create_block_band(stdscr, screenState, main_scope,
@@ -3750,10 +3800,10 @@ def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
     genesis_challenge = network_info["genesis_challenge"]
     network_name = network_info["network_name"]
 
-    full_node_port = "8444"
-    full_node_rpc_port = "8555"
+    # from the config...
+    full_node_port = config['full_node']['port']  # "8444"
+    full_node_rpc_port = config['full_node']['rpc_port']  # "8555"
 
-    blockchain_state = call_rpc_node('get_blockchain_state')
     difficulty = blockchain_state["difficulty"]
     synced = blockchain_state["sync"]["synced"]
     sync_mode = blockchain_state["sync"]["sync_mode"]
@@ -3766,6 +3816,7 @@ def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
         row = 15
         col = 4
         node_data.addstr(row, col, f"Network: {network_name}    Port: {full_node_port}   RPC Port: {full_node_rpc_port}")
+
         row += 1
         node_data.addstr(row, col, f"Node ID: {node_id}")
         row += 1

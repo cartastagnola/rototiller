@@ -33,6 +33,7 @@ wallet_rpc_port = config["wallet"]["rpc_port"]  # 9256
 # COSTANT
 ## database
 DB_WDB = 'walletiller.db'
+SQL_TIMEOUT = 10
 
 ## chia tail
 XCH_FAKETAIL = '0c61a'

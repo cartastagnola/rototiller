@@ -122,23 +122,23 @@ def get_block_record():
 #        await full_node_client.await_closed()
 
 
-async def call_daemon_rpc(method_name, *args, **kwargs):
+async def fetch_rpc_daemon(method_name, *args, **kwargs):
 
     daemon = await connect_to_daemon_and_validate(DEFAULT_ROOT_PATH, config)
 
     if daemon is None:
         raise Exception("Failed to connect to chia daemon")
 
-    result = {}
     try:
-        ws_request = daemon.format_request(method_name, kwargs)
-        ws_response = await daemon._get(ws_request)
-        result = ws_response["data"]
+        request = daemon.format_request(method_name, kwargs)
+        response = await daemon._get(request)
+        response = response['data']
     except Exception as e:
+        logging(server_logger, "DEBUG", "sometime wrong with a daemon rpc call")
         raise Exception(f"Request failed: {e}")
     finally:
         await daemon.close()
-    return result
+    return response
 
 
 # not sure, but all the future rpc call should be done we the function below.
@@ -195,6 +195,11 @@ async def fetch_rpc_wallet(method_name, *args, **kwargs):
 
 # rpc call from list
 # if the items is an empty list the output of the rpc call is unaltered
+rpc_call_daemon = {
+    "get_key": ["key"],
+    "get_wallet_addresses": ["wallet_addresses"]
+}
+
 rpc_call_full_node = {
     "get_blockchain_state": ["blockchain_state"],
     "get_block": ["block"],
@@ -202,6 +207,7 @@ rpc_call_full_node = {
     "get_block_record": ["block_record"],
     "get_block_records": ["block_records"],
     "get_all_mempool_items": ["mempool_items"],
+    "get_all_mempool_tx_ids": ["tx_ids"],
     "get_routes": ["routes"],
     "get_additions_and_removals": [],
     "get_puzzle_and_solution": ["coin_solution"]
@@ -217,6 +223,23 @@ rpc_call_wallet = {
 
 
 # refactor using the name call_rpc_node()
+def call_rpc_daemon(method_name, *args, **kwargs):
+    """fetch the full node with the given rpc call and filter the output.
+    If the output is a single object, the 'success' is filtered out,
+    if not the output remain untouched.
+    Method_name: name of the method,
+    then all the parameters as: block_header='0xa89...'"""
+
+    rpc_result = asyncio.run(fetch_rpc_daemon(method_name, **kwargs))
+    output_filter = rpc_call_daemon[method_name]
+
+    if len(output_filter) == 1:
+        return rpc_result[output_filter[0]]
+    else:
+        return rpc_result
+
+
+# refactor using the name call_rpc_node()
 def call_rpc_node(method_name, *args, **kwargs):
     """fetch the full node with the given rpc call and filter the output.
     If the output is a single object, the 'success' is filtered out,
@@ -225,10 +248,10 @@ def call_rpc_node(method_name, *args, **kwargs):
     then all the parameters as: block_header='0xa89...'"""
 
     rpc_result = asyncio.run(fetch_rpc_node(method_name, **kwargs))
-    output = rpc_call_full_node[method_name]
+    output_filter = rpc_call_full_node[method_name]
 
-    if len(output) == 1:
-        return rpc_result[output[0]]
+    if len(output_filter) == 1:
+        return rpc_result[output_filter[0]]
     else:
         return rpc_result
 
@@ -242,14 +265,20 @@ def call_rpc_wallet_with_output(method_name, *args, **kwargs):
     then all the parameters as: block_header='0xa89...'"""
 
     rpc_result = asyncio.run(fetch_rpc_wallet(method_name, **kwargs))
-    output = rpc_call_wallet[method_name]
+    output_filter = rpc_call_wallet[method_name]
 
-    if len(output) == 1:
-        return rpc_result[output[0]]
-    elif len(output) == 0:
+    if len(output_filter) == 1:
+        return rpc_result[output_filter[0]]
+    elif len(output_filter) == 0:
         raise
     else:
         return rpc_result
+
+
+if __name__ == '__main__':
+
+    blockchain_state = call_rpc_node('get_blockchain_state')
+    print(blockchain_state)
 
 #rpc_functions = {}
 #
