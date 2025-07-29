@@ -8,7 +8,7 @@ from chia.types.full_block import FullBlock
 from chia.consensus.block_record import BlockRecord
 
 from CONFtiller import (
-    server_logger, ui_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO
+    server_logger, ui_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT
 )
 
 
@@ -433,6 +433,44 @@ def insert_address(conn, pk_state_id, hd_path, address, hardened):
     conn.commit()
     return store_id
 
+# mempool items
+class MempoolItem:
+
+    def __init__(self, tx_id, json_item):
+        self.tx_id = tx_id
+        self.cost = json_item['cost']
+        self.fee = json_item['fee']
+
+        self.addition_amount = json_item['npc_result']['conds']['addition_amount']
+        self.removal_amount = json_item['npc_result']['conds']['removal_amount']
+        self.additions = json_item['additions']
+        self.removals = json_item['removals']
+        self.spend_bundle = json_item['spend_bundle']
+        self.added_coins_count = len(self.additions)
+        self.removed_coins_count = len(self.removals)
+        self.fee_per_cost = self.fee / self.cost
+
+    def __str__(self):
+        str = (f"tx_id: {self.tx_id} | cost: {self.cost} | fee: {self.fee:_} mojo or {self.fee / 1_000_000_000_000} | "
+            f"amount added/removed: {self.addition_amount} / {self.removal_amount} | "
+            f"added/removed coins: {self.added_coins_count} / {self.removed_coins_count}"
+               )
+        return str
+
+
+class MempoolBlock:
+
+    def __init__(self):
+        self.transactions = []
+        self.total_cost = 0
+
+    def add_item(self, item: MempoolItem):
+        self.transactions.append(item)
+        self.total_cost += item.cost
+
+    def __str__(self):
+        return f"n. of transaction {len(self.transactions)}, total cost: {self.total_cost}"
+
 
 # block state type
 class BlockState:
@@ -475,7 +513,7 @@ class BlockState:
 
         # blockrecords:
         self.fees = block_record['fees']
-        self.header_hash = block_record['header_hash']
+        # self.header_hash = block_record['header_hash']
         self.farmer_puzzle_hash = block_record['farmer_puzzle_hash']
         self.pool_puzzle_hash = block_record['pool_puzzle_hash']
         self.deficit = block_record['deficit']   # what is it? number of block needed to be infused in this slot
@@ -501,7 +539,7 @@ class BlockState:
             self.timestamp_b = None
         self.n_iteration_challenge_chain = block['reward_chain_block']['challenge_chain_ip_vdf']['number_of_iterations']
         self.height_b = block['reward_chain_block']['height']
-        self.is_transaction_block_b = block['reward_chain_block']['is_transaction_block']
+        self.is_transaction_block = block['reward_chain_block']['is_transaction_block']
         self.plot_public_key = block['reward_chain_block']['proof_of_space']['plot_public_key']
         self.pool_public_key = block['reward_chain_block']['proof_of_space']['pool_public_key']
         self.proof_of_space_proof = block['reward_chain_block']['proof_of_space']['proof']
@@ -523,6 +561,89 @@ class BlockState:
     def __str__(self):
         return f"Block height: {self.height:,}; sp: {self.signage_point_index}; ts: {self.timestamp} and {self.timestamp_b} ; header: {self.header_hash}"
 
+    def block_state_to_2d_list(self):
+        keys = []
+        values = []
+
+        keys.append('header_hash')
+        values.append(self.header_hash)
+        keys.append('height')
+        values.append(self.height)
+        keys.append('sub_epoch_summary')
+        values.append(self.sub_epoch_summary)
+
+        # blockrecords:
+        keys.append('fees')
+        values.append(self.fees)
+        keys.append('farmer_puzzle_hash')
+        values.append(self.farmer_puzzle_hash)
+        keys.append('pool_puzzle_hash')
+        values.append(self.pool_puzzle_hash)
+        keys.append('deficit')
+        values.append(self.deficit)
+        keys.append('overflow')
+        values.append(self.overflow)
+        keys.append('prev_transaction_block_height')
+        values.append(self.prev_transaction_block_height)
+        keys.append('reward_claims_incorporated')
+        values.append(self.reward_claims_incorporated)
+        keys.append('signage_point_index')
+        values.append(self.signage_point_index)
+        keys.append('required_iters')
+        values.append(self.required_iters)
+        keys.append('sub_slot_iters')
+        values.append(self.sub_slot_iters)
+        keys.append('total_iters')
+        values.append(self.total_iters)
+        keys.append('weight')
+        values.append(self.weight)
+        keys.append('timestamp')
+        values.append(self.timestamp)
+
+        # block:
+        keys.append('farmer_puzzle_hash_b')
+        values.append(self.farmer_puzzle_hash_b)
+        keys.append('pool_puzzle_hash_b')
+        values.append(self.pool_puzzle_hash_b)
+
+        keys.append('additions_merkle_root')
+        values.append(self.additions_merkle_root)
+        keys.append('timestamp_b')
+        values.append(self.timestamp_b)
+        keys.append('n_iteration_challenge_chain')
+        values.append(self.n_iteration_challenge_chain)
+        keys.append('height_b')
+        values.append(self.height_b)
+        keys.append('is_transaction_block')
+        values.append(self.is_transaction_block)
+        keys.append('plot_public_key')
+        values.append(self.plot_public_key)
+        keys.append('pool_public_key')
+        values.append(self.pool_public_key)
+        keys.append('proof_of_space_proof')
+        values.append(self.proof_of_space_proof)
+        keys.append('proof_of_space_size')
+        values.append(self.proof_of_space_size)
+        keys.append('signage_point_index_b')
+        values.append(self.signage_point_index_b)
+        keys.append('total_iters_b')
+        values.append(self.total_iters_b)
+        keys.append('weight_b')
+        values.append(self.weight_b)
+        keys.append('transactions_generator')
+        values.append(self.transactions_generator)
+        keys.append('transactions_generator_ref_list')
+        values.append(self.transactions_generator_ref_list)
+        keys.append('aggregate_signature')
+        values.append(self.aggregate_signature)
+        keys.append('cost')
+        values.append(self.cost)
+        keys.append('fees_b')
+        values.append(self.fees_b)
+
+        return [keys, values]
+
+
 
 ##### Data chunk loader
 import threading
@@ -530,8 +651,9 @@ import time
 from dataclasses import dataclass
 
 
-def make_sql_fetcher(table, sort_column="id"):
-    def fetch(conn, start, count, filters=None):
+def make_sql_fetcher(table, sorting_column="id"):
+    def fetch(conn, start, count, filters=None, order='ASC'):
+        """ order is not implemented... """
         if not filters:
             filters = {}
 
@@ -543,37 +665,141 @@ def make_sql_fetcher(table, sort_column="id"):
             where_clauses.append(f"{filter} = ?")
             values.append(val)
 
-        #print(f"where clau {where_clauses}")
-        where_sql = f" WHERE {' AND '.join(where_clauses)} AND {sort_column} > ?" if filters else f" WHERE {sort_column} > ?"
-        #where_sql = f" WHERE {' AND '.join(where_clauses)}" if filters else ""
+        range_sql = f"{sorting_column} >= ? AND {sorting_column} < ?"
+        where_sql = f"WHERE {' AND '.join(where_clauses)} AND {range_sql}" if filters else f"WHERE {range_sql}"
 
         cur = conn.cursor()
-        ### ref ### query = "SELECT * FROM full_blocks WHERE height > ? ORDER BY height LIMIT ?;"
-        query = f"SELECT * FROM {table} {where_sql} ORDER BY {sort_column} LIMIT ?"
-        #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sort_column} LIMIT ? OFFSET ?"
-        print(f"questy: {query}")
-        values.extend([start, count])
-        print(query)
-        print(values)
+        query = f"SELECT * FROM {table} {where_sql}"
+        #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
+
+        values.extend([start, start + count])
+        #print(f"questy: {query}")
+        #print(f"valuesty: {values}")
+        cur.execute(query, values)
+        items = cur.fetchall()
+        return items
+
+    return fetch
+
+
+def make_sql_fetcher_range(table, sorting_column="id"):
+    def fetch(conn, start, count, filters=None, order='ASC'):
+        if not filters:
+            filters = {}
+
+        where_clauses = []
+        values = []
+
+        for filter, val in filters.items():
+            where_clauses.append(f"{filter} = ?")
+            values.append(val)
+
+        values = list(range(start, start + count))
+        range_sql = f"{sorting_column} in ({', '.join(['?'] * count)})"
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)} AND {range_sql}" if filters else f"WHERE {range_sql}"
+
+        cur = conn.cursor()
+        query = f"SELECT * FROM {table} {where_sql}"
+        #print(f"questy: {query}")
+        #print(f"valuesty: {values}")
+        cur.execute(query, values)
+        items = cur.fetchall()
+        return items
+
+    return fetch
+
+
+def make_sql_fetcher_range_M(table, sorting_column="id"):
+    def fetch(conn, start, count, filters=None, order='ASC'):
+        if not filters:
+            filters = {}
+
+        where_clauses = []
+        values = [start, start + count]
+
+        for filter, val in filters.items():
+            where_clauses.append(f"{filter} = ?")
+            values.append(val)
+
+        range_sql = f"{sorting_column} >= ? AND {sorting_column} < ?"
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)} AND {range_sql}" if filters else f"WHERE {range_sql}"
+
+        cur = conn.cursor()
+        query = f"SELECT * FROM {table} {where_sql}"
+        #print(f"questy: {query}")
+        #print(f"valuesty: {values}")
+        cur.execute(query, values)
+        items = cur.fetchall()
+        return items
+
+    return fetch
+
+
+def make_sql_last_element_fetcher(table, sort_column='id'):
+    def fetch(conn, filters=None, order='ASC'):
+        if not filters:
+            filters = {}
+
+        where_clauses = []
+        values = []
+
+        for filter, val in filters.items():
+            where_clauses.append(f"{filter} = ?")
+            values.append(val)
+
+        where_sql = f" WHERE {' AND '.join(where_clauses)} " if filters else ""
+
+        cur = conn.cursor()
+        query = (f"SELECT row_number "
+                 f"FROM ( "
+                    f"SELECT {sort_column}, ROW_NUMBER() OVER (ORDER BY {sort_column}) AS row_number "
+                    f"FROM {table} "
+                    f"{where_sql} )"
+                f"ORDER BY {sort_column} DESC "
+                f"LIMIT 1"
+                )
+
         cur.execute(query, values)
         return cur.fetchall()
 
     return fetch
 
 
+
 @dataclass
 class Chunk:
-    chunk_idx: int
-    first_idx: int
+    chunk_idx: int  # idx of the chunk
+    first_idx: int  # idx of the first element of the chunk
+    chunk_size: int
     data: list
+
+    def __post_init__(self):
+        """ It make the data len equal to the chunk size """
+        if len(self.data) < self.chunk_size:
+            self.data.extend([None] * (self.chunk_size - len(self.data)))
+
+    def is_full(self):
+        valid_items = 0
+        for i in self.data:
+            if i is not None:
+                valid_items += 1
+
+        return True if valid_items == self.chunk_size else False
 
 
 class DataChunkLoader:
-    def __init__(self, conn, table_name: str, chunk_size: int, offset: int = 0, sorting_column="id", filters=None, data_struct=None):
+    def __init__(self, db_path: str, table_name: str, chunk_size: int, offset: int = 0, sorting_column="id", filters=None, data_struct=None):
         """offset = distance from the beging of the array of elements
            filters = a dic with filter and value. EG. {'pk_state_id': 2, 'other_filter': 'yellow'}"""
+
+        self.db_path = db_path
+        conn = self.create_sql_conneciton()
+
         self.table_name = table_name
-        self.total_row_count = self.update_total_row_count(conn)
+        self.total_row_count = None
+        self.idx_last_item = None  # if there are double elements, this it could be different from the total row count
         self.sorting_column = sorting_column
         self.lock = threading.Lock()
         self.current_offset: int = offset
@@ -585,6 +811,9 @@ class DataChunkLoader:
         self.data_struct = data_struct
         self.filters = filters
 
+        self.update_total_row_count(conn)
+        self.update_idx_last_item(conn)
+
         # fetch_main chunk
         self.chunk_arena[self.main_chunk_pointer] = self.fetch_chunk(conn, self.current_offset)
         if (self.current_offset - self.chunk_size) >= 0:
@@ -593,15 +822,24 @@ class DataChunkLoader:
         post_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
         self.chunk_arena[post_chunk_pointer] = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
 
+        conn.close()
+
+    def create_sql_conneciton(self):
+        return sqlite3.connect(self.db_path, uri=True, timeout=SQL_TIMEOUT)
+
     def update_offset(self, offset: int):
         with self.lock:
             self.current_offset = offset
 
-    def change_current_offset(self, idx):
-        self.current_offset = idx
-
     def update_total_row_count(self, conn):
-        return get_row_count(conn, self.table_name)
+        self.total_row_count = get_row_count(conn, self.table_name)
+        return self.total_row_count
+
+    def update_idx_last_item(self, conn):
+        """ Return the highest value of the sorted columns, it can differs from 
+        the total_row_count in case of double entries"""
+        self.idx_last_item = self.fetcher(conn, 1, 1, self.filters, 'DESC')
+        return self.idx_last_item
 
     def fetch_db(self, conn, start, count):
         return self.fetcher(conn, start, count, self.filters)
@@ -617,9 +855,33 @@ class DataChunkLoader:
                 sturctured_data.append(self.data_struct(d, False))
             data = sturctured_data
 
-        return Chunk(chunk_idx, chunk_first_idx, data)
+        return Chunk(chunk_idx, chunk_first_idx, self.chunk_size, data)
 
-    def update_current_chunk(self):
+    def fetch_item_chunk(self, data_index):
+        """Return False if the updated chunk is not in the cache"""
+        conn = self.create_sql_conneciton()
+        with self.lock:
+            chunk_idx = data_index // self.chunk_size
+            chunk_first_idx = chunk_idx * self.chunk_size
+            # check if the chunk is in the cache
+            for chunk in self.chunk_arena:
+                if chunk is not None and chunk.chunk_idx == chunk_idx:
+                    item_local_idx = data_index % self.chunk_size
+                    if chunk.data[item_local_idx] is not None:
+                        # already present
+                        conn.close()
+                        return True
+                    data = self.fetch_db(conn, data_index, 1)
+                    if self.data_struct is not None:
+                        data = self.data_struct(data[0], False)
+                    item_local_idx = data_index % self.chunk_size
+                    chunk.data.insert(item_local_idx, data)
+                    conn.close()
+                    return True
+            conn.close()
+            return False
+
+    def update_current_chunk_pointer(self):
         current_chunk_idx = self.get_current_chunk().chunk_idx
         if self.current_offset // self.chunk_size > current_chunk_idx:
             self.main_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
@@ -658,7 +920,7 @@ class DataChunkLoader:
 
             data = []
             chunk_idx = None
-            if pre_chunk:
+            if pre_chunk and pre_chunk.chunk_idx < current_chunk.chunk_idx:
                 data.extend(pre_chunk.data)
                 chunk_idx = pre_chunk.chunk_idx
             else:
@@ -670,23 +932,35 @@ class DataChunkLoader:
             return data, chunk_idx * self.chunk_size
 
 
-    def update_loader(self, conn):
+    def update_loader(self):
+        conn = self.create_sql_conneciton()
         with self.lock:
-            # TODO: is this the place to update also the offset wiht scope.cursor?
-            self.update_current_chunk()
+
+            # update total row and current chunk
+            self.update_total_row_count(conn)
+            self.update_current_chunk_pointer()
             current_chunk: Chunk = self.get_current_chunk()
-            pre_chunk: Chunk = self.chunk_arena[(self.main_chunk_pointer - 1) % self.chunk_arena_size]
-            post_chunk: Chunk = self.chunk_arena[(self.main_chunk_pointer + 1) % self.chunk_arena_size]
+
+            # TODO: is this the place to update also the offset wiht scope.cursor?
+            current_chunk_pointer = self.main_chunk_pointer % self.chunk_arena_size
+            pre_chunk_pointer = (self.main_chunk_pointer - 1) % self.chunk_arena_size
+            post_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
+
+            pre_chunk: Chunk = self.chunk_arena[pre_chunk_pointer]
+            post_chunk: Chunk = self.chunk_arena[post_chunk_pointer]
+
+            if not current_chunk.is_full():
+                self.chunk_arena[current_chunk_pointer] = self.fetch_chunk(conn, self.current_offset)
+
 
             # add logic to deal with empty chunks
-            if not post_chunk or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
-                post_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
+            if not post_chunk or not post_chunk.is_full or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
                 self.chunk_arena[post_chunk_pointer] = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
 
             if current_chunk.chunk_idx > 0:
                 if not pre_chunk or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
-                    pre_chunk_pointer = (self.main_chunk_pointer - 1) % self.chunk_arena_size
                     self.chunk_arena[pre_chunk_pointer] = self.fetch_chunk(conn, self.current_offset - self.chunk_size)
+        conn.close()
 
     def get_current_chunk(self):
         return self.chunk_arena[self.main_chunk_pointer]
@@ -698,23 +972,203 @@ if __name__ == "__main__":
 
     from CONFtiller import DB_WDB, SQL_TIMEOUT
     from time import sleep
+    import time
     import traceback
+    import multiprocessing
     conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
 
 
     # test blockchain DB
     db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
+    sqlite_path ="file:/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite?mode=ro"
 
     # connection = sqlite3.connect(db_path)
     # read only read
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
+    fetch_item = make_sql_fetcher('full_blocks', sort_column='height')
+
     table_name = 'full_blocks'
     chunk_size = 20  # height * 2  # to be sure to have at least 2 full screen of data
-    offset = 34000
+    offset = 4315870 #34000
     sorting_column = 'height'
     filters = {}
-    data_loader = DataChunkLoader(conn, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=BlockState)
+    data_loader = DataChunkLoader(sqlite_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=BlockState)
+
+    last_item1 = data_loader.total_row_count
+    print(f"row count = {last_item1}")
+    #last_item = data_loader.fetch_last_item()
+    #print(f"last item = {last_item}")
+    last_item = data_loader.idx_last_item[0][2]
+    print(f"last item height = {last_item}")
+    print(f"last item bd {last_item1} = {last_item}")
+    print(f"fiff = {last_item1 - last_item}")
+
+
+    start = offset
+    for i in range(start, start + 10):
+        items = fetch_item(conn, i, 2)
+        print(f"n. items {len(items)}")
+        for m in items:
+            b = BlockState(m, False)
+            print(f"idx {i} and height {b.height}, hash: {b.header_hash}, {b.weight}")
+        print("----")
+
+    print("___________________________")
+    curr = conn.cursor()
+    query = f"SELECT * FROM full_blocks WHERE height = ?"
+    value = [4315872]
+    curr.execute(query, value)
+    items = curr.fetchall()
+    print(f"n. items {len(items)}")
+    for m in items:
+        b = BlockState(m, False)
+        print(f"idx {i} and height {b.height}, hash: {b.header_hash}, {b.weight}")
+
+
+
+
+
+
+
+    block_ranger = make_sql_fetcher_range("full_blocks", sorting_column="height")
+    block_ranger_M = make_sql_fetcher_range_M("full_blocks", sorting_column="height")
+    p1 = time.perf_counter()
+    blocks = block_ranger_M(conn, offset, 100000)
+    p2 = time.perf_counter()
+    blocks = block_ranger(conn, offset, 100000)
+    p3 = time.perf_counter()
+    print(f"time 1 {p2 - p1}")
+    print(f"time 2 {p3 - p2}")
+    exit()
+    for m in blocks:
+        b = BlockState(m, False)
+        print(f"idx {i} and height {b.height}, hash: {b.header_hash}, {b.weight}")
+
+
+    import queue
+    #block_queue = queue.Queue(maxsize=100_000)
+    block_queue = multiprocessing.Queue(maxsize=10_000)
+    llock = threading.Lock()
+
+    def load_blocks(lock):
+
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
+        size_count = 0
+        count = offset
+        step = 5_000
+        start = time.perf_counter()
+        while True:
+
+            p0 = time.perf_counter()
+            pre_calc = p0 - start
+            p1 = time.perf_counter()
+            broks = block_ranger(conn, count, step)
+            p2 = time.perf_counter()
+            count += step
+
+            for b in broks:
+                block_queue.put(b)
+            p3 = time.perf_counter()
+
+            size_count += 1
+            end = time.perf_counter()
+            delta_time = end - start
+            #print(f"precalc: {pre_calc}")
+            #print(f"db loading: {p2 - p1}")
+            #print(f"queueing: {p3 - p2}")
+            if size_count % 10 == 0:
+                print(f"queue size = {block_queue.qsize()}")
+                print(f"tot time: {delta_time}")
+                print(f"_____________________________")
+            start = end
+
+    #loader_man_thread = threading.Thread(target=load_blocks, args=(llock,), daemon=True)
+    loader_man_thread = multiprocessing.Process(target=load_blocks, args=(llock,))
+    loader_man_thread.start()
+
+
+    # offset = 4315870 #34000
+    count = offset
+    file = "forks.text"
+    prev_forked_block = 0
+    fork = 0
+    diff = 0
+
+    start = time.perf_counter()
+    while True:
+        c: BlockState = BlockState(block_queue.get(), False)
+        if int(c.height) != (count - diff):
+            diff += 1
+            if prev_forked_block != int(c.height - 1):
+                fork += 1
+            with open(file, "a") as f:
+                f.write(f"height {c.height} count: {count} fork: {fork}\n")
+                #raise Exception(f"c height {c.height} count: {count}")
+
+            prev_forked_block = int(c.height)
+
+        if count % 10_000 == 0:
+            print('||||||||||||||||')
+            print(f"counting: {count}")
+            print(f"c height {c.height} count: {count - diff} effective count: {count}")
+            print(f"queue size = {block_queue.qsize()}")
+            end = time.perf_counter()
+            delta_time = end - start
+            print(f"tot time processing: {delta_time}")
+            start = end
+            print('||||||||||||||||')
+        if count % 100_000 == 0:
+            print(f"c height {c.height} count: {count - diff} effective count: {count}")
+            time.sleep(0.01)
+        #print(f"c height {c.height} count: {count - diff} effective count: {count}")
+        count += 1
+        #if count == 4330883:
+        #    break
+
+    exit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    count = offset
+    file = "forks.text"
+    prev_forked_block = 0
+    fork = 0
+    diff = 0
+
+    while True:
+        c: BlockState = data_loader.get_current_item()
+        if int(c.height) != (count - diff):
+            diff += 1
+            with open(file, "a") as f:
+                f.write(f"height {c.height} count: {count} fork: {fork}\n")
+                #raise Exception(f"c height {c.height} count: {count}")
+            if prev_forked_block != int(c.height - 1):
+                fork += 1
+
+            prev_forked_block = int(c.height)
+
+        if count % 100 == 0:
+            print(count)
+        count += 1
+        data_loader.update_offset(count)
+        if count % chunk_size == 0:
+            data_loader.update_loader()
+        if count % 1000 == 0:
+            print(f"c height {c.height} count: {count -1}")
+            time.sleep(1)
+    exit()
 
     ## one block
     ## fetch all the coins
@@ -767,9 +1221,10 @@ if __name__ == "__main__":
     blockchain_state = call_rpc_node('get_blockchain_state')
     height_last_block = int(blockchain_state['peak']['height'])
     
-    print(f'peak {height_last_block}') 
+    print(f'peak {height_last_block}')
 
     offset = height_last_block
+    offset = 0
     data_loader = DataChunkLoader(conn, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=BlockState)
     bbs, idx = data_loader.get_items_hot_chunks()
     print(len(bbs))
@@ -860,7 +1315,7 @@ if __name__ == "__main__":
     for i in range(30):
         cu = data_chunk_loader.get_current_item()
         print(f'{i} - current item: {cu}')
-        data_chunk_loader.change_current_offset(data_chunk_loader.current_offset + 1)
+        data_chunk_loader.update_offset(data_chunk_loader.current_offset + 1)
         sleep(0.55)
         #data_chunk_loader.update_loader(conn)
         if i == 20:
