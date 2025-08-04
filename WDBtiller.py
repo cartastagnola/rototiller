@@ -156,12 +156,24 @@ def retrive_table_timestamp(conn, table_name):
     return timestamp
 
 
-def get_row_count(conn, table_name):
+def get_row_count(conn, table_name, filters={}):
+    """ Really slow if filters (not indexed) are used """
+
+    where_clauses = []
+    values = []
+
+    for filter, val in filters.items():
+        where_clauses.append(f"{filter} = ?")
+        values.append(val)
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if filters else ""
+    query = f"SELECT COUNT(*) FROM {table_name} {where_sql}"
+
+    print(f" row count: {query} val {values}")
     cursor = conn.cursor()
-    cursor.execute(
-        f"SELECT COUNT(*) FROM {table_name};",
-    )
+    cursor.execute(query, values)
     count = cursor.fetchone()[0]
+    print(f"count {count}")
     return count
 
 
@@ -492,7 +504,7 @@ class BlockState:
     # farmer_receiver: int  # address
     # k-size of the winning plot
 
-    def __init__(self, raw_data, full_init: bool):
+    def __init__(self, raw_data, full_init: bool = True):
 
         # raw data shape:
         ## 0 - header_hash
@@ -507,6 +519,9 @@ class BlockState:
         self.header_hash = raw_data[0]
         self.height = raw_data[2]
         self.sub_epoch_summary = raw_data[3]
+
+        if not full_init:
+            return None
 
         block = reconstruct_block_from_bytes(raw_data[6])
         block_record = reconstruct_block_record_from_bytes(raw_data[7])
@@ -547,7 +562,7 @@ class BlockState:
         self.signage_point_index_b = block['reward_chain_block']['signage_point_index']  # redundant
         self.total_iters_b = block['reward_chain_block']['total_iters']  # redundant
         self.weight_b = block['reward_chain_block']['weight']  # redundant
-        self.transactions_generator = block['transactions_generator'] # chialisp
+        self.transactions_generator = block['transactions_generator']  # chialisp
         self.transactions_generator_ref_list = block['transactions_generator_ref_list']  # ref to other block if needed
         if block['transactions_info'] == "None":
             self.aggregate_signature = block['transactions_info']['aggregated_signature']
@@ -673,8 +688,8 @@ def make_sql_fetcher(table, sorting_column="id"):
         #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
 
         values.extend([start, start + count])
-        #print(f"questy: {query}")
-        #print(f"valuesty: {values}")
+        print(f"questy: {query}")
+        print(f"valuesty: {values}")
         cur.execute(query, values)
         items = cur.fetchall()
         return items
@@ -711,9 +726,7 @@ def make_sql_fetcher_range(table, sorting_column="id"):
 
 
 def make_sql_fetcher_range_M(table, sorting_column="id"):
-    def fetch(conn, start, count, filters=None, order='ASC'):
-        if not filters:
-            filters = {}
+    def fetch(conn, start, count, filters={}, order='ASC'):
 
         where_clauses = []
         values = [start, start + count]
@@ -737,10 +750,8 @@ def make_sql_fetcher_range_M(table, sorting_column="id"):
     return fetch
 
 
-def make_sql_last_element_fetcher(table, sort_column='id'):
-    def fetch(conn, filters=None, order='ASC'):
-        if not filters:
-            filters = {}
+def make_sql_fetcher_first_last_element(table, sorting_column='id'):
+    def fetch(conn, filters={}, order='ASC'):
 
         where_clauses = []
         values = []
@@ -750,17 +761,9 @@ def make_sql_last_element_fetcher(table, sort_column='id'):
             values.append(val)
 
         where_sql = f" WHERE {' AND '.join(where_clauses)} " if filters else ""
+        query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} {order} LIMIT 1"
 
         cur = conn.cursor()
-        query = (f"SELECT row_number "
-                 f"FROM ( "
-                    f"SELECT {sort_column}, ROW_NUMBER() OVER (ORDER BY {sort_column}) AS row_number "
-                    f"FROM {table} "
-                    f"{where_sql} )"
-                f"ORDER BY {sort_column} DESC "
-                f"LIMIT 1"
-                )
-
         cur.execute(query, values)
         return cur.fetchall()
 
@@ -790,16 +793,18 @@ class Chunk:
 
 
 class DataChunkLoader:
-    def __init__(self, db_path: str, table_name: str, chunk_size: int, offset: int = 0, sorting_column="id", filters=None, data_struct=None):
+    def __init__(self, db_path: str, table_name: str, chunk_size: int, offset: int = 0, sorting_column="id", filters={}, data_struct=None):
         """offset = distance from the beging of the array of elements
-           filters = a dic with filter and value. EG. {'pk_state_id': 2, 'other_filter': 'yellow'}"""
+           filters = a dic with filter and value. EG. {'pk_state_id': 2, 'other_filter': 'yellow'}
+           it is supposed that the chunk is small enough to not degrade performance using not indexed filters"""
 
         self.db_path = db_path
         conn = self.create_sql_conneciton()
 
         self.table_name = table_name
         self.total_row_count = None
-        self.idx_last_item = None  # if there are double elements, this it could be different from the total row count
+        #self.idx_last_item = None  # if there are double elements, this it could be different from the total row count
+        self.last_item = None  # raw values of the last item. If double, only the first one is taken
         self.sorting_column = sorting_column
         self.lock = threading.Lock()
         self.current_offset: int = offset
@@ -808,11 +813,13 @@ class DataChunkLoader:
         self.chunk_arena: list[Chunk] = [None] * self.chunk_arena_size
         self.main_chunk_pointer: int = 0
         self.fetcher = make_sql_fetcher(table_name, self.sorting_column)
+        self.fetcher_first_last = make_sql_fetcher_first_last_element(table_name, self.sorting_column)
         self.data_struct = data_struct
         self.filters = filters
 
         self.update_total_row_count(conn)
-        self.update_idx_last_item(conn)
+        #self.update_idx_last_item(conn)
+        self.update_last_item(conn)
 
         # fetch_main chunk
         self.chunk_arena[self.main_chunk_pointer] = self.fetch_chunk(conn, self.current_offset)
@@ -831,15 +838,24 @@ class DataChunkLoader:
         with self.lock:
             self.current_offset = offset
 
+    # probably it is very slow
     def update_total_row_count(self, conn):
-        self.total_row_count = get_row_count(conn, self.table_name)
-        return self.total_row_count
+        total_row_count = get_row_count(conn, self.table_name, self.filters)
+        with self.lock:
+            self.total_row_count = total_row_count
+        return total_row_count
 
-    def update_idx_last_item(self, conn):
-        """ Return the highest value of the sorted columns, it can differs from 
-        the total_row_count in case of double entries"""
-        self.idx_last_item = self.fetcher(conn, 1, 1, self.filters, 'DESC')
-        return self.idx_last_item
+    #def update_idx_last_item(self, conn):
+    #    """ Return the highest value of the sorted columns, it can differs from 
+    #    the total_row_count in case of double entries"""
+    #    self.idx_last_item = self.fetcher(conn, 1, 1, self.filters, 'DESC')
+    #    return self.idx_last_item
+
+    def update_last_item(self, conn):
+        last_item = self.fetcher_first_last(conn, self.filters, 'DESC')[0]
+        with self.lock:
+            self.last_item = last_item
+        return self.last_item
 
     def fetch_db(self, conn, start, count):
         return self.fetcher(conn, start, count, self.filters)
@@ -852,7 +868,7 @@ class DataChunkLoader:
         if self.data_struct is not None:
             sturctured_data = []
             for d in data:
-                sturctured_data.append(self.data_struct(d, False))
+                sturctured_data.append(self.data_struct(d))
             data = sturctured_data
 
         return Chunk(chunk_idx, chunk_first_idx, self.chunk_size, data)
@@ -934,10 +950,11 @@ class DataChunkLoader:
 
     def update_loader(self):
         conn = self.create_sql_conneciton()
-        with self.lock:
+        self.update_total_row_count(conn)
 
+        # read chunks data
+        with self.lock:
             # update total row and current chunk
-            self.update_total_row_count(conn)
             self.update_current_chunk_pointer()
             current_chunk: Chunk = self.get_current_chunk()
 
@@ -949,17 +966,25 @@ class DataChunkLoader:
             pre_chunk: Chunk = self.chunk_arena[pre_chunk_pointer]
             post_chunk: Chunk = self.chunk_arena[post_chunk_pointer]
 
-            if not current_chunk.is_full():
-                self.chunk_arena[current_chunk_pointer] = self.fetch_chunk(conn, self.current_offset)
+        # current chunk, fetch again if not full
+        if not current_chunk.is_full():
+            fetched_chunk = self.fetch_chunk(conn, self.current_offset)
+            with self.lock:
+                self.chunk_arena[current_chunk_pointer] = fetched_chunk
 
+        # add logic to deal with empty chunks
+        # post chunk
+        if not post_chunk or not post_chunk.is_full or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
+            fetched_chunk = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
+            with self.lock:
+                self.chunk_arena[post_chunk_pointer] = fetched_chunk
 
-            # add logic to deal with empty chunks
-            if not post_chunk or not post_chunk.is_full or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
-                self.chunk_arena[post_chunk_pointer] = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
-
-            if current_chunk.chunk_idx > 0:
-                if not pre_chunk or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
-                    self.chunk_arena[pre_chunk_pointer] = self.fetch_chunk(conn, self.current_offset - self.chunk_size)
+        # pre chunk, do not fetch if we are at the beginning
+        if current_chunk.chunk_idx > 0:
+            if not pre_chunk or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
+                fetched_chunk = self.fetch_chunk(conn, self.current_offset - self.chunk_size)
+                with self.lock:
+                    self.chunk_arena[pre_chunk_pointer] = fetched_chunk
         conn.close()
 
     def get_current_chunk(self):
@@ -971,12 +996,17 @@ if __name__ == "__main__":
 
 
     from CONFtiller import DB_WDB, SQL_TIMEOUT
+    from RPCtiller import call_rpc_node
     from time import sleep
     import time
     import traceback
     import multiprocessing
     conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
 
+    # fing the peak
+    blockchain_state = call_rpc_node('get_blockchain_state')
+    height_last_block = int(blockchain_state['peak']['height'])
+    print(f'peak {height_last_block}')
 
     # test blockchain DB
     db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
@@ -986,23 +1016,40 @@ if __name__ == "__main__":
     # read only read
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
-    fetch_item = make_sql_fetcher('full_blocks', sort_column='height')
+    fetch_item = make_sql_fetcher('full_blocks', sorting_column='height')
+    fetch_last_item = make_sql_fetcher_first_last_element('full_blocks', sorting_column='height')
 
     table_name = 'full_blocks'
     chunk_size = 20  # height * 2  # to be sure to have at least 2 full screen of data
     offset = 4315870 #34000
     sorting_column = 'height'
-    filters = {}
+    filters = {'in_main_chain': 1}
     data_loader = DataChunkLoader(sqlite_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=BlockState)
 
     last_item1 = data_loader.total_row_count
     print(f"row count = {last_item1}")
     #last_item = data_loader.fetch_last_item()
     #print(f"last item = {last_item}")
-    last_item = data_loader.idx_last_item[0][2]
-    print(f"last item height = {last_item}")
-    print(f"last item bd {last_item1} = {last_item}")
-    print(f"fiff = {last_item1 - last_item}")
+    #last_item = data_loader.idx_last_item[0][2]
+    #print(f"last item height = {last_item}")
+    #print(f"last item bd {last_item1} = {last_item}")
+    #print(f"fiff = {last_item1 - last_item}")
+    #print(f"diff from peak: {last_item1 - height_last_block}")
+
+    a1 = time.perf_counter()
+    a = (fetch_last_item(conn, filters, 'DESC'))
+    a2 = time.perf_counter()
+    b = (fetch_last_item(conn, {}, 'DESC'))
+    a3 = time.perf_counter()
+    c = (fetch_last_item(conn, filters, 'DESC'))
+    a4 = time.perf_counter()
+
+    print(f"t1: {a2-a1}")
+    print(f"t2: {a3-a2}")
+    print(f"t2: {a4-a3}")
+    l = fetch_last_item(conn, {}, 'DESC')
+    print(BlockState(l[0], True))
+
 
 
     start = offset
@@ -1010,7 +1057,7 @@ if __name__ == "__main__":
         items = fetch_item(conn, i, 2)
         print(f"n. items {len(items)}")
         for m in items:
-            b = BlockState(m, False)
+            b = BlockState(m, True)
             print(f"idx {i} and height {b.height}, hash: {b.header_hash}, {b.weight}")
         print("----")
 
@@ -1022,30 +1069,36 @@ if __name__ == "__main__":
     items = curr.fetchall()
     print(f"n. items {len(items)}")
     for m in items:
-        b = BlockState(m, False)
+        b = BlockState(m, True)
         print(f"idx {i} and height {b.height}, hash: {b.header_hash}, {b.weight}")
 
 
 
-
-
-
-
-    block_ranger = make_sql_fetcher_range("full_blocks", sorting_column="height")
-    block_ranger_M = make_sql_fetcher_range_M("full_blocks", sorting_column="height")
+    block_ranger = make_sql_fetcher("full_blocks", sorting_column="height")
     p1 = time.perf_counter()
-    blocks = block_ranger_M(conn, offset, 100000)
+    blocks = block_ranger(conn, offset, 10000, filters=filters)
     p2 = time.perf_counter()
-    blocks = block_ranger(conn, offset, 100000)
+    blocks = block_ranger(conn, offset, 10000)
     p3 = time.perf_counter()
     print(f"time 1 {p2 - p1}")
     print(f"time 2 {p3 - p2}")
+
+
+    p4 = time.perf_counter()
+    data_loader.update_total_row_count(conn)
+    p5 = time.perf_counter()
+    a = get_row_count(conn, 'full_blocks', filters={'in_main_chain': 1})
+    p6 = time.perf_counter()
+    print(f"time 3 {p5 - p4}")
+    print(f"time 4 {p6 - p5}")
+
     exit()
     for m in blocks:
         b = BlockState(m, False)
         print(f"idx {i} and height {b.height}, hash: {b.header_hash}, {b.weight}")
 
 
+    # prototype for forks searcher
     import queue
     #block_queue = queue.Queue(maxsize=100_000)
     block_queue = multiprocessing.Queue(maxsize=10_000)
@@ -1214,14 +1267,6 @@ if __name__ == "__main__":
         print(b)
 
 
-    # fing the peak
-
-    from RPCtiller import call_rpc_node
-
-    blockchain_state = call_rpc_node('get_blockchain_state')
-    height_last_block = int(blockchain_state['peak']['height'])
-    
-    print(f'peak {height_last_block}')
 
     offset = height_last_block
     offset = 0

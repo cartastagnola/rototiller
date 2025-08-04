@@ -12,8 +12,8 @@ from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 from chia.rpc.rpc_server import RpcServer
 from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.daemon.client import connect_to_daemon_and_validate
-from chia.types.blockchain_format.sized_bytes import bytes32, bytes48
-from chia.util.ints import uint16, uint32, uint64
+from chia_rs.sized_bytes import bytes32, bytes48
+from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 
 
 async def get_wallet(coin_id: str):
@@ -202,6 +202,7 @@ rpc_call_daemon = {
 
 rpc_call_full_node = {
     "get_blockchain_state": ["blockchain_state"],
+    "get_network_info": [],
     "get_block": ["block"],
     "get_blocks": ["blocks"],
     "get_block_record": ["block_record"],
@@ -277,71 +278,58 @@ def call_rpc_wallet_with_output(method_name, *args, **kwargs):
 
 if __name__ == '__main__':
 
+    import json
+    import WDBtiller as WDB
+
+
+    def print_json(dict):
+        print(json.dumps(dict, sort_keys=True, indent=4))
+
     blockchain_state = call_rpc_node('get_blockchain_state')
     print(blockchain_state)
 
-#rpc_functions = {}
-#
-## create dynamic methods
-#for methods_name, outputs in rpc_call_full_node.items():
-#    def rpc_func_template(*args, **kwargs):
-#        return call_rpc_with_output(methods_name, outputs, *args, **kwargs)
-#    rpc_func = types.FunctionType(
-#        rpc_func_template.__code__,
-#        globals(),
-#        name=methods_name,
-#        argdefs=rpc_function_template.__defaults__,
-#        closure=rpc_function_template.__closure__
-#    )
-#
-#    rpc_func.__name__ = methods_name
-#    rpc_function.__doc__ = f"RPC function for method '{method_name}'"
-#    rpc_functions[method_name] = rpc_function
-#
-#
-#
-#def create_rpc_call_from_name_list(names: dict, module_name: str):
-#    """It creates dinamically funcions that mirror the rpc calls.
-#    names: dict with the key=rpc_call name, and item=list of results to output"""
-#.
-#
-#    # create a sub-module
-#    module = types.ModuleType(module_name)
-#    sys.modules[module_name] = module
-#
-#    functions = {}
-#    for fun_name, items in names.items():
-#        def _dynamic_function(*args, **kwargs):
-#            """Dynamic function"""
-#            rpc_result = asyncio.run(call_rpc_fetch(fun_name, kwargs))
-#            # should I check for something? if success is False it should be
-#            # already failed
-#            if len(items) == 1:
-#                return rpc_result[items[0]]
-#            else:
-#                return rpc_result
-#
-#
-#        _dynamic_function.__name__ = fun_name
-#        functions[fun_name] = _dynamic_function
-#
-#        setattr(module, fun_name, _dynamic_function)
-#
-#    return module
-#
-#
-#rpc_call_full_node = {
-#    "get_block_record": ["block_record"],
-#    "get_block_records": ["block_records"],
-#    "get_all_mempool_items": ["mempool_items"],
-#    "get_routes": ["routes"]
-#}
-#
-#
-#
-#
-#mod = create_rpc_call_from_name_list(rpc_call_full_node, "full_node")
-#
-#mod.get_block_records(start=2, end=3)
 
 
+    raw_mempool = call_rpc_node('get_all_mempool_items')
+
+    for tx_id, tx in raw_mempool.items():
+        #print(f"tx_id: {tx_id}")
+        #print_json(tx)
+        mm = WDB.MempoolItem(tx_id, tx)
+        print(mm)
+
+    n = 4315872
+
+    blocks = call_rpc_node('get_blocks', start=n, end=n+1)
+    keys = blocks[0]['reward_chain_block'].keys()
+
+    for key in keys:
+        print()
+        print(key)
+        for b in blocks:
+            print(b['reward_chain_block'][key])
+
+    for b in blocks:
+        print(b['reward_chain_block']['height'])
+        print(b['reward_chain_block']['weight'])
+        print(b['header_hash'])
+
+    blocks = call_rpc_node('get_blocks', start=n, end=n+1)
+
+    print('prev block hash')
+    print(blocks[0]['foliage']['prev_block_hash'])
+
+
+    n = 7311095
+    blocks = call_rpc_node('get_blocks', start=n, end=n+4)
+
+    for key in keys:
+        print()
+        print(key)
+        for b in blocks:
+            print(b['reward_chain_block'][key])
+
+    for b in blocks:
+        print(b['reward_chain_block']['height'])
+        print(b['reward_chain_block']['weight'])
+        print(b['header_hash'])

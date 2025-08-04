@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys, os, traceback
+import copy
 import asyncio
 import curses
 import time
@@ -22,8 +23,13 @@ from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 from chia.rpc.rpc_server import RpcServer
 from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.daemon.client import connect_to_daemon_and_validate
-from chia.types.blockchain_format.sized_bytes import bytes32, bytes48
-from chia.util.ints import uint16, uint32, uint64
+#from chia.types.blockchain_format.sized_bytes import bytes32, bytes48
+from chia_rs.sized_bytes import bytes32, bytes48
+
+#from chia.util.ints import uint16, uint32, uint64
+# NEEDED?
+from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+
 
 # load configuration
 from chia.util.config import load_config
@@ -33,16 +39,35 @@ import UItext as UItext
 import UIgraph as UIgraph
 import LOGtiller as LOGtiller
 from CONFtiller import (
-    server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_WDB, SQL_TIMEOUT,
-    XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO,
-    config, self_hostname, full_node_rpc_port, wallet_rpc_port,
+    server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_BLOCKCHAIN_RO,
+    DB_WDB, SQL_TIMEOUT, XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO,
+    CAT_MOJO, config, self_hostname, full_node_port, full_node_rpc_port, wallet_rpc_port,
     DEFAULT_ROOT_PATH)
 import DEBUGtiller as DEBUGtiller
 import ELEMENTStiller as ELEMENTS
 import WDBtiller as WDB
 import DEXtiller as DEX
 from RPCtiller import call_rpc_node, call_rpc_daemon
-from UTILITYtiller import binary_search_l
+from UTILITYtiller import binary_search_l, Timer
+
+from pympler import asizeof
+
+def deep_getsizeof(object, seen=None):
+    if seen is None:
+        seen = set()
+    object_id = id(object)
+    if object_id in seen:
+        return 0
+
+    seen.add(object_id)
+    size = sys.getsizeof(object)
+
+    if isinstance(object, dict):
+        size += sum(deep_getsizeof(k, seen) + deep_getsizeof(v, seen) for k, v in object.items())
+    elif isinstance(object, (list, tuple, set, frozenset)):
+        size += sum(deep_getsizeof(i, seen) for i in object)
+
+    return size
 
 
 #### global for debugging
@@ -260,6 +285,113 @@ class KeyboardState:
     mouse: bool = False
     enter: bool = False
     esc: bool = False
+
+
+class FullNodeMeta:
+
+    def __init__(self):
+        self.peak_height: int = None
+        self.peak_header_hash = None
+        self.peak_timestamp = None
+        self.genesis_challenge = None
+        self.network_name = None
+        self.difficulty = None
+        self.synced = None
+        self.sync_mode = None
+        self.sub_slot_iters = None
+        self.net_space = None
+        self.node_id = None
+        self.sync_tip_height = None
+        self.sync_progress_height = None
+        self.finished_challenge_slot_hashes = None
+        self.finished_infused_challenge_slot_hashes = None
+        self.finished_reward_slot_hashes = None
+        self.prev_hash = None
+        self.prev_transaction_block_hash = None
+
+
+class FullNodeState:
+
+    def __init__(self, db_path: str):
+        self.lock = threading.Lock()
+        self.db_path = db_path
+        self.mempool_items = None
+        self.blocks_loader: WDB.DataChunkLoader = None
+        self.is_blocks_loader_on_peak = True
+        self.full_node_meta = FullNodeMeta()
+
+        self.update_chain_info()
+        self.update_chain_state()
+        self.update_mempool()
+
+        table_name = 'full_blocks'
+        chunk_size = 120  # height * 2  # to be sure to have at least 2 full screen of data
+        offset = self.full_node_meta.peak_height
+        sorting_column = 'height'
+        filters = {'in_main_chain': 1}
+        self.blocks_loader = WDB.DataChunkLoader(db_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
+
+    def update_mempool(self):
+        mempool_items = [WDB.MempoolItem(tx_id, json_item) for tx_id, json_item in call_rpc_node('get_all_mempool_items').items()]
+        with self.lock:
+            self.mempool_items = mempool_items
+
+    def update_chain_info(self):
+        network_info = call_rpc_node('get_network_info')
+        with self.lock:
+            full_node_meta = self.full_node_meta
+            full_node_meta.genesis_challenge = network_info["genesis_challenge"]
+            full_node_meta.network_name = network_info["network_name"]
+
+    def update_chain_state(self):
+        blockchain_state = call_rpc_node('get_blockchain_state')
+        with self.lock:
+            full_node_meta = self.full_node_meta
+            full_node_meta.peak_height = blockchain_state['peak']['height']
+            full_node_meta.peak_header_hash = blockchain_state['peak']['header_hash']
+            full_node_meta.peak_timestamp = blockchain_state['peak']['timestamp']
+            full_node_meta.finished_challenge_slot_hashes = blockchain_state['peak']['finished_challenge_slot_hashes']
+            full_node_meta.finished_infused_challenge_slot_hashes = blockchain_state['peak']['finished_infused_challenge_slot_hashes']
+            full_node_meta.finished_reward_slot_hashes = blockchain_state['peak']['finished_reward_slot_hashes']
+            full_node_meta.prev_hash = blockchain_state['peak']['prev_hash']
+            full_node_meta.prev_transaction_block_hash = blockchain_state['peak']['prev_transaction_block_hash']
+            full_node_meta.difficulty = blockchain_state["difficulty"]
+            full_node_meta.synced = blockchain_state["sync"]["synced"]
+            full_node_meta.sync_mode = blockchain_state["sync"]["sync_mode"]
+            full_node_meta.sub_slot_iters = blockchain_state["sub_slot_iters"]
+            # full_node_meta.net_space = blockchain_state["space"]
+            full_node_meta.net_space = blockchain_state["space"] / (1024**6), ' Eib'
+            full_node_meta.node_id = blockchain_state["node_id"]
+            full_node_meta.sync_tip_height = blockchain_state["sync"]["sync_tip_height"]
+            full_node_meta.sync_progress_height = blockchain_state["sync"]["sync_progress_height"]
+
+
+    def update_blocks(self):
+        if self.is_blocks_loader_on_peak:
+            self.blocks_loader.update_loader()
+
+    def update_state(self, screenState):
+        while True:
+            logging(server_logger, "DEBUG", f"NODE STATE - updating node state")
+            self.update_chain_state()
+            logging(server_logger, "DEBUG", f"NODE STATE - state updated")
+            try:
+                if "block_band" not in screenState.scopes or screenState.scopes["block_band"].data['on_peak']:
+                    # if the band is not created it keep up with the peak.
+                    # here it should update also the offset with the peak to do a real update
+                    self.update_blocks()
+                    logging(server_logger, "DEBUG", f"NODE STATE - blocks updated")
+            except:
+                traceback.print_exc()
+
+
+            time.sleep(10)
+
+    def deepcopy_meta(self):
+        return copy.deepcopy(self.full_node_meta)
+
+    def deepcopy_mempool(self):
+        return copy.deepcopy(self.mempool_items)
 
 
 @dataclass
@@ -1218,7 +1350,7 @@ def menu_select(stdscr, menu, select, point, color_pairs, color_pairs_sel, figle
             stdscr.addstr(point[0] + i, point[1], (str(i) + " - " + str(item)))
 
 
-def screen_main_menu(stdscr, keyboardState, screenState: ScreenState,
+def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState,
                      figlet=False):
 
     width = screenState.screen_size.x
@@ -1310,7 +1442,7 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState,
     menu_win.addstr(12, 4, u'\U0001F331'.encode('utf-8'))
 
 
-def screen_dex(stdscr, keyboardState, screenState: ScreenState, figlet=False):
+def screen_dex(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -1407,7 +1539,7 @@ pathA = Path("figlet_fonts/smblock.tlf")
 UItext.loadFontFTL(pathA, SMBLOCK_FONT)
 
 
-def screen_intro(stdscr, keyboardState, screenState: ScreenState):
+def screen_intro(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
     """Intro screen"""
 
     width = screenState.screen_size.x
@@ -1499,7 +1631,7 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
             stdscr.addstr(point.y + i, point.x, (str(i) + " - " + str(item)))
 
 
-def screen_debugging_insert(stdscr, keyboardState, screenState: ScreenState):
+def screen_debugging_insert(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -1528,7 +1660,7 @@ def screen_debugging_insert(stdscr, keyboardState, screenState: ScreenState):
     main_scope.update()
 
 
-def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
+def screen_debugging(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -2384,7 +2516,7 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState):
     debug_win.refresh()  # delete if not using newwin. It flickers...
 
 
-def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
+def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
     """ waooolllet """
 
     width = screenState.screen_size.x
@@ -2748,7 +2880,7 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState):
     # button to select the visualization: transactions, coins, addresses
 
 
-def screen_fingers(stdscr, keyboardState, screenState):
+def screen_fingers(stdscr, keyboardState, screenState, fullNodeState: FullNodeState):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -2806,7 +2938,7 @@ def screen_fingers(stdscr, keyboardState, screenState):
     # arise select = select % len(screenState.public_keys)
 
 
-def screen_wallet(stdscr, keyboardState, screenState: ScreenState):
+def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -3072,30 +3204,29 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState):
                 historic_prices_currency_tab.append([])
                 historic_ts_currency_tab.append([])
 
-        # DEBUG
-        debug_cursor = active_scope.cursor
-        try:
-            global DEBUG_TEXT
-            print(historic_prices_xch_tab)
-            if len(historic_prices_xch_tab) > 1:
-                DEBUG_TEXT = (f"ticker: {tickers[debug_cursor]} "
-                              f"prices [1] xch: {historic_prices_xch_tab[debug_cursor][0]} "
-                              f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][0] / 1000).strftime('%Y-%m-%d')} // "
-                              f"prices [2] xch: {historic_prices_xch_tab[debug_cursor][1]} "
-                              f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][1] / 1000).strftime('%Y-%m-%d')} ////"
-                              f"prices [1] cur: {historic_prices_currency_tab[debug_cursor][0]} "
-                              f"data: {datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][0] / 1000).strftime('%Y-%m-%d')} // "
-                              f"prices [2] cur: {historic_prices_currency_tab[debug_cursor][1]} "
-                              f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][1] / 1000).strftime('%Y-%m-%d')}"
-                              )
-        except Exception as e:
-            print(e)
-            print("debugging is not for everyone...")
+        # DEBUGGING historic prices
+        #debug_cursor = active_scope.cursor
+        #try:
+        #    global DEBUG_TEXT
+        #    if len(historic_prices_xch_tab) > 1:
+        #        DEBUG_TEXT = (f"ticker: {tickers[debug_cursor]} "
+        #                      f"prices [1] xch: {historic_prices_xch_tab[debug_cursor][0]} "
+        #                      f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][0] / 1000).strftime('%Y-%m-%d')} // "
+        #                      f"prices [2] xch: {historic_prices_xch_tab[debug_cursor][1]} "
+        #                      f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][1] / 1000).strftime('%Y-%m-%d')} ////"
+        #                      f"prices [1] cur: {historic_prices_currency_tab[debug_cursor][0]} "
+        #                      f"data: {datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][0] / 1000).strftime('%Y-%m-%d')} // "
+        #                      f"prices [2] cur: {historic_prices_currency_tab[debug_cursor][1]} "
+        #                      f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][1] / 1000).strftime('%Y-%m-%d')}"
+        #                      )
+        #except Exception as e:
+        #    print(e)
+        #    print("debugging is not for everyone...")
 
         ### CAT TABLE FORMATTING
         dataTable = [tickers, balances, current_prices_xch, historic_prices_xch_tab,
-                 current_prices_currency, historic_prices_currency_tab,
-                 total_values_xch, total_values_currency]
+                     current_prices_currency, historic_prices_currency_tab,
+                     total_values_xch, total_values_currency]
 
         color_up = screenState.colors['azure_up']
         color_down = screenState.colors['white_down']
@@ -3162,8 +3293,6 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState):
                                     True,
                                     False,
                                     data_table_legend)
-                print("leg")
-                print(data_table_legend)
             else:
                 row_size = 5
                 ELEMENTS.create_tab_large(
@@ -3598,7 +3727,7 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
 
 
 white_darkBlue = None
-def screen_tabs(stdscr, keyboardState, screenState: ScreenState, figlet=False):
+def screen_tabs(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -3648,7 +3777,7 @@ def screen_harvester():
     pass
 
 
-def screen_full_node(stdscr, keyboardState, screenState, figlet=False):
+def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
     width = screenState.screen_size.x
     height = screenState.screen_size.y
 
@@ -3711,7 +3840,7 @@ def screen_full_node(stdscr, keyboardState, screenState, figlet=False):
 
 
 
-def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
+def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 # Network: mainnet    Port: 8444   RPC Port: 8555
 # Node ID: dab6ea4ed2076b13c3c15998aeb5dd0e4d7e5779aeef973beaf6147063e19629
 # Genesis Challenge: ccd5bb71183532bff220ba46c268991a3ff07eb358e8255a65c30a2dce0e5fbb
@@ -3741,48 +3870,68 @@ def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
     screenState.scope_exec_args = [screenState]
     main_scope.update()
 
+    if 'lapper' not in main_scope.data:
+        main_scope.data["lapper"] = Timer('block_band')
+    lapper = main_scope.data["lapper"]
+    lapper.start()
     # load blockchain database
-    config = load_config(DEFAULT_ROOT_PATH, "config.yaml")
-    blockchain_db_path = config["full_node"]["database_path"]
-    sql_path_read_only = f"file:{blockchain_db_path}?mode=ro"
+    ## TODO: move it on startup
 
-    blockchain_state = call_rpc_node('get_blockchain_state')
-    heigh_last_block = blockchain_state['peak']['height']
+    full_node_meta: FullNodeMeta = fullNodeState.deepcopy_meta()
+    #print("size: ", deep_getsizeof(full_node_meta))
+    #print("size2: ", asizeof.asizeof(full_node_meta))
 
-    print(sql_path_read_only)
+    height_last_block = full_node_meta.peak_height
+
+    # load memepool
+    ## TODO: move the sorting of the mempool outside the UI loop
+    mempool_items = fullNodeState.deepcopy_mempool()
+
+    max_block_cost = 11_000_000_000  # 11billion - https://docs.chia.net/chia-blockchain/coin-set-model/costs/
+    sorted_mempool = sorted(mempool_items, key=lambda item: item.fee_per_cost)  # sorted by fee per cost
+
+    # create mempool block
+    mempool_bloks = [WDB.MempoolBlock()]
+    for item in sorted_mempool:
+        current_block: WDB.MempoolBlock = mempool_bloks[-1]
+        if current_block.total_cost + item.cost <= max_block_cost:
+            current_block.add_item(item)
+        else:
+            mempool_bloks.append(WDB.MempoolBlock())
+
+    logging(server_logger, "DEBUG", f"mempool {mempool_bloks}")
+    logging(server_logger, "DEBUG", f"mempool block sum {mempool_bloks[0]}")
+
+
+    lapper.clocking('meme')
     # load blocks
-    if 'blocks_loader' not in main_scope.data:
-        conn = sqlite3.connect(sql_path_read_only, uri=True, timeout=SQL_TIMEOUT)
-        table_name = 'full_blocks'
-        chunk_size = 20  # height * 2  # to be sure to have at least 2 full screen of data
-        offset = heigh_last_block
-        sorting_column = 'height'
-        filters = {}
-        main_scope.data['blocks_loader'] = WDB.DataChunkLoader(conn, table_name, chunk_size, offset, filters, sorting_column)
-        conn.close()
+    with fullNodeState.lock:
+        blocks_loader: WDB.DataChunkLoader = fullNodeState.blocks_loader
 
-    data_chunk_loader: WDB.DataChunkLoader = main_scope.data['blocks_loader']
+    #global BLOCK_STATES
+    #if BLOCK_STATES is None:
+    #    import random
 
-    global BLOCK_STATES
-    if BLOCK_STATES is None:
-        import random
+    #    height = 7052463
+    #    block_states = []
+    #    for i in range(30):
+    #        tx_bool = True if random.random() < 0.35 else False
+    #        block_states.append(ELEMENTS.BlockState(height + i, True, False, tx_bool, 0.2))
+    #    block_states[-1].infused = False
+    #    block_states.append(ELEMENTS.BlockState(-1, False, True, True, 0.8))
+    #    block_states.reverse()
+    #    BLOCK_STATES = block_states
 
-        height = 7052463
-        block_states = []
-        for i in range(30):
-            tx_bool = True if random.random() < 0.35 else False
-            block_states.append(ELEMENTS.BlockState(height + i, True, False, tx_bool, 0.2))
-        block_states[-1].infused = False
-        block_states.append(ELEMENTS.BlockState(-1, False, True, True, 0.8))
-        block_states.reverse()
-        BLOCK_STATES = block_states
+    #block_states = BLOCK_STATES  # only for testing
+    block_states = None
 
-    block_states = BLOCK_STATES  # only for testing
+    lapper.clocking('block loader')
+    if blocks_loader is not None:
+        block_band_scope = ELEMENTS.create_block_band(stdscr, screenState, main_scope,
+                                   "block_band", mempool_bloks, blocks_loader,
+                                   UIgraph.Point(15, 2), height_last_block)
 
-
-    if block_states is not None:
-        ELEMENTS.create_block_band(stdscr, screenState, main_scope,
-                                   "block band", block_states, UIgraph.Point(15, 2))
+    lapper.clocking('block band')
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -3796,119 +3945,154 @@ def screen_blocks(stdscr, keyboardState, screenState, figlet=False):
     node_data.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
     node_data.addstr(4, 4, "Timestamp: " + timestamp_time.strftime('%Y-%m-%d %H:%M:%S'))
 
-    network_info = asyncio.run(call_rpc_fetch('get_network_info'))
-    genesis_challenge = network_info["genesis_challenge"]
-    network_name = network_info["network_name"]
+    genesis_challenge = full_node_meta.genesis_challenge
+    network_name = full_node_meta.network_name
 
-    # from the config...
-    full_node_port = config['full_node']['port']  # "8444"
-    full_node_rpc_port = config['full_node']['rpc_port']  # "8555"
+    difficulty = full_node_meta.difficulty
+    synced = full_node_meta.synced
+    sync_mode = full_node_meta.sync_mode
+    sub_slot_iters = full_node_meta.sub_slot_iters
+    space = full_node_meta.net_space
+    node_id = full_node_meta.node_id
+    row = 15
+    col = 4
+    node_data.addstr(row, col, f"cursor position: y:{block_band_scope.cursor} x:{block_band_scope.cursor_x}")
 
-    difficulty = blockchain_state["difficulty"]
-    synced = blockchain_state["sync"]["synced"]
-    sync_mode = blockchain_state["sync"]["sync_mode"]
-    sub_slot_iters = blockchain_state["sub_slot_iters"]
-    space = blockchain_state["space"]
-    space = blockchain_state["space"] / (1024**6), ' Eib'
-    node_id = blockchain_state["node_id"]
+    if block_band_scope.data['on_peak']:
+        try:
 
-    try:
-        row = 15
-        col = 4
-        node_data.addstr(row, col, f"Network: {network_name}    Port: {full_node_port}   RPC Port: {full_node_rpc_port}")
-
-        row += 1
-        node_data.addstr(row, col, f"Node ID: {node_id}")
-        row += 1
-        node_data.addstr(row, col, f"Genesis Challenge: {genesis_challenge}")
-        row += 1
-
-        peak = blockchain_state["peak"]
-        peak_hash = peak['header_hash']
-        peak_height = peak['height']
-        peak_timestamp = peak['timestamp']
-
-        if synced:
-            node_data.addstr(row, col, f"Current Blockchain Status: Full Node Synced. Height: {peak['height']}")
-            row += 1
-            node_data.addstr(row, col, f"Peak: Hash: {peak['header_hash']}")
-            # what kind of object is peak? block i suppose
-            # check that the challenge block info hash is the header hash
-            #node_data.addstr(row, col, f"Peak: Hash: {peak.header_hash}")
-            row += 1
-        elif peak is not None and sync_mode:
-            sync_max_block = blockchain_state["sync"]["sync_tip_height"]
-            sync_current_block = blockchain_state["sync"]["sync_progress_height"]
-            node_data.addstr(row, col, f"Current Blockchain Status: Syncing {sync_current_block}/{sync_max_block} ({sync_max_block - sync_current_block} behind)."
-            )
-            row += 1
-            node_data.addstr(row, col, f"Peak: Hash:  {peak['header_hash']}")
-            row += 1
-        elif peak is not None:
-            node_data.addstr(row, col, f"Current Blockchain Status: Not Synced. Peak height: {peak['height']}")
-            row += 1
-        else:
-            node_data.addstr(row, col, "Searching for an initial chain")
-            row += 1
-            node_data.addstr(row, col, "You may be able to expedite with 'chia peer full_node -a host:port' using a known node.\n")
+            node_data.addstr(row, col, f"cursor position: y:{block_band_scope.cursor} x:{block_band_scope.cursor_x}")
             row += 1
 
-        node_data.addstr(row, col, f"finished challenge: {peak['finished_challenge_slot_hashes']}, "
-                                   f"infused: {peak['finished_infused_challenge_slot_hashes']}, "
-                                   f"reward: {peak['finished_reward_slot_hashes']}")
+            node_data.addstr(row, col, f"Network: {network_name}    Port: {full_node_port}   RPC Port: {full_node_rpc_port}")
 
-        row += 1
-        node_data.addstr(row, col, f"prev hash: {peak['prev_hash']}")
-        row += 1
-        node_data.addstr(row, col, f"prev transaction hash: {peak['prev_transaction_block_hash']}")
-        row += 1
+            row += 1
+            node_data.addstr(row, col, f"Node ID: {node_id}")
+            row += 1
+            node_data.addstr(row, col, f"Genesis Challenge: {genesis_challenge}")
+            row += 1
 
-        if peak is not None:
-            if peak['timestamp']:
-                peak_time = peak['timestamp']
+            peak_hash = full_node_meta.peak_header_hash
+            peak_height = full_node_meta.peak_height
+            peak_timestamp = full_node_meta.peak_timestamp
+
+            if synced:
+                node_data.addstr(row, col, f"Current Blockchain Status: Full Node Synced. Height: {peak_height}")
+                row += 1
+                node_data.addstr(row, col, f"Peak: Hash: {peak_hash}")
+                # what kind of object is peak? block i suppose
+                # check that the challenge block info hash is the header hash
+                #node_data.addstr(row, col, f"Peak: Hash: {peak.header_hash}")
+                row += 1
+            elif peak_height is not None and sync_mode:
+                sync_max_block = full_node_meta.sync_tip_height
+                sync_current_block = full_node_meta.sync_progress_height
+                node_data.addstr(row, col, f"Current Blockchain Status: Syncing {sync_current_block}/{sync_max_block} ({sync_max_block - sync_current_block} behind)."
+                )
+                row += 1
+                node_data.addstr(row, col, f"Peak: Hash:  {peak_hash}")
+                row += 1
+            elif peak_height is not None:
+                node_data.addstr(row, col, f"Current Blockchain Status: Not Synced. Peak height: {peak_height}")
+                row += 1
             else:
-                curr_block_record = call_rpc_node('get_block_record', header_hash=peak['prev_hash'])
-                while curr_block_record is not None and curr_block_record['timestamp'] is None:
-                    curr_block_record = call_rpc_node('get_block_record', header_hash=curr_block_record['prev_hash'])
-                if curr_block_record is not None:
-                    peak_time = curr_block_record['timestamp']
+                node_data.addstr(row, col, "Searching for an initial chain")
+                row += 1
+                node_data.addstr(row, col, "You may be able to expedite with 'chia peer full_node -a host:port' using a known node.\n")
+                row += 1
+
+            node_data.addstr(row, col, f"finished challenge: {full_node_meta.finished_challenge_slot_hashes}, "
+                                       f"infused: {full_node_meta.finished_infused_challenge_slot_hashes}, "
+                                       f"reward: {full_node_meta.finished_reward_slot_hashes}")
+
+            row += 1
+            node_data.addstr(row, col, f"prev hash: {full_node_meta.prev_hash}")
+            row += 1
+            node_data.addstr(row, col, f"prev transaction hash: {full_node_meta.prev_transaction_block_hash}")
+            row += 1
+
+            if peak_height is not None:
+                if peak_timestamp:
+                    peak_time = peak_timestamp
                 else:
-                    peak_time = uint64(0)
+                    curr_block: WDB.BlockState = blocks_loader.get_item_by_idx(peak_height)
+                    #curr_block_record = call_rpc_node('get_block_record', header_hash=peak['prev_hash'])
+                    prev_block_idx = peak_height - 1
+                    print("peak heihgt ", peak_height)
+                    print("curr block ", curr_block)
+                    while curr_block is not None and curr_block.is_transaction_block is not True:
+                        curr_block = blocks_loader.get_item_by_idx(prev_block_idx)
+                        prev_block_idx -= 1
+                    peak_time = curr_block.timestamp
 
-            peak_time_struct = time.struct_time(time.localtime(peak_time))
+                peak_time_struct = time.struct_time(time.localtime(peak_time))
 
-            node_data.addstr(row, col, f"      Time: {time.strftime('%a %b %d %Y %T %Z', peak_time_struct)}                 Height: {peak_height:>10}")
-            row += 1
+                node_data.addstr(row, col, f"      Time: {time.strftime('%a %b %d %Y %T %Z', peak_time_struct)}                 Height: {peak_height:>10}")
+                row += 1
 
-            node_data.addstr(row, col, f"Estimated network space: {space}")
-            row += 1
-            #node_data.addstr(row, col, format_bytes(blockchain_state["space"]))
-            node_data.addstr(row, col, f"Current difficulty: {difficulty}")
-            row += 1
-            node_data.addstr(row, col, f"Current VDF sub_slot_iters: {sub_slot_iters}")
-            row += 1
-            #node_data.addstr(row, col, "\n  Height: |   Hash:")
+                node_data.addstr(row, col, f"Estimated network space: {space}")
+                row += 1
+                #node_data.addstr(row, col, format_bytes(blockchain_state["space"]))
+                node_data.addstr(row, col, f"Current difficulty: {difficulty}")
+                row += 1
+                node_data.addstr(row, col, f"Current VDF sub_slot_iters: {sub_slot_iters}")
+                row += 1
+                #node_data.addstr(row, col, "\n  Height: |   Hash:")
 
-        row += 2
-        # show last 7 blocks
-        last_block_records = call_rpc_node('get_block_records', start=peak_height - 7, end=peak_height)
+            else:
+                peak_time = uint64(0)
 
-        for br in reversed(last_block_records):
-            br_hash = br['header_hash']
-            br_height = br['height']
-            br_timestamp = br['timestamp']
-            node_data.addstr(row, col, f"{br_height} | {br_hash} | is_tx: {br_timestamp}")
-            row += 1
+            row += 2
+            # show last 7 blocks
+            # TODO: Load last 7 blocks
+            # last_block_records = call_rpc_node('get_block_records', start=peak_height - 7, end=peak_height)
 
-    except Exception as e:
-        print(e)
-        print("except what?")
+            # for br in reversed(last_block_records):
+            #     br_hash = br['header_hash']
+            #     br_height = br['height']
+            #     br_timestamp = br['timestamp']
+            #     node_data.addstr(row, col, f"{br_height} | {br_hash} | is_tx: {br_timestamp}")
+            #     row += 1
 
-    if keyboardState.esc is True:
-        screenState.screen = 'main'
+        except Exception as e:
+            print(e)
+            print("except what?")
+            traceback.print_exc()
+    else:
+        current_block: WDB.BlockState = blocks_loader.get_current_item()
+        block_data = current_block.block_state_to_2d_list()
+        pos = UIgraph.Point(col, row)
+        block_legend = ['property', 'value']
+        tab_size = UIgraph.Point(80,15)
 
-def screen_memepool(stdscr, keyboardState, screenState, figlet=False):
+        ELEMENTS.create_tab(node_data,
+                            screenState,
+                            main_scope,
+                            "current_bloc",
+                            block_data,
+                            None,
+                            None,
+                            True,
+                            pos,
+                            tab_size,
+                            keyboardState,
+                            exit_scope,
+                            False,
+                            False,
+                            block_legend)
+
+    lapper.clocking('block data')
+    lapper.end()
+    print(lapper)
+
+
+    #if keyboardState.esc is True:
+    #    screenState.screen = 'main'
+
+
+def screen_memepool(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
     pass
+
 
 if True:
     #screenGenerators["debugging window"] = debugging_window
@@ -3962,7 +4146,6 @@ def keyboard_processing(screen_state: ScreenState, keyboard_state: KeyboardState
                     active_scope.data['cursor'] += 1
 
         case ScopeMode.VISUAL:
-            print('visula')
 
             if key == ord('j') or key == curses.KEY_DOWN:
                 keyboard_state.moveDown = True
@@ -4022,6 +4205,10 @@ def interFace(stdscr):
         frame_time_max = 0
         frame_time_display = 0
         frame_count = 0
+        frame_time_real_display = 0
+        frame_time_real_max = 0
+        frame_time_curses_max = 0
+        frame_time_curses_display = 0
 
         # load data from WDB
         # create the WDB or load the data
@@ -4057,6 +4244,13 @@ def interFace(stdscr):
 
         screenState = ScreenState()
         screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
+
+        fullNodeState: FullNodeState = FullNodeState(DB_BLOCKCHAIN_RO)
+
+        node_state_thread = threading.Thread(target=fullNodeState.update_state,
+                                             args=(screenState,), daemon=True)
+        node_state_thread.start()
+
 
         # Start colors in curses
         curses.start_color()
@@ -4288,7 +4482,15 @@ def interFace(stdscr):
                 header.addstr(0, 0, f"{title} | {fing_name}")
                 # write on the right but not in the window, but on the main screen
                 # fps = f"fps: {fps} | second per frame: {frame_time_display}; "
-                fps = f"second per frame: {frame_time_display:.5f}; "
+                fps = 0
+                fps_real = 0
+                curses_percent = 0
+                if frame_time_display > 0:
+                    fps = 1 / frame_time_display
+                    curses_percent = frame_time_curses_display / frame_time_display
+                if frame_time_real_display > 0:
+                    fps_real = 1 / frame_time_real_display
+                fps = f"fps eff./real: {fps:.1f} / {fps_real:.1f} | blit time ratio: {curses_percent*100:.1f}% | "
                 window_info = fps + windowDim
                 y, x = 0, width - len(window_info) - 1
                 header.addstr(y, x, window_info)
@@ -4353,31 +4555,64 @@ def interFace(stdscr):
                 activeScope = screenState.activeScope
                 keyboard_processing(screenState, keyboardState, activeScope, key)
                 activeScope.screen(stdscr, keyboardState,
-                                   screenState)
+                                   screenState, fullNodeState)
                 keyboard_execution(screenState, keyboardState, activeScope)
 
 
             # html tables: https://www.w3.org/TR/xml-entity-names/026.html
 
-            curses.doupdate()
+            frame_curses_start = time.perf_counter()
+            #curses.doupdate()
+            stdscr.refresh()
+            frame_curses_end = time.perf_counter()
+            key = stdscr.getch()
+
+            # curses fps
+            frame_time = frame_curses_end - frame_curses_start
+            if frame_time > frame_time_max:
+                frame_time_curses_max = frame_time
+
+
+            # effective fps
             frame_end = time.perf_counter()
             frame_time = frame_end - frame_start
             if frame_time > frame_time_max:
                 frame_time_max = frame_time
-            frame_count += 1
-            if frame_count == 20:
-                frame_count = 0
-                frame_time_display = frame_time_max
-                frame_time_max = 0
 
             # cap frame rate
             fps = 30
             sleep_time = 1/fps - frame_time
             if sleep_time > 0:
                 time.sleep(sleep_time)
+
+            # real fps
+            # frame_time_real_display = 0
+            # frame_time_real_max = 0
+            frame_end = time.perf_counter()
+            frame_time = frame_end - frame_start
+            if frame_time > frame_time_real_max:
+                frame_time_real_max = frame_time
+
+            # update counter
+            if frame_count == 30:
+                frame_count = 0
+
+                # curses
+                frame_time_curses_display = frame_time_curses_max
+                frame_time_curses_max = 0
+
+                # effective
+                frame_time_display = frame_time_max
+                frame_time_max = 0
+
+                # real
+                frame_time_real_display = frame_time_real_max
+                frame_time_real_max = 0
+
+
+            frame_count += 1
+
             frame_start = time.perf_counter()
-            # stdscr.refresh()
-            key = stdscr.getch()
 
     except Exception as e:
         print("error in the loop")
