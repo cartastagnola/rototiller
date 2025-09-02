@@ -10,6 +10,7 @@ from datetime import datetime
 # Connect to the SQLite database
 # Replace 'your_database.db' with the path to your database
 db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
+
 # connection = sqlite3.connect(db_path)
 # read only read
 connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
@@ -41,6 +42,7 @@ def inspect_rows(table_name, limit=5):
 
 
 def list_tables():
+
     """
     List all tables in the database.
     """

@@ -408,9 +408,11 @@ def menu(stdscr):
 
         # Rendering title
         try:
-            stdscr.addstr(5, 0, f.renderText("1 - Wallet w W a l l e t hdd analytics "))
+            #stdscr.addstr(5, 0, f.renderText("1 - Wallet w W a l l e t hdd analytics "))
+            stdscr.addstr(5, 0, f.renderText("Peak: 4_456_456 "))
             #stdscr.addstr(10, 0, f.renderText("2 - harvester analytics"))
-            stdscr.addstr(15, 0, f.renderText("3 - xch / XCH - CHIA chia "))
+            #stdscr.addstr(15, 0, f.renderText("3 - xch / XCH - CHIA chia "))
+            stdscr.addstr(15, 0, f.renderText("PEAK: 4.456.456 "))
             curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
             #stdscr.addstr(20, 0, f.renderText("4 - move interface"))
             f = pyfiglet.Figlet(font=fonts[ff], width=230)

@@ -61,6 +61,19 @@ def binary_search_r(lst, target):
     return high
 
 
+def human_mojo(num: int) -> str:
+    # suffixes
+    suffixes = ['', 'K', 'M', 'B', 'XCH']
+    magnitude = 0
+
+    while abs(num) >= 1000 and magnitude < len(suffixes) - 1:
+        num /= 1000.0
+        magnitude += 1
+
+    # format with 3 significant digits
+    return f"{num:.3g}{suffixes[magnitude]}"
+
+
 def time_ago(ts):
     now = datetime.now()
     delta = now - ts

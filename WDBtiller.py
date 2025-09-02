@@ -838,6 +838,18 @@ class DataChunkLoader:
         with self.lock:
             self.current_offset = offset
 
+    def update_offset_and_item(self, offset: int):
+        with self.lock:
+            self.current_offset = offset
+        ### TODO
+        ### check if the new offset is still in the cache, if not fetch it
+        conn = self.create_sql_conneciton()
+        fetched_chunk = self.fetch_chunk(conn, self.current_offset)
+        print(f"new offset: {self.current_offset}")
+        with self.lock:
+            self.main_chunk_pointer = 2  # arbitrarly start from the middle chunk
+            self.chunk_arena[self.main_chunk_pointer] = fetched_chunk
+
     # probably it is very slow
     def update_total_row_count(self, conn):
         total_row_count = get_row_count(conn, self.table_name, self.filters)
@@ -874,7 +886,8 @@ class DataChunkLoader:
         return Chunk(chunk_idx, chunk_first_idx, self.chunk_size, data)
 
     def fetch_item_chunk(self, data_index):
-        """Return False if the updated chunk is not in the cache"""
+        """Fetch a particular item only if its chunk is already in the cache,
+        Return False if the related chunk is not in the cache"""
         conn = self.create_sql_conneciton()
         with self.lock:
             chunk_idx = data_index // self.chunk_size
@@ -897,6 +910,9 @@ class DataChunkLoader:
             conn.close()
             return False
 
+    # this updater work only for consecutive chunks and only when moving block by block...
+    ## change... if the new chunk idx is in the boundary of the cache, move pointes
+    ## else init the chunk and load only the current offset. then launch the global update of the loader
     def update_current_chunk_pointer(self):
         current_chunk_idx = self.get_current_chunk().chunk_idx
         if self.current_offset // self.chunk_size > current_chunk_idx:

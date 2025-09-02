@@ -325,7 +325,7 @@ class FullNodeState:
         self.update_mempool()
 
         table_name = 'full_blocks'
-        chunk_size = 120  # height * 2  # to be sure to have at least 2 full screen of data
+        chunk_size = 10  # 120  # height * 2  # to be sure to have at least 2 full screen of data
         offset = self.full_node_meta.peak_height
         sorting_column = 'height'
         filters = {'in_main_chain': 1}
@@ -2783,12 +2783,12 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNode
             if 'address_loader' not in main_scope.data:
                 conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
                 table_name = 'addresses'
-                chunk_size = 10  # height * 2  # to be sure to have at least 2 full screen of data
+                chunk_size = 12  # height * 2  # to be sure to have at least 2 full screen of data
                 offset = 0  # start from 0
                 finger = screenState.active_pk[0]
                 pk_state_id = WDB.retrive_pk(conn, finger)[0]
                 filters = {'pk_state_id': pk_state_id, 'hardened': False}
-                main_scope.data['address_loader'] = WDB.DataChunkLoader(conn, table_name, chunk_size, offset, filters=filters)
+                main_scope.data['address_loader'] = WDB.DataChunkLoader(DB_WDB, table_name, chunk_size, offset, filters=filters)
                 conn.close()
 
             data_chunk_loader: WDB.DataChunkLoader = main_scope.data['address_loader']
@@ -2812,28 +2812,44 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNode
 
             # conn creation should be more logic inside the update, so i can be 
             # created only when needed
-            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-            data_chunk_loader.update_loader(conn)
-            conn.close()
+            data_chunk_loader.update_loader()
 
             #2 show all address
             pass
         case 'send':
             text = "Reciving address: "
-            ELEMENTS.create_text(wallet_win, pos, text, P_col, True)
-            pos_ins = pos + UIgraph.Point(len(text), 0)
+            ELEMENTS.create_text(wallet_win, pos, text, P_text, True)
+            pos_ins = pos + UIgraph.Point(len(text), 5)
             pre_text = "add address: "
             ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'add', pos_ins,
-                                   pre_text, P_col, True, False)
+                                   pre_text, 60, P_text, True, False)
             pos_ins += UIgraph.Point(0,1)
             pre_text = "add amount:  "
             ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'amount', pos_ins,
-                                   pre_text, P_col, True, False)
+                                   pre_text, 60, P_text, True, False)
             pos_ins += UIgraph.Point(0,1)
-            pre_text = "add fee: "
+            pre_text = "add fee:     "
             ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'fee', pos_ins,
-                                   pre_text, P_col, True, False)
-            pos_ins += UIgraph.Point(0,1)
+                                   pre_text, 60, P_text, True, False)
+            pos_ins += UIgraph.Point(0,3)
+
+
+            ## test double
+            text = "Reciving address: "
+            ELEMENTS.create_text(wallet_win, pos_ins, text, 60, P_text, True)
+            pos_ins = pos_ins + UIgraph.Point(len(text), 0)
+            pre_text = "add address: "
+            ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'addd', pos_ins,
+                                   pre_text, 60, P_text, True, False)
+            pos_ins += UIgraph.Point(0,2)
+            pre_text = "add amount:  "
+            ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'amountt', pos_ins,
+                                   pre_text, 60, P_text, True, False)
+            pos_ins += UIgraph.Point(0,2)
+            pre_text = "add fee:     "
+            ELEMENTS.create_prompt(wallet_win, screenState, keyboardState, main_scope, 'feee', pos_ins,
+                                   pre_text, 60, P_text, True, False)
+            pos_ins += UIgraph.Point(0,2)
             pass
             # show the filling fields
             # add menu to chose auto or manual coin selection toggle
@@ -3891,16 +3907,19 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     sorted_mempool = sorted(mempool_items, key=lambda item: item.fee_per_cost)  # sorted by fee per cost
 
     # create mempool block
-    mempool_bloks = [WDB.MempoolBlock()]
+    max_cost = 0
+    mempool_blocks = [WDB.MempoolBlock()]
     for item in sorted_mempool:
-        current_block: WDB.MempoolBlock = mempool_bloks[-1]
+        current_block: WDB.MempoolBlock = mempool_blocks[-1]
+        if max_cost < item.cost:
+            max_cost = item.cost
         if current_block.total_cost + item.cost <= max_block_cost:
             current_block.add_item(item)
         else:
-            mempool_bloks.append(WDB.MempoolBlock())
+            mempool_blocks.append(WDB.MempoolBlock())
 
-    logging(server_logger, "DEBUG", f"mempool {mempool_bloks}")
-    logging(server_logger, "DEBUG", f"mempool block sum {mempool_bloks[0]}")
+    logging(server_logger, "DEBUG", f"mempool {mempool_blocks}")
+    logging(server_logger, "DEBUG", f"mempool block sum {mempool_blocks[0]}")
 
 
     lapper.clocking('meme')
@@ -3908,54 +3927,109 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     with fullNodeState.lock:
         blocks_loader: WDB.DataChunkLoader = fullNodeState.blocks_loader
 
-    #global BLOCK_STATES
-    #if BLOCK_STATES is None:
-    #    import random
-
-    #    height = 7052463
-    #    block_states = []
-    #    for i in range(30):
-    #        tx_bool = True if random.random() < 0.35 else False
-    #        block_states.append(ELEMENTS.BlockState(height + i, True, False, tx_bool, 0.2))
-    #    block_states[-1].infused = False
-    #    block_states.append(ELEMENTS.BlockState(-1, False, True, True, 0.8))
-    #    block_states.reverse()
-    #    BLOCK_STATES = block_states
-
-    #block_states = BLOCK_STATES  # only for testing
-    block_states = None
-
-    lapper.clocking('block loader')
-    if blocks_loader is not None:
-        block_band_scope = ELEMENTS.create_block_band(stdscr, screenState, main_scope,
-                                   "block_band", mempool_bloks, blocks_loader,
-                                   UIgraph.Point(15, 2), height_last_block)
-
-    lapper.clocking('block band')
-
-    width = screenState.screen_size.x
+    ### colors
+    P_text = screenState.colorPairs["body"]
+    ### sub win
     height = screenState.screen_size.y
+    width = screenState.screen_size.x
 
-    if 'full_node_data' not in screenState.screen_data:
-        screenState.screen_data['full_node_data'] = {}
-        screenState.screen_data['full_node_data']['timestamp'] = time.time()
-    timestamp_time = datetime.fromtimestamp(screenState.screen_data['full_node_data']['timestamp'])
-    nLinesUsed = screenState.headerLines + screenState.footerLines
-    node_data = stdscr.subwin(height - nLinesUsed, width, screenState.headerLines, 0)
+    if 'peak_timestamp' not in main_scope.data:
+        main_scope.data["peak_timestamp"] = "None"
+
+
+    # nLinesUsed = screenState.headerLines + screenState.footerLines
+    # node_data = stdscr.subwin(height - nLinesUsed, width, screenState.headerLines, 0)
+    node_data = createFullSubWin(stdscr, screenState, height, width)
     node_data.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
-    node_data.addstr(4, 4, "Timestamp: " + timestamp_time.strftime('%Y-%m-%d %H:%M:%S'))
 
+    pos = UIgraph.Point(2,2)
+    main_win_size = node_data.getmaxyx()
+    main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+    block_band_size = UIgraph.Point(main_win_size.x - pos.x * 2, 10)
+
+    # node data
     genesis_challenge = full_node_meta.genesis_challenge
     network_name = full_node_meta.network_name
-
     difficulty = full_node_meta.difficulty
     synced = full_node_meta.synced
     sync_mode = full_node_meta.sync_mode
     sub_slot_iters = full_node_meta.sub_slot_iters
     space = full_node_meta.net_space
     node_id = full_node_meta.node_id
-    row = 15
+    peak_height = full_node_meta.peak_height
+    peak_timestamp = full_node_meta.peak_timestamp
+    if peak_timestamp:
+        peak_timestamp = datetime.fromtimestamp(peak_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        main_scope.data["peak_timestamp"]
+    else:
+        peak_timestamp = main_scope.data["peak_timestamp"]
+
+    ### node summary
+    local = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    sync_status = "synced"
+    if not synced:
+        if sync_mode:
+            sync_status = "syncing"
+        else:
+            sync_status = "not syncing"
+
+    text = f"Peak: {peak_height}    sync status: {sync_status}   local time: {local}  chain time: {peak_timestamp}"
+
+    ELEMENTS.create_text(node_data, pos, ' ' * block_band_size.x, P_text, True, inv_color=True)
+    ELEMENTS.create_text(node_data, pos, text, P_text, True, inv_color=True)
+    pos += UIgraph.Point(0, 2)
+
+    ### go to block
+    def go_to_block(scope: Scope, screen_state: ScreenState, *args):
+        if scope.parent_scope:
+            scope.data['pressed_enter'] = True
+            screen_state.activeScope = scope.parent_scope
+            return scope.parent_scope
+
+    pre_text = "Go to block: "
+    scope_go_to = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'go to block', pos,
+                                         pre_text, 80, P_text, True, False, custom_scope_function=go_to_block,
+                                         invalid_data_message='invalid input. Use int or hash')
+    pos += UIgraph.Point(0,3)
+
+    def to_int(text: str):
+        try:
+            return int(text)
+        except ValueError:
+            return None
+
+    ### block band
+    lapper.clocking('block loader')
+    if blocks_loader is not None:
+
+        block_band_scope = ELEMENTS.create_block_band(stdscr, screenState, main_scope,
+                                   "block_band", pos, block_band_size, mempool_blocks, 
+                                   blocks_loader, height_last_block)
+
+        if 'pressed_enter' in scope_go_to.data and scope_go_to.data['pressed_enter']:
+            scope_go_to.data['pressed_enter'] = False
+            prompt = to_int(scope_go_to.data['prompt'])
+            if prompt:
+                scope_go_to.data['prompt'] = ''
+                scope_go_to.data['cursor'] = 0
+                blocks_loader.update_offset_and_item(prompt)
+                blocks_loader.update_loader()
+                block_band_scope.cursor = prompt
+                block_band_scope.data["idx_last_item"] = prompt
+            else:
+                scope_go_to.data['valid_data'] = False
+
+
+    pos += UIgraph.Point(0, block_band_size.y + 1)
+
+    lapper.clocking('block band')
+
+    ELEMENTS.create_text(node_data, pos, "chia show -s:", P_text, True)
+    pos += UIgraph.Point(0, 2)
+
+    row = pos.y
     col = 4
+
     node_data.addstr(row, col, f"cursor position: y:{block_band_scope.cursor} x:{block_band_scope.cursor_x}")
 
     if block_band_scope.data['on_peak']:
@@ -4063,7 +4137,8 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
         block_data = current_block.block_state_to_2d_list()
         pos = UIgraph.Point(col, row)
         block_legend = ['property', 'value']
-        tab_size = UIgraph.Point(80,15)
+        max_y = main_win_size.y - pos.y - 3
+        tab_size = UIgraph.Point(80, max_y)
 
         ELEMENTS.create_tab(node_data,
                             screenState,
@@ -4109,8 +4184,10 @@ def keyboard_processing(screen_state: ScreenState, keyboard_state: KeyboardState
 
     if key == curses.KEY_ENTER or key == 10 or key == 13:
         keyboard_state.enter = True
+        return
     if key == 27:
         keyboard_state.esc = True
+        return
 
     match active_scope.mode:
         case ScopeMode.INSERT:
@@ -4290,6 +4367,9 @@ def interFace(stdscr):
         screenState.colors["yellow_bee"] = UIgraph.addCustomColor(
             (255, 190, 0),
             screenState.cursesColors)
+        screenState.colors["red"] = UIgraph.addCustomColor(
+            (255, 0, 0),
+            screenState.cursesColors)
         screenState.colors["orange_red"] = UIgraph.addCustomColor(
             (244, 43, 3),
             screenState.cursesColors)
@@ -4387,8 +4467,12 @@ def interFace(stdscr):
         screenState.colorPairs["tab_selected"] = UIgraph.addCustomColorTuple(
             (screenState.colors["chia_green"], screenState.colors["tab_selected"]),
             screenState.cursesColors)
+        # double, remove it
         screenState.colorPairs["win_select"] = UIgraph.addCustomColorTuple(
             (screenState.colors["yellow_bee"], screenState.colors["background"]),
+            screenState.cursesColors)
+        screenState.colorPairs["error"] = UIgraph.addCustomColorTuple(
+            (screenState.colors["red"], screenState.colors["background"]),
             screenState.cursesColors)
         screenState.colorPairs["bar_dark"] = UIgraph.addCustomColorTuple(
             (screenState.colors["chia_green"], screenState.colors["bar_dark"]),
@@ -4410,6 +4494,9 @@ def interFace(stdscr):
             screenState.cursesColors)
         screenState.colorPairs["copy_banner"] = UIgraph.addCustomColorTuple(
             (screenState.colors["white"], screenState.colors["tab_softer"]),
+            screenState.cursesColors)
+        screenState.colorPairs["block_band"] = UIgraph.addCustomColorTuple(
+            (screenState.colors["chia_green"], screenState.colors["tab_softer"]),
             screenState.cursesColors)
 
     except Exception as e:
