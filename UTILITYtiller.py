@@ -2,6 +2,11 @@ import json
 import time
 from datetime import datetime, timedelta
 
+from chia_rs.sized_bytes import bytes32
+from chia.util.hash import std_hash
+from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+from clvm.casts import int_to_bytes
+
 
 ##############################################################################
 ########### varius
@@ -16,6 +21,11 @@ def parseFloatJsonValue(dic, key):
     except:
         return None
 
+############################################
+########### chia utility
+
+def calc_coin_id(amount: uint64, parent_coin_info: str, puzzle_hash: str):
+    return std_hash(bytes32.from_hexstr(parent_coin_info) + bytes32.from_hexstr(puzzle_hash) + int_to_bytes(amount))
 
 ##############################################################################
 ########### binary search
@@ -101,7 +111,9 @@ def time_ago(ts):
         return f"{s}sec ago"
 
 
-# time
+#############################################
+############## timer #######################
+
 class Timer:
     def __init__(self, name='lapper', tag='t'):
         self.name = name

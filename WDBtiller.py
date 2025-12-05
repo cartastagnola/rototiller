@@ -3,12 +3,27 @@ import sqlite3
 import json
 import zstd
 from datetime import datetime
+import time
 
 from chia.types.full_block import FullBlock
 from chia.consensus.block_record import BlockRecord
+from chia.types.spend_bundle import SpendBundle
+from chia_rs import CoinSpend, Coin, Program
+from chia.util.hash import std_hash
+from chia_rs.sized_bytes import bytes32, bytes48
+from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+from clvm.casts import int_to_bytes
+
+from chia_rs import (ELIGIBLE_FOR_DEDUP, ELIGIBLE_FOR_FF, BLSCache, ConsensusConstants,
+    G2Element, supports_fast_forward, validate_clvm_and_signature)
+
+from chia.consensus.default_constants import DEFAULT_CONSTANTS
+from chia.types.spend_bundle_conditions import SpendBundleConditions, SpendConditions
+
+
 
 from CONFtiller import (
-    server_logger, ui_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT
+    server_logger, ui_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB
 )
 
 
@@ -130,6 +145,7 @@ def create_wallet_db(conn):
         logging(server_logger, "DEBUG", "WDB error _________________________________________")
         logging(server_logger, "DEBUG", "WDB error _________________________________________")
         logging(server_logger, "DEBUG", "WDB error _________________________________________")
+
 
 
 def insert_table_timestamp(conn, table_name):
@@ -445,25 +461,441 @@ def insert_address(conn, pk_state_id, hd_path, address, hardened):
     conn.commit()
     return store_id
 
+
+######################## spend bundles db ##########################
+
+def create_spend_bundle_db(conn):
+    """Creates a database to store spend bundles and puzzles if it doesn't already exist.
+    Puzzle reveals are store in a separate table and referenced by hash. """
+
+    try:
+        cursor = conn.cursor()
+
+        # puzzle table
+        # i think i shoud get the hash of the first uncurried puzzle. The last curried stuff
+        ## should be always the std transaction and so the puzzle_hash change always because the
+        ## public key is curried in
+        ### i should check the levels of uncurried puzzle, and i lev 1 exist exlude that one
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS puzzles("
+            "puzzle_hash BLOB PRIMARY KEY NOT NULL UNIQUE, "
+            "clvm BLOB NOT NULL, "
+            "size INT);"
+        )
+
+        ## coin spend db
+        # parent id, amount and puzzle hash are already on the chain. Could be deleted
+        # puzzle_reveal reference to the puzzles TABLE
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS coin_spends("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "spend_bundle_id INT NOT NULL, "
+            "coin_id BLOB NOT NULL UNIQUE, "
+            "parent_id BLOB NOT NULL, "
+            "amount INT NOT NULL, "
+            #"puzzle_hash BLOB NOT NULL,"
+            "puzzle_reveal_hash BLOB NOT NULL, "
+            "solution BLOB NOT NULL, "
+
+            "FOREIGN KEY (puzzle_reveal_hash) REFERENCES puzzles(puzzle_hash), "
+            "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id));"
+
+        )
+        print('OMO')
+
+        # spend bundle TABLE spend_bundles
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS spend_bundles("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "spend_bundle_hash BLOB NOT NULL UNIQUE, "  # spend bundle hash
+            "timestamp BIGINT NOT NULL, "  # first appearance
+            "block_height INT, "
+            "status TEXT NOT NULL, "  # change to INT: 0-pending, 1-confirmed, 2-invalid
+            "aggregated_signature BLOB NOT NULL, "
+            "raw_spend_bundle BLOB NOT NULL);"
+        )
+
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS spend_bundle_group_names ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "name TEXT NOT NULL UNIQUE);"
+        )
+
+        # spend bundle groups (eg: watchlater)
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS spend_bundle_groups ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "group_id INT NOT NULL, "
+            "spend_bundle_id BLOB NOT NULL UNIQUE, "
+            "FOREIGN KEY (group_id) REFERENCES group_names(id),"
+            "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id));"
+        )
+
+        # Indexing for quick lookups
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_coin_spend_bundle_id ON coin_spends(spend_bundle_id); "
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_coin_id ON coin_spends(coin_id); "
+        )
+
+        conn.commit()
+
+    except sqlite3.Error as e:
+        print(f"Error creating the spend bundle database: {e}")
+        logging(server_logger, "DEBUG", f"WDB error while creating the spend bundle database: {e}")
+        logging(server_logger, "DEBUG", "WDB error _________________________________________")
+        logging(server_logger, "DEBUG", "WDB error _________________________________________")
+        logging(server_logger, "DEBUG", "WDB error _________________________________________")
+
+
+def insert_puzzle(contable_namen, puzzle_hash, puzzle, size):
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT OR IGNORE INTO puzzles ("
+        "puzzle_hash, clvm, size) VALUES (?, ?, ?);",
+        (puzzle_hash,
+         puzzle,
+         size)
+    )
+
+
+def add_spend_bundles_to_watch_later(conn, spend_bundle_hash):
+    cursor = conn.cursor()
+    group_name = "watch later"
+
+    spend_bundle_hash = bytes.fromhex(spend_bundle_hash)
+
+    # retrive the id of the sb
+    cursor.execute(
+        "SELECT id FROM spend_bundles WHERE spend_bundle_hash = ?;",
+        (spend_bundle_hash,)
+    )
+    item = cursor.fetchone()
+    spend_bundle_id = None
+    if item:
+        spend_bundle_id = item[0]
+
+    # add the group name or retrive the id
+    cursor.execute(
+        "INSERT OR IGNORE INTO spend_bundle_group_names (name) VALUES (?);",
+        (group_name, )
+    )
+
+    if cursor.rowcount == 0:
+        cursor.execute(
+            "SELECT id FROM spend_bundle_group_names WHERE name = ?",
+            (group_name,))
+        group_id = cursor.fetchone()[0]
+    else:
+        group_id = cursor.lastrowid
+
+    # add the sb to the group
+    cursor.execute(
+        "INSERT OR IGNORE INTO spend_bundle_groups (group_id, spend_bundle_id) VALUES (?,?);",
+        (group_id, spend_bundle_id)
+    )
+
+    conn.commit()
+
+    # SHould return something?
+
+
+def remove_spend_bundle_from_group(spend_bundle_hash):
+    pass
+
+
+def insert_spend_bundle(conn, spend_bundle: SpendBundle):
+
+    cursor = conn.cursor()
+
+    # spend_bundle
+    spend_bundle_hash = spend_bundle.get_hash()
+    timestamp = time.time()
+    block_height = None  # added when executer
+    status = 'pending'
+    aggregated_signature = spend_bundle.aggregated_signature.to_bytes()
+    raw_spend_bundle = spend_bundle.to_bytes()
+
+    spend_bundle_id = None  # i should get the id from the execute of the bundle
+    ### cursor.execute() spend bundle
+
+    # puzzles and coin_spend
+    puzzles = {}
+    coin_spends: list[CoinSpend] = spend_bundle.coin_spends
+
+    try:
+        cursor.execute(
+            "INSERT OR IGNORE INTO spend_bundles("
+            "spend_bundle_hash, timestamp, block_height, status, "
+            "aggregated_signature, raw_spend_bundle) "
+            "VALUES (?, ?, ?, ?, ?, ?);",
+            (spend_bundle_hash, timestamp, block_height, status, aggregated_signature, raw_spend_bundle)
+        )
+
+        if cursor.rowcount == 0:
+            return None  # spend bundle already added
+
+        spend_bundle_id = cursor.lastrowid
+
+    except Exception as e:
+        print(f"we have and exception guys... do something please!!! {e}")
+        logging(server_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
+
+
+    for spend in coin_spends:
+        puzzle_reveal = spend.puzzle_reveal
+        puzzle_hash = puzzle_reveal.get_tree_hash()
+        print()
+        print("puzzle hash")
+        print(f"hash: {puzzle_reveal.get_hash()}")
+        print(f"tree hash: {puzzle_reveal.get_tree_hash()}")
+        if puzzle_hash not in puzzles:
+            puzzles[puzzle_hash] = puzzle_reveal
+
+            ### TODO: here we need to decompose the puzzle in all the sub puzzle, and save the input on the coin_spend table, and all the puzzle in the puzzles table
+
+            try:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO puzzles("
+                    "puzzle_hash, clvm, size) "
+                    "VALUES (?, ?, ?);",
+                    (puzzle_hash, puzzle_reveal.to_bytes(), 0)  # for now the size is 0
+                )
+            except Exception as e:
+                print(f"we have and exception guys... puzzle insertion do something please!!! {e}")
+                logging(server_logger, "DEBUG", f"WDB error while inserting the "
+                        f" a new puzzle in the database: {e}")
+
+        coin = spend.coin
+        coin_id = coin.name()  # get_hash() is not the coin_it, but the hash of the data
+        # coin_id manual
+        #coin_id_manual = std_hash(coin.parent_coin_info +
+        #    coin.puzzle_hash +
+        #    int_to_bytes(coin.amount)).hex()
+        coin_amount = coin.amount
+        coin_parent = coin.parent_coin_info
+        coin_puzzle_reveal_hash = puzzle_hash
+        coin_solution = spend.solution
+
+        try:
+            cursor.execute(
+                "INSERT OR IGNORE INTO coin_spends("
+                "spend_bundle_id, coin_id, parent_id, amount, puzzle_reveal_hash, solution) "
+                "VALUES (?, ?, ?, ?, ?, ?);",
+                (spend_bundle_id, coin_id, coin_parent, coin_amount,
+                 coin_puzzle_reveal_hash, coin_solution.to_bytes())
+            )
+
+        except Exception as e:
+            print(f"we have and exception guys... coin spend insertion do something please!!! {e}")
+            logging(server_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
+
+        # check if the puzzle hash of the coin is the same of the tree hash,
+        # if yes the puzzle is the one with curried in pk
+        # try to do with the first uncurried one
+
+        # saving the puzzles it could be a lit bit more involved. The puzzle shoud be unbcurried
+        # and for each uncurried levele the parameter saved
+
+        # 2 uncurry levels
+        # first puzzle - n. parameter of which one is the second puzzle
+        # second puzzle - n. parameter
+
+        # per adesso salviamo solo il puzzle principale semplice
+
+
+        # Program.get_hash  # it is calculate on the blob data, faster and less costly
+        # Program.get_tree_hash  # the one used in the puzzles
+
+    conn.commit()
+    print("done")
+    # aggregated_signature are not needed to be directily accessible...
+
+
+    return "bye bye..."
+
+
+def load_spend_bundles(conn, group_name=None):
+    """General loader, it loads all the entries"""
+
+    cursor = conn.cursor()
+
+    if group_name is not None:
+
+        cursor.execute(
+            "SELECT id FROM spend_bundle_group_names WHERE name = ?;",
+            (group_name,)
+        )
+
+        fetch = cursor.fetchone()
+        if fetch is None:
+            return None
+
+        group_id = fetch[0]
+
+        cursor. execute(
+            " SELECT s.* FROM "
+            " spend_bundles s JOIN spend_bundle_groups g "
+            " ON s.id = g.spend_bundle_id WHERE g.group_id = ? ",
+            (group_id,))
+
+    else:
+        cursor.execute(
+            "SELECT * FROM spend_bundles;"
+        )
+    raw_spend_bundles = cursor.fetchall()
+
+    bundle_states = []
+    for rsp in raw_spend_bundles:
+        spend_bundle_state: BundleState = BundleState(rsp)
+        bundle_states.append(spend_bundle_state)
+
+    return bundle_states
+
+
+def load_spend_bundle(conn, bundle_hash, group_name=None):
+    """General loader, it loads all the entries"""
+
+    cursor = conn.cursor()
+
+    if group_name is not None:
+
+        cursor.execute(
+            "SELECT id FROM spend_bundle_group_names WHERE name = ?;",
+            (group_name,)
+        )
+        fetch = cursor.fetchone()
+        if fetch is None:
+            return None
+
+        group_id = fetch[0]
+
+
+        cursor. execute(
+            " SELECT s.raw_spend_bundle, s.timestamp FROM "
+            " spend_bundles s JOIN spend_bundle_groups g "
+            " ON s.id = g.spend_bundle_id WHERE g.id = ? AND s.spend_bundle_hash = ? ",
+            (group_id, bundle_hash)
+        )
+
+    else:
+        cursor.execute(
+            "SELECT raw_spend_bundle, timestamp FROM spend_bundles WHERE spend_bundle_hash = ? ",
+            (bundle_hash,)
+        )
+
+    raw_spend_bundles = cursor.fetchall()
+    if len(raw_spend_bundles) == 0:
+        return None
+
+    bundle_states = []
+    for rsp in raw_spend_bundles:
+        spend_bundle_state: BundleState = BundleState(rsp)
+        bundle_states.append(spend_bundle_state)
+
+    return bundle_states
+
+
+############### mempool structure ######################
+
 # mempool items
+## why not to use the class Spendbundle()?
 class MempoolItem:
 
-    def __init__(self, tx_id, json_item):
-        self.tx_id = tx_id
-        self.cost = json_item['cost']
-        self.fee = json_item['fee']
+    def __init__(self, spend_bundle_hash=None, rpc_json_item=None, raw_json_spendbundle=None, timestamp=None):
+        if rpc_json_item is not None:
+            self.spend_bundle_hash = spend_bundle_hash
+            self.cost = rpc_json_item['cost']
+            self.fee = rpc_json_item['fee']
 
-        self.addition_amount = json_item['npc_result']['conds']['addition_amount']
-        self.removal_amount = json_item['npc_result']['conds']['removal_amount']
-        self.additions = json_item['additions']
-        self.removals = json_item['removals']
-        self.spend_bundle = json_item['spend_bundle']
-        self.added_coins_count = len(self.additions)
-        self.removed_coins_count = len(self.removals)
-        self.fee_per_cost = self.fee / self.cost
+            self.addition_amount = rpc_json_item['npc_result']['conds']['addition_amount']
+            self.removal_amount = rpc_json_item['npc_result']['conds']['removal_amount']
+            self.additions = rpc_json_item['additions']
+            self.removals = rpc_json_item['removals']
+            self.spend_bundle = rpc_json_item['spend_bundle']
+            self.added_coins_count = len(self.additions)
+            self.removed_coins_count = len(self.removals)
+            self.fee_per_cost = self.fee / self.cost
+
+            self.added_at = time.time()
+            self.removed_at = None
+            self.coin_types = None
+            self.single_coins_with_all_type = None  # list of internal puzzle
+            # form to store coin type (dic with tuple)
+        elif raw_json_spendbundle is not None and timestamp is not None:
+
+            sp: SpendBundle = SpendBundle.from_json_dict(raw_json_spendbundle)
+
+
+            #def validate_clvm_and_signature(
+            #    new_spend: SpendBundle,
+            #    max_cost: int,
+            #    constants: ConsensusConstants,
+            #    peak_height: int)
+            #    -> tuple[SpendBundleConditions, list[tuple[bytes32, GTElement]], float]: ...
+
+            sp_conds: SpendBundleConditions = validate_clvm_and_signature(
+                sp,
+                1000000000,  # max cost
+                DEFAULT_CONSTANTS,  # ConsensusConstants
+                1000000000)  # peak_height
+            sp_conds = sp_conds[0]  # keep only the conditions
+
+            # sp_conds.condition_cost
+            # sp_conds.execution_cost
+            # sp_conds.reserve_fee)
+
+            self.spend_bundle_hash = sp.name()
+
+            self.cost = sp_conds.cost
+            self.fee = sp_conds.removal_amount - sp_conds.addition_amount
+
+            self.addition_amount = sp_conds.addition_amount
+            self.removal_amount = sp_conds.removal_amount
+
+            # spends
+            spends = sp_conds.spends
+
+            removals_dict: dict[bytes32, Coin] = {}
+            additions_dict: dict[bytes32, Coin] = {}
+            addition_amount: int = 0
+            removal_amount: int = 0
+
+            for spend in spends:
+                coin_id = bytes32(spend.coin_id)
+                removals_dict[coin_id] = Coin(spend.parent_id, spend.puzzle_hash, spend.coin_amount)
+                removal_amount += spend.coin_amount
+                spend_additions = []
+                for puzzle_hash, amount, _ in spend.create_coin:
+                    child_coin = Coin(coin_id, puzzle_hash, uint64(amount))
+                    spend_additions.append(child_coin)
+                    additions_dict[child_coin.name()] = child_coin
+                    addition_amount += child_coin.amount
+
+            # convert to dict for compatibility
+            def coin_to_dict(coin):
+                return {'parent_coin_info': f'0x{coin.parent_coin_info}', 'puzzle_hash': f'0x{coin.puzzle_hash}', 'amount': coin.amount}
+
+            self.additions = [coin_to_dict(c) for c in additions_dict.values()]
+            self.removals = [coin_to_dict(c) for c in removals_dict.values()]
+            self.spend_bundle = raw_json_spendbundle
+            self.added_coins_count = len(additions_dict)
+            self.removed_coins_count = len(removals_dict)
+            self.fee_per_cost = self.fee / self.cost
+
+            self.added_at = None
+            self.removed_at = None
+            self.coin_types = None
+            self.single_coins_with_all_type = None  # list of internal puzzle
+            # form to store coin type (dic with tuple)
+        else:
+            raise "an spend_bundle_hash + rpc output or a json spendbule + timestamp is needed"
+
 
     def __str__(self):
-        str = (f"tx_id: {self.tx_id} | cost: {self.cost} | fee: {self.fee:_} mojo or {self.fee / 1_000_000_000_000} | "
+        str = (f"spend_bundle_hash: {self.spend_bundle_hash} | cost: {self.cost} | fee: {self.fee:_} mojo or {self.fee / 1_000_000_000_000} | "
             f"amount added/removed: {self.addition_amount} / {self.removal_amount} | "
             f"added/removed coins: {self.added_coins_count} / {self.removed_coins_count}"
                )
@@ -483,6 +915,16 @@ class MempoolBlock:
     def __str__(self):
         return f"n. of transaction {len(self.transactions)}, total cost: {self.total_cost}"
 
+class BundleState:
+
+    def __init__(self, raw_data):
+        self.id = raw_data[0]
+        self.spend_bundle_hash = raw_data[1].hex()
+        self.timestamp = raw_data[2]
+        self.block_height = raw_data[3]
+        self.status = raw_data[4]
+        self.aggregated_signature = raw_data[5]
+        self.raw_spend_bundle = raw_data[6]
 
 # block state type
 class BlockState:
@@ -666,13 +1108,14 @@ import time
 from dataclasses import dataclass
 
 
-def make_sql_fetcher(table, sorting_column="id"):
+def make_sql_fetcher(table, sorting_column=None):
     def fetch(conn, start, count, filters=None, order='ASC'):
         """ order is not implemented... """
         if not filters:
             filters = {}
 
-        #print(f" fileter : {filters}")
+        print(f" fileter : {filters}")
+        print("HHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
         where_clauses = []
         values = []
 
@@ -680,14 +1123,20 @@ def make_sql_fetcher(table, sorting_column="id"):
             where_clauses.append(f"{filter} = ?")
             values.append(val)
 
-        range_sql = f"{sorting_column} >= ? AND {sorting_column} < ?"
-        where_sql = f"WHERE {' AND '.join(where_clauses)} AND {range_sql}" if filters else f"WHERE {range_sql}"
+        if sorting_column is not None:
+            range_sql = f"{sorting_column} >= ? AND {sorting_column} < ?"
+            where_sql = f"WHERE {' AND '.join(where_clauses)} AND {range_sql}" if filters else f"WHERE {range_sql}"
+            values.extend([start, start + count])
+        else:
+            range_sql = 'LIMIT ? OFFSET ?'
+            where_sql = f"WHERE {' AND '.join(where_clauses)} {range_sql}" if filters else f"{range_sql}"
+            values.extend([start + count, start])
+
 
         cur = conn.cursor()
         query = f"SELECT * FROM {table} {where_sql}"
         #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
 
-        values.extend([start, start + count])
         print(f"questy: {query}")
         print(f"valuesty: {values}")
         cur.execute(query, values)
@@ -750,7 +1199,7 @@ def make_sql_fetcher_range_M(table, sorting_column="id"):
     return fetch
 
 
-def make_sql_fetcher_first_last_element(table, sorting_column='id'):
+def make_sql_fetcher_first_last_element(table, sorting_column=None):
     def fetch(conn, filters={}, order='ASC'):
 
         where_clauses = []
@@ -761,7 +1210,11 @@ def make_sql_fetcher_first_last_element(table, sorting_column='id'):
             values.append(val)
 
         where_sql = f" WHERE {' AND '.join(where_clauses)} " if filters else ""
-        query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} {order} LIMIT 1"
+
+        if sorting_column is not None:
+            query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} {order} LIMIT 1"
+        else:
+            query = f"SELECT * FROM {table} {where_sql} ORDER BY 1 {order} LIMIT 1"  # use the first column
 
         cur = conn.cursor()
         cur.execute(query, values)
@@ -793,9 +1246,11 @@ class Chunk:
 
 
 class DataChunkLoader:
-    def __init__(self, db_path: str, table_name: str, chunk_size: int, offset: int = 0, sorting_column="id", filters={}, data_struct=None):
+    def __init__(self, db_path: str, table_name: str, chunk_size: int, offset: int = 0, sorting_column=None, row_offset=False, filters={}, data_struct=None):
         """offset = distance from the beging of the array of elements
            filters = a dic with filter and value. EG. {'pk_state_id': 2, 'other_filter': 'yellow'}
+           row_offset: bool; use the row number to select item, instead of the value of the sorting column (NOT IMPLEMENTED: at the moment
+           this behaviour is granted by soting_column=None)
            it is supposed that the chunk is small enough to not degrade performance using not indexed filters"""
 
         self.db_path = db_path
@@ -816,6 +1271,8 @@ class DataChunkLoader:
         self.fetcher_first_last = make_sql_fetcher_first_last_element(table_name, self.sorting_column)
         self.data_struct = data_struct
         self.filters = filters
+
+        self.update_loader_thread = None
 
         self.update_total_row_count(conn)
         #self.update_idx_last_item(conn)
@@ -864,9 +1321,13 @@ class DataChunkLoader:
     #    return self.idx_last_item
 
     def update_last_item(self, conn):
-        last_item = self.fetcher_first_last(conn, self.filters, 'DESC')[0]
-        with self.lock:
-            self.last_item = last_item
+        first_last_items = self.fetcher_first_last(conn, self.filters, 'DESC')
+        if first_last_items:
+            last_item = first_last_items[0]
+            with self.lock:
+                self.last_item = last_item
+        else:
+            self.last_item = None
         return self.last_item
 
     def fetch_db(self, conn, start, count):
@@ -963,6 +1424,12 @@ class DataChunkLoader:
 
             return data, chunk_idx * self.chunk_size
 
+    # for now used only for spend bundle archive
+    def start_updater_thread(self):
+        with self.lock:
+            if self.update_loader_thread is None or not self.update_loader_thread.is_alive():
+                self.update_loader_thread = threading.Thread(target=self.update_loader, daemon=True)
+                self.update_loader_thread.start()
 
     def update_loader(self):
         conn = self.create_sql_conneciton()
@@ -982,6 +1449,10 @@ class DataChunkLoader:
             pre_chunk: Chunk = self.chunk_arena[pre_chunk_pointer]
             post_chunk: Chunk = self.chunk_arena[post_chunk_pointer]
 
+        if current_chunk is None:
+            print("chunk is None")
+            return None
+
         # current chunk, fetch again if not full
         if not current_chunk.is_full():
             fetched_chunk = self.fetch_chunk(conn, self.current_offset)
@@ -994,7 +1465,7 @@ class DataChunkLoader:
             fetched_chunk = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
             with self.lock:
                 self.chunk_arena[post_chunk_pointer] = fetched_chunk
-
+ 
         # pre chunk, do not fetch if we are at the beginning
         if current_chunk.chunk_idx > 0:
             if not pre_chunk or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
@@ -1010,6 +1481,159 @@ class DataChunkLoader:
 
 if __name__ == "__main__":
 
+    #### test rebuild spendbundle info
+    ## fee
+    ## cost
+    ## cost / fee
+
+    # spend_bundle_hash = spend_bundle_hash
+    # cost = json_item['cost']
+    # fee = json_item['fee']
+    #
+    # addition_amount = json_item['npc_result']['conds']['addition_amount']
+    # removal_amount = json_item['npc_result']['conds']['removal_amount']
+    # additions = json_item['additions']
+    # removals = json_item['removals']
+    # spend_bundle = json_item['spend_bundle']
+    # added_coins_count = len(self.additions)
+    # removed_coins_count = len(self.removals)
+    # fee_per_cost = self.fee / self.cost
+    #
+    # added_at = time.time()
+    # removed_at = None
+    # coin_types = None
+    # removed_at = None
+    # single_coins_with_all_type = None  # list of internal puzzle
+    #
+    #
+    #### test spendbundle db
+
+    with open('mempool_items.json', 'r') as f:
+        meme = json.load(f)
+
+    item_ids = list(meme['mempool_items'].keys())
+    print(item_ids)
+    idx = 0
+    item = meme['mempool_items'][item_ids[idx]]
+    print(item)
+
+    mempool_item: MempoolItem = MempoolItem(item_ids[idx], item)
+    print(mempool_item)
+    print(type(mempool_item.spend_bundle))
+    sp = SpendBundle.from_json_dict(mempool_item.spend_bundle)
+    print("spend")
+    print(sp)
+    print(type(sp))
+
+
+
+#def validate_clvm_and_signature(
+#    new_spend: SpendBundle,
+#    max_cost: int,
+#    constants: ConsensusConstants,
+#    peak_height: int,
+#) -> tuple[SpendBundleConditions, list[tuple[bytes32, GTElement]], float]: ...
+
+    a: SpendBundleConditions = validate_clvm_and_signature(
+        sp,
+        1000000000,
+        DEFAULT_CONSTANTS,
+        1000000000
+    )
+
+    print(a)
+    print("conditions")
+    print(a[0])
+    a = a[0]
+    print("condition cost ", a.condition_cost)
+    print("execution cost ", a.execution_cost)
+    print("cost ", a.cost)
+    print("original cost ", mempool_item.cost)
+    print(a.addition_amount)
+    print(a.removal_amount)
+    print("fee")
+    print(a.addition_amount - a.removal_amount)
+    print(a.reserve_fee)
+    print('other')
+
+    spends = a.spends
+
+    print(f"spend conditions count: {len(spends)}")
+    print(spends)
+    for i in spends:
+        print()
+        print(i)
+        print(type(i))
+
+
+
+    print("recreate spends")
+
+    removals_dict: dict[bytes32, Coin] = {}
+    additions_dict: dict[bytes32, Coin] = {}
+    addition_amount: int = 0
+    removal_amount: int = 0
+
+    for spend in a.spends:
+        coin_id = bytes32(spend.coin_id)
+        removals_dict[coin_id] = Coin(spend.parent_id, spend.puzzle_hash, spend.coin_amount)
+        removal_amount += spend.coin_amount
+        spend_additions = []
+        for puzzle_hash, amount, _ in spend.create_coin:
+            child_coin = Coin(coin_id, puzzle_hash, uint64(amount))
+            spend_additions.append(child_coin)
+            additions_dict[child_coin.name()] = child_coin
+            addition_amount += child_coin.amount
+
+    print(f"type spends {a}")
+    print(f"type spend {a.spends[0]}")
+    print(f"type create coin {a.spends[0].create_coin}")
+    print(f"type create coin [] {a.spends[0].create_coin[0]}")
+
+    print(f"addition amount: {addition_amount}")
+    print(f"removal amount: {removal_amount}")
+    print(f"removals name: {removals_dict}")
+    print(f"fee: {removal_amount - addition_amount}")
+    print(f"fee from the mempool item: {mempool_item.fee}")
+
+
+
+
+    print('meta plinto')
+
+    raw_sp = mempool_item.spend_bundle
+    new_mem = MempoolItem(raw_json_spendbundle=raw_sp, timestamp=mempool_item.added_at)
+    print('original')
+    print(mempool_item)
+    print("new mem")
+    print(new_mem)
+
+    exit()
+
+
+    conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+    sp_db = create_spend_bundle_db(conn)
+    print(sp_db)
+
+    with open('./tests/sb_SBX-XCH_swap.json', 'r') as f:
+        sp = json.load(f)
+
+    print()
+    print('swap transaction')
+    sp = SpendBundle.from_json_dict(sp)
+    print(sp)
+
+    print("add SB")
+    insert_spend_bundle(conn, sp)
+
+
+
+    conn.close()
+    exit()
+
+
+
+    #### test block and double block 
 
     from CONFtiller import DB_WDB, SQL_TIMEOUT
     from RPCtiller import call_rpc_node

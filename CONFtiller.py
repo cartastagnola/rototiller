@@ -1,6 +1,7 @@
 import LOGtiller as LOG
 from enum import Enum
 import sqlite3
+import json
 
 
 from chia.util.config import load_config
@@ -31,15 +32,32 @@ wallet_rpc_port = config["wallet"]["rpc_port"]  # 9256
 chain_network = config["full_node"]["selected_network"]
 
 
+# UI
+FIGLET = True  # EVAL: trying using a global instead of a value in screenState
+# to make it working ui should import it without using FROM CONFtiller import ...
+
+
 # COSTANT
 
 ## database
-DB_WDB = 'walletiller.db'
+# DB_WDB = 'walletiller.db'
+DB_WDB = 'DBiller_wallets.db'
+DB_SB = 'DBiller_spend_bundles.db'
 
 blockchain_db_path = config["full_node"]["database_path"].replace("CHALLENGE", chain_network)
 DB_BLOCKCHAIN_RO = f"file:{blockchain_db_path}?mode=ro"
 
 SQL_TIMEOUT = 10
+
+## CLMV
+# load the known puzzles
+KNOWN_PUZZLES_PATH = './puzzles/puzzles.json'
+KNOWN_PUZZLES = None
+with open(KNOWN_PUZZLES_PATH, 'r') as f:
+    KNOWN_PUZZLES = json.load(f)
+
+## memepool
+TXS_MEMPOOL_DELAY = 1000  # ms
 
 ## chia tail
 XCH_FAKETAIL = '0c61a'

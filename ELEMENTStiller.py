@@ -14,7 +14,8 @@ from typing import List, Tuple, Dict, Union, Callable
 from datetime import datetime, timedelta
 
 from CONFtiller import (
-    server_logger, ui_logger, logging, ScopeMode, SQL_TIMEOUT, BLOCK_MAX_COST)
+    server_logger, ui_logger, logging, ScopeMode, SQL_TIMEOUT, BLOCK_MAX_COST, FIGLET)
+import CONFtiller
 
 from UItiller import (
     Scope, activate_scope, screen_coin_wallet, ScreenState, KeyboardState,
@@ -137,8 +138,6 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
         total_dims -= dim
         scope_x -= 1
 
-    print(f"max dims: {max_dims}")
-
 
     ### remove last column until there is enough space
     if total_dims > max_table_width:
@@ -207,6 +206,47 @@ def create_text(stdscr, pos: UIgraph.Point, text: str, P_text_color, bold: bool 
     stdscr.addstr(pos.y, pos.x, str(text))
     stdscr.attroff(curses.A_BOLD)
     stdscr.attroff(curses.A_REVERSE)
+
+
+def get_win_dimension(stdscr):
+    temp_vec = stdscr.getmaxyx()
+    return UIgraph.Point(temp_vec[1], temp_vec[0])
+
+
+def align_bounding_box(stdscr, bbox: UIgraph.Point, margin: UIgraph.Point,
+                       align_h: int = 0, align_v: int = 0):
+    """Give the position for the bounding box aligned according the options,
+    align_h: right=0, center=1, left=2
+    align_v: top=0, center=1, bottom=2
+    the margin.x is used as distance from the margin, both in align right and left
+    margin.y is used as distance from the top margin or lower margin"""
+
+    win_dim = get_win_dimension(stdscr)
+    print(win_dim)
+    print(bbox)
+    assert win_dim.x > bbox.x and win_dim.y > bbox.y
+
+    pos_x = None
+    pos_y = None
+
+    match align_h:
+        case 0:
+            pos_x = margin.x
+        case 1:
+            pos_x = int((win_dim.x - bbox.x) // 2)
+        case 2:
+            pos_x = win_dim.x - margin.x - bbox.x
+
+    match align_v:
+        case 0:
+            pos_y = margin.y
+        case 1:
+            pos_y = int((win_dim.y - bbox.y) // 2)
+        case 2:
+            pos_y = win_dim.y - margin.y - bbox.y
+    print(f"x{pos_x} y {pos_y}")
+
+    return UIgraph.Point(pos_x, pos_y)
 
 
 def create_text_aligned(stdscr, margin: UIgraph.Point, text: str, P_text_color,
@@ -500,10 +540,11 @@ def create_tab(scr,
                size: UIgraph.Point,
                keyboardState,
                scope_activation_func,
-               active=False,  # what is it?
+               active=False,  # to implement
                multipleSelection=False,
                data_table_legend=None,
-               chunk_loader: WDB.DataChunkLoader = None):
+               chunk_loader: WDB.DataChunkLoader=None,
+               chunk_data_parser=None):
 
     """Create a beautiful and shining tab
     dataTable: 2dim data list
@@ -558,6 +599,9 @@ def create_tab(scr,
         total_item_count = chunk_loader.total_row_count
         row_count = len(dataTable)
         circular_selection = False
+
+        if chunk_data_parser is not None:
+            dataTable, data_table_keys = chunk_data_parser(dataTable)
         # update the offset in the loader
         # chunk_loader.update_offset(select)
     else:
@@ -577,6 +621,18 @@ def create_tab(scr,
     if chunk_loader:
         chunk_loader.update_offset(selected_idx)
 
+
+    ### if no data, make an epmty line
+    if len(dataTable) == 0:
+        if data_table_legend is not None or len(data_table_legend) > 0:
+            new_empty_line = []
+            for i in data_table_legend:
+                new_empty_line.append('')
+            new_empty_line[0] = "empty table"
+            dataTable.append(new_empty_line)
+
+
+
     ### make empty data_table_color if...
     if data_table_color is None:
         row = len(dataTable)
@@ -585,7 +641,10 @@ def create_tab(scr,
 
     ### assert the shape of the data
     if data_table_legend:
-        assert len(data_table_legend) == len(dataTable[0]), f"legend data length ({len(data_table_legend)}) differ from the data ({len(dataTable[0])})"
+        if len(dataTable) == 0:
+            pass
+        else:
+            assert len(data_table_legend) == len(dataTable[0]), f"legend data length ({len(data_table_legend)}) differ from the data ({len(dataTable[0])})"
 
 
     ### tab geometry
@@ -838,6 +897,8 @@ def create_tab(scr,
     if (keyboardState.yank and tab_scope_is_active) or screenState.activeScope == copy_scope:
         # create a new over scope where you can select the bit of info you want
         create_copy_banner(table, screenState, scope, current_selection_data, False)
+
+    return scope
 
 
 def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, only_init: bool):
@@ -1652,6 +1713,7 @@ def read_bool_button(stdscr, screenState, main_scope, name):
     name = f"{main_scope.id}_{name}"
     return screenState.scopes[name].bool
 
+
 def normalize_menu(menu_list: List, scope: Scope, max_size: int) -> Tuple[List[str], int]:
     """Recreate the menu so that it stay in the limit of a max number"""
 
@@ -1663,8 +1725,6 @@ def normalize_menu(menu_list: List, scope: Scope, max_size: int) -> Tuple[List[s
     #if selected >= len_menu:
     #    selected = len_menu - 1
     #    scope.cursor = selected
-    for i, m in enumerate(menu_list):
-        menu_list[i] = f"{i} - {menu_list[i]}"
 
     if len_menu > max_size:
         if 'first_idx' not in scope.data:
@@ -1752,7 +1812,7 @@ def menu_static(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
         stdscr.addstr(point.y + i, point.x, str(item))
 
 
-### TODO: rename, stationary menu...
+### TODO: rename to menu_select_stationary!
 def menu_select(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
                 color_pair, color_pair_sel):
     """Create a menu at given coordinate. Point[y,x]"""
@@ -2098,7 +2158,7 @@ def create_block_band(stdscr,
         scope_is_active = True
 
 
-    lapper.clocking()
+    lapper.clocking("init")
 
     idx_last_item = scope.data["idx_last_item"]
     last_peak = scope.data["last_peak"]
@@ -2108,8 +2168,6 @@ def create_block_band(stdscr,
 
     prev_idx_selected = scope.data["prev_idx_selected"]
     scope.data["prev_idx_selected"] = selected_idx
-    print('it is running')
-    print(f'current peak {current_peak}')
     DEBUG_OBJ.text += (
         f" mmm... what's up? | current {current_peak}, last {last_peak} | cursor: {scope.cursor}  "
     )
@@ -2131,14 +2189,7 @@ def create_block_band(stdscr,
             scope.data['on_peak'] = True
 
             idx_last_item += delta
-            print(f" MEGA {current_peak - last_peak}")
-            logging(ui_logger, "DEBUG", f"index jump {current_peak - last_peak}")
-            if current_peak - last_peak > 1:
-                logging(ui_logger, "DEBUG", f"RAISE JUMPER: jump > 1 -> {current_peak - last_peak}")
             # update the data_loader peak and update
-            logging(ui_logger, "DEBUG", f"RAISE loader offset {blocks_loader.current_offset}")
-            blocks_loader.update_offset(selected_idx - separator)
-            logging(ui_logger, "DEBUG", f"RAISE loader offset updated {blocks_loader.current_offset}")
             blocks_loader.update_offset(selected_idx - separator)
             blocks_loader.update_loader()
             logging(ui_logger, "DEBUG", f"RAISE loader tot items {blocks_loader.total_row_count}")
@@ -2149,20 +2200,19 @@ def create_block_band(stdscr,
             #blocks_loader.update_loader()
         else:
             logging(ui_logger, "DEBUG", f"RAISE not RUN block.current_offset: {blocks_loader.current_offset}")
-            DEBUG_OBJ.text += ( f" NOOOO | ")
 
     # if not at peak
-    lapper.clocking('pre update')
+    #lapper.clocking('pre update')
     if selected_idx < (last_peak + separator):
-        lapper.clocking('init update')
+        #lapper.clocking('init update')
         scope.data['on_peak'] = False
         # with the new peak from the db we do not need it anymore
-        lapper.clocking('offset1')
+        #lapper.clocking('offset1')
         loader_offset_update = threading.Thread(target=blocks_loader.update_offset, args=(selected_idx - separator,), daemon=True)
         #blocks_loader.update_offset(selected_idx - separator)
-        lapper.clocking('offset2')
+        #lapper.clocking('offset2')
         loader_offset_update.start()
-        lapper.clocking('offset3')
+        #lapper.clocking('offset3')
         logging(ui_logger, "DEBUG", f"RAISE NOT PEAK: {blocks_loader.current_offset}")
 
         # update only if you move more then half of the chunk size
@@ -2172,19 +2222,19 @@ def create_block_band(stdscr,
             if scope.data['thread_update_loader'] is None or not scope.data['thread_update_loader'].is_alive():
                 scope.data['thread_update_loader'] = threading.Thread(target=blocks_loader.update_loader, daemon=True)
                 block_loader_update_thread = scope.data['thread_update_loader']
-                lapper.clocking('start threading')
+                #lapper.clocking('start threading')
                 block_loader_update_thread.start()
-                lapper.clocking('end threading')
+                #lapper.clocking('end threading')
                 scope.data["loader_update_counter"] = 0
                 logging(ui_logger, "DEBUG", f"UPDATE RUNNING")
             else:
                 logging(ui_logger, "DEBUG", f"update already running")
-        lapper.clocking('end update')
+        #lapper.clocking('end update')
     else:
         scope.data['on_peak'] = True
 
 
-    lapper.clocking()
+    #lapper.clocking()
     if mempool_blocks_count == 0:
         pass
         # recalculate first idx item
@@ -2244,9 +2294,9 @@ def create_block_band(stdscr,
 
 
 
-    lapper.clocking('pre hot')
+    #lapper.clocking('pre hot')
     block_states, first_idx = blocks_loader.get_items_hot_chunks()
-    lapper.clocking('post hot chunks')
+    #lapper.clocking('post hot chunks')
 
 
     # rectangle block dimension
@@ -2256,7 +2306,6 @@ def create_block_band(stdscr,
     rec_dim = UIgraph.Point(rec_dim_x, rec_dim_y)
     rec_mini_dim = UIgraph.Point(6, 3)
     block_spacer = 2
-
 
     ### estimate number of block on the screen
     idx_first_block = idx_last_item - first_idx
@@ -2268,38 +2317,68 @@ def create_block_band(stdscr,
     bbb = []
     ccc = []
 
-
+    ##### mempool and separator
     while True:
         local_idx_block = idx_first_block - items_count
-        print(f"fisrt block: {idx_first_block} items count {items_count}")
-        block: WDB.BlockState = block_states[local_idx_block]
-        block_lenght = 0
-
-
-        try:
-            if block is None or block.is_transaction_block is True:
-                a = 1
-        except:
-
-            for n, i in enumerate(block_states):
-                print(n, i)
-            blocks_loader.update_loader()
-            bbb, fff = blocks_loader.get_items_hot_chunks()
-            print(f" first idx: {fff}")
-            for n, i in enumerate(bbb):
-                print(n, i)
-            print(f"current idx itmes: {items_count}")
-            print(f"peak {current_peak}")
-            print(f"len bb {len(block_states)}")
-            print(f"local idx first block {idx_first_block}")
-            print(f"local idx block {local_idx_block}")
-
 
         if local_idx_block >= local_idx_mempool:
             block_lenght = rec_dim.x
         elif local_idx_block == local_peak + separator:
             block_lenght = 5  # to change if the geometry of the spacer change
-        elif block is None or block.is_transaction_block:
+        elif local_idx_block < local_peak + separator:
+            break
+
+        if size.x < (tot_blocks_lenght + block_lenght + 2):  # 2 is the selection
+            break
+        else:
+            tot_blocks_lenght += block_lenght + block_spacer
+            items_count += 1
+            bbb.append(block_lenght)
+            ccc.append(tot_blocks_lenght)
+
+
+    ##### blocks
+    print("BLOCK PRE CALC")
+    print(f"curren idx: {items_count}")
+    print(f"len states: {len(block_states)}")
+    while True:
+        local_idx_block = idx_first_block - items_count
+        block = None
+
+        try:
+            #if block is None or block.is_transaction_block is True:
+            block: WDB.BlockState = block_states[local_idx_block]
+            block_lenght = 0
+            if block.is_transaction_block is True:
+                a = 1
+        except Exception as e:
+            print("PREEEEEEEEEEEEEEEEEEEEE")
+            print(f"exception: {e}")
+            if block is None:
+                print("DDDDDDDDDDDDDDDDDDD")
+                print(f"fisrt block: {idx_first_block} items count {items_count}, n. of blocks {len(block_states)}")
+                print(f"local idx: {local_idx_block}")
+                print(f"calc idx first block: last item {idx_last_item}, first_idx {first_idx}")
+                print(f"lcoal_peak {local_peak} and current peak {current_peak}")
+                #for n, i in enumerate(block_states):
+                #    print(n, ' - ', i)
+            #print(f"len loader")
+
+            #for n, i in enumerate(block_states):
+            #    print(n, i)
+            #blocks_loader.update_loader()
+            #bbb, fff = blocks_loader.get_items_hot_chunks()
+            #print(f" first idx: {fff}")
+            #for n, i in enumerate(bbb):
+            #    print(n, i)
+            #print(f"current idx itmes: {items_count}")
+            #print(f"peak {current_peak}")
+            #print(f"len bb {len(block_states)}")
+            #print(f"local idx first block {idx_first_block}")
+            #print(f"local idx block {local_idx_block}")
+
+
+        if block is None or block.is_transaction_block:
             block_lenght = rec_dim.x
         else:
             block_lenght = rec_mini_dim.x
@@ -2318,8 +2397,11 @@ def create_block_band(stdscr,
     #items_count -= 1
     #items_count = 10  # should be a number big enough to cover all screen...
     idx_first_item = idx_last_item - items_count   # the last block is the first
+    DEBUG_OBJ.text += ( f" | last item: {idx_last_item} | item count: {items_count} | first_itme: {idx_first_item}")
     ### recalculate firt and last element
     idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element_BAND(selected_idx, idx_last_item, items_count)
+    #idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element(selected_idx, idx_last_item, items_count)
+    DEBUG_OBJ.text += ( f" | after LI: {idx_last_item} | after IC: {items_count} | first_itme: {idx_first_item}")
     #idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element(selected_idx, idx_first_item, items_count)
     #### update first item when window is resized
     #### TODO: modify for blocks
@@ -2340,6 +2422,7 @@ def create_block_band(stdscr,
     current_peak_global = current_peak
     current_peak -= first_idx
 
+    DEBUG_OBJ.text += (f" | local LI: {idx_last_item} | local IC: {items_count} | first_itme: {idx_first_item}")
 
     # rectangle block dimension
     name_block_len = len(f'{current_peak_global}')  # check how big is the block name
@@ -2350,7 +2433,13 @@ def create_block_band(stdscr,
 
     current_idx = idx_last_item
 
-    lapper.clocking('pre calc posiitons')
+    print('LOOP BEGINNING')
+    print(f'current index: {current_idx}')
+    print(f'current peak local idx: {current_peak}')
+    print(f'current peak global idx: {current_peak_global}')
+
+    #lapper.clocking('pre calc posiitons')
+    DEBUG_OBJ.text += (f" | current idx at mem: {current_idx} | actual mem: {mempool_idx} ")
     while current_idx >= mempool_idx:
         if base_point.x + rec_dim.x > size.x:
             break
@@ -2381,7 +2470,7 @@ def create_block_band(stdscr,
 
         current_idx -= 1
 
-    lapper.clocking()
+    #lapper.clocking('memepool')
     if current_idx == current_peak + separator:
         ############### separation line #####################################
         #    ## dot line
@@ -2431,24 +2520,37 @@ def create_block_band(stdscr,
 
     ######### blocks ###############
 
-    lapper.clocking("blocks")
+    #lapper.clocking("blocks")
+    print("BLOCK BLIPPING")
+    print(f"curren idx: {current_idx}")
+    print(f"len states: {len(block_states)}")
+    for n, i in enumerate(block_states):
+        print(n, i)
     count = 0
+    DEBUG_OBJ.text += (f" | idx block : {current_idx} ")
+    if current_idx > len(block_states):
+        ## implement logic to brake the loop and load the data, or skip it and wait for the upodate of the cache
+        raise Exception("The block idx asked is outside the cache. Try to expand it")
     while current_idx > 0:
         # select the rec_dim before and then keep only one
         try:
             block: WDB.BlockState = block_states[current_idx]
         except:
-            print(f"current idx: {current_idx}")
-            print(f"peak {current_peak}")
-            print(f"real peak {current_peak_global}")
-            print(f"len bb {len(block_states)}")
-            for n, i in enumerate(block_states):
-                print(n, i)
-            blocks_loader.update_loader()
-            bbb, fff = blocks_loader.get_items_hot_chunks()
-            print(f" first idx: {fff}")
-            for n, i in enumerate(bbb):
-                print(n, i)
+            print()
+            print("FAILED block retrive")
+            print(f"idx; {current_idx}")
+           # print(f"len block_states: {len(block_states)}")
+           # print(f"current idx: {current_idx}")
+           # print(f"peak {current_peak}")
+           # print(f"real peak {current_peak_global}")
+           # print(f"len bb {len(block_states)}")
+           # for n, i in enumerate(block_states):
+           #     print(n, i)
+            #blocks_loader.update_loader()
+            #bbb, fff = blocks_loader.get_items_hot_chunks()
+            #print(f" first idx: {fff}")
+            #for n, i in enumerate(bbb):
+            #    print(n, i)
 
 
         #print(f"c. idx {current_idx}")
@@ -2458,28 +2560,33 @@ def create_block_band(stdscr,
         # print(count)
         count += 1
 
+        # lapper.clocking("blocks A")
         try:
             if block is None or block.is_transaction_block is True:
                 a = 1
         except:
+            print("block is NOOOONEEEE")
             print(f"current idx: {current_idx}")
             print(f"peak {current_peak}")
             print(f"real peak {current_peak_global}")
             print(f"len bb {len(block_states)}")
-            for n, i in enumerate(block_states):
-                print(n, i)
-            blocks_loader.update_loader()
-            bbb, fff = blocks_loader.get_items_hot_chunks()
-            print(f" first idx: {fff}")
-            for n, i in enumerate(bbb):
-                print(n, i)
+            #for n, i in enumerate(block_states):
+            #    print(n, i)
+            #blocks_loader.update_loader()
+            #bbb, fff = blocks_loader.get_items_hot_chunks()
+            #print(f" first idx: {fff}")
+            #for n, i in enumerate(bbb):
+            #    print(n, i)
 
+
+        #lapper.clocking("blocks B")
         with open('block_loader.txt', 'w') as f:
             for n, i in enumerate(block_states):
                 if i is not None:
                         i = str(i)[:35]
                 f.write(f'{n} - {i} \n')
 
+        #lapper.clocking("blocks C")
         if block is None:
 
             # add the code to reload the missing block. When updating the block loader
@@ -2538,6 +2645,7 @@ def create_block_band(stdscr,
             p = p + UIgraph.Point(0, 1)
             create_text(win_band, p, f'cost: {block.cost}', P_text, True, inv_color=True)
             p = p + UIgraph.Point(0, 1)
+            print("transaction block")
             print(block)
             print(block.cost)
             create_text(win_band, p, f'idx: {current_idx}', P_text, True, inv_color=True)
@@ -2601,9 +2709,11 @@ def create_block_band(stdscr,
 
             base_point += UIgraph.Point(rec_mini_dim.x + 2, 0)
 
+        # lapper.clocking("blocks D")
+
         current_idx -= 1
 
-    lapper.clocking()
+    lapper.clocking('the very end')
     # scope selection
     ## delete
     #edge_size = 2
@@ -2614,7 +2724,6 @@ def create_block_band(stdscr,
     #else:
     #    create_text(win_band, base_point, u'\u2580' * x_size, P_azzure, True)
 
-    lapper.clocking()
     lapper.end()
     print(lapper)
 

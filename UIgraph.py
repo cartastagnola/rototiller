@@ -151,6 +151,8 @@ class Point():
             return NotImplemented
         return Point(self.x * other, self.y * other)
 
+    def __str__(self):
+        return f"Point: x={self.x}; y={self.y}"
 
 
 

@@ -206,6 +206,7 @@ rpc_call_full_node = {
     "get_block": ["block"],
     "get_blocks": ["blocks"],
     "get_block_record": ["block_record"],
+    "get_block_record_by_height": ["block_record"],
     "get_block_records": ["block_records"],
     "get_all_mempool_items": ["mempool_items"],
     "get_all_mempool_tx_ids": ["tx_ids"],

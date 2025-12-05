@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys, os, traceback
+import ast
 import copy
 import asyncio
 import curses
@@ -25,6 +26,9 @@ from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.daemon.client import connect_to_daemon_and_validate
 #from chia.types.blockchain_format.sized_bytes import bytes32, bytes48
 from chia_rs.sized_bytes import bytes32, bytes48
+from chia.types.blockchain_format.program import Program
+from chia.types.spend_bundle import SpendBundle
+from clvm_tools.binutils import disassemble
 
 #from chia.util.ints import uint16, uint32, uint64
 # NEEDED?
@@ -40,15 +44,17 @@ import UIgraph as UIgraph
 import LOGtiller as LOGtiller
 from CONFtiller import (
     server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_BLOCKCHAIN_RO,
-    DB_WDB, SQL_TIMEOUT, XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO,
+    DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO,
     CAT_MOJO, config, self_hostname, full_node_port, full_node_rpc_port, wallet_rpc_port,
-    DEFAULT_ROOT_PATH)
+    DEFAULT_ROOT_PATH, TXS_MEMPOOL_DELAY, FIGLET)
+import CONFtiller
 import DEBUGtiller as DEBUGtiller
 import ELEMENTStiller as ELEMENTS
 import WDBtiller as WDB
 import DEXtiller as DEX
 from RPCtiller import call_rpc_node, call_rpc_daemon
-from UTILITYtiller import binary_search_l, Timer
+from UTILITYtiller import binary_search_l, Timer, calc_coin_id
+from PUZZLEtiller import compare_to_known_puzzle, unroll_coin_puzzle, get_opcode_name
 
 from pympler import asizeof
 
@@ -276,6 +282,7 @@ class PkState:
 # UI elements
 @dataclass
 class KeyboardState:
+    key: int = None
     moveUp: bool = False
     moveDown: bool = False
     moveLeft: bool = False
@@ -316,25 +323,96 @@ class FullNodeState:
         self.lock = threading.Lock()
         self.db_path = db_path
         self.mempool_items = None
+        self.mempool_archive = {}
         self.blocks_loader: WDB.DataChunkLoader = None
         self.is_blocks_loader_on_peak = True
         self.full_node_meta = FullNodeMeta()
 
         self.update_chain_info()
         self.update_chain_state()
-        self.update_mempool()
+        self.init_mempool()
 
         table_name = 'full_blocks'
-        chunk_size = 10  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+        chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
         offset = self.full_node_meta.peak_height
         sorting_column = 'height'
         filters = {'in_main_chain': 1}
         self.blocks_loader = WDB.DataChunkLoader(db_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
+        # create and keep track of the thread that update the block loader, so it is possible to know if it is running and calling in different places. Once it ends
+        # it has to be recrated
+        # self.blocks_loader_thread = threading.Thread(target=self._update_blocks_loader, daemon=True)
+        # self.blocks_loader_thread.start()
 
-    def update_mempool(self):
-        mempool_items = [WDB.MempoolItem(tx_id, json_item) for tx_id, json_item in call_rpc_node('get_all_mempool_items').items()]
+        table_name = 'spend_bundles'
+        chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+        offset = 0
+        sorting_column = None
+        filters = None  # {'in_main_chain': 1}
+        self.spend_bundle_archive_loader: WDB.DataChunkLoader = WDB.DataChunkLoader(DB_SB, table_name, chunk_size,
+                                                                                    offset, sorting_column=sorting_column,
+                                                                                    data_struct=WDB.BundleState)
+        self.spend_bundle_archive_loader.start_updater_thread()
+
+
+    def init_mempool(self):
+        mempool_items = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
+
+        #for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items():
+        #    print(f"tx id: {spend_bundle_hash} and json: {json_item}")
+
         with self.lock:
             self.mempool_items = mempool_items
+            logging(server_logger, "DEBUG", f"NODE STATE - init mempool, inserting items")
+            conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+            for key, item in mempool_items.items():
+                sb = item.spend_bundle
+
+            conn.close()
+
+
+    def update_mempool(self):
+        # removed expired transactions older then
+        logging(server_logger, "DEBUG", f"NODE STATE - updating mempool")
+        new_mempool = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
+        added_tx = new_mempool.keys() - self.mempool_items.keys()
+        removed_txs = self.mempool_items.keys() - new_mempool.keys()
+        with self.lock:
+            logging(server_logger, "DEBUG", f"NODE STATE - lock")
+            conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+            for tx in added_tx:
+                logging(server_logger, "DEBUG", f"NODE STATE - tx: {tx}")
+                self.mempool_items[tx] = new_mempool[tx]
+                # add to the db
+                raw_sb = new_mempool[tx].spend_bundle
+                logging(server_logger, "DEBUG", f"NODE STATE - raw_sb: {raw_sb}")
+                sb = SpendBundle.from_json_dict(new_mempool[tx].spend_bundle)
+                logging(server_logger, "DEBUG", f"NODE STATE - {type(sb)}")
+                WDB.insert_spend_bundle(conn, sb)
+                logging(server_logger, "DEBUG", f"NODE STATE - inserting SB")
+
+            conn.close()
+        for tx in removed_txs:
+            # here we should modify the status of the sb also in the db, as invalid or blocked
+            if self.mempool_items[tx].removed_at is None:
+                with self.lock:
+                    self.mempool_items[tx].removed_at = time.time()
+            else:
+                if self.mempool_items[tx].removed_at - time.time() > TXS_MEMPOOL_DELAY:
+                    with self.lock:
+                        self.mempool_archive = self.mempool_items.pop(tx)
+
+
+
+    def parse_mempool_txs(self):
+        for spend_bundle_hash, tx in self.mempool_items:
+            pass
+            # take SB
+            # take input coin
+        # fill coin types
+# take solution coin
+
+        pass
+
 
     def update_chain_info(self):
         network_info = call_rpc_node('get_network_info')
@@ -374,6 +452,7 @@ class FullNodeState:
         while True:
             logging(server_logger, "DEBUG", f"NODE STATE - updating node state")
             self.update_chain_state()
+            self.update_mempool()
             logging(server_logger, "DEBUG", f"NODE STATE - state updated")
             try:
                 if "block_band" not in screenState.scopes or screenState.scopes["block_band"].data['on_peak']:
@@ -392,6 +471,9 @@ class FullNodeState:
 
     def deepcopy_mempool(self):
         return copy.deepcopy(self.mempool_items)
+
+    def deepcopy_mempool_archive(self):
+        return copy.deepcopy(self.mempool_archive)
 
 
 @dataclass
@@ -553,12 +635,25 @@ def activate_scope_and_set_pk(scope: Scope, screenState):
     return scope
 
 
+
 # used to open a coin view from a tab
+# we can create a open_stuff function to not create a particular fn for each type
+# and add the screen_fn as parameter
 def open_coin_wallet(scope: Scope, screenState: ScreenState, tail):
     new_name = f"{scope.parent_scope.name}_{tail}"
     new_scope = Scope(new_name, screen_coin_wallet, screenState)
     new_scope.parent_scope = scope  # parent_scope
     new_scope.data['tail'] = tail
+    new_scope.exec = None
+    screenState.activeScope = new_scope
+    return new_scope
+
+
+def open_transaction(scope: Scope, screenState: ScreenState, spend_bundle_hash):
+    new_name = f"{scope.parent_scope.name}_{spend_bundle_hash}"
+    new_scope = Scope(new_name, screen_transaction, screenState)
+    new_scope.parent_scope = scope  # parent_scope
+    new_scope.data['spend_bundle_hash'] = spend_bundle_hash
     new_scope.exec = None
     screenState.activeScope = new_scope
     return new_scope
@@ -1326,8 +1421,11 @@ def createFullSubWin(stdscr, screenState, height, width):
     return stdscr.subwin(height - nLinesUsed, width, screenState.headerLines, 0)
 
 
-def menu_select(stdscr, menu, select, point, color_pairs, color_pairs_sel, figlet=False):
+def menu_select(stdscr, menu, select, point, color_pairs, color_pairs_sel,
+                figlet=False):
+    ##### legacy, to replace with menu_select_figlet
     """Create a menu at given coordinate. Point[y,x]"""
+
     if figlet:
 
         s_height = FUTURE_FONT.height
@@ -1348,6 +1446,92 @@ def menu_select(stdscr, menu, select, point, color_pairs, color_pairs_sel, figle
             else:
                 stdscr.attron(curses.color_pair(color_pairs) | curses.A_BOLD)
             stdscr.addstr(point[0] + i, point[1], (str(i) + " - " + str(item)))
+
+
+def menu_select_figlet(stdscr, menu, select, point, color_pairs, color_pairs_sel,
+                       figlet=False):
+    ### move to ELEMENTStiller
+    """Create a menu at given coordinate. Point[y,x]"""
+
+    if figlet:
+
+        s_height = FUTURE_FONT.height
+
+        for i, item in enumerate(menu):
+            if select == i:
+                stdscr.attron(curses.color_pair(color_pairs_sel))
+            else:
+                stdscr.attron(curses.color_pair(color_pairs))
+            text = str(item)
+            s = UItext.renderFont(text, FUTURE_FONT)
+            for n, line in enumerate(s):
+                stdscr.addstr(point[0] + i * s_height + n, point[1], line)
+    else:
+        for i, item in enumerate(menu):
+            if select == i:
+                stdscr.attron(curses.color_pair(color_pairs_sel) | curses.A_BOLD)
+            else:
+                stdscr.attron(curses.color_pair(color_pairs) | curses.A_BOLD)
+            stdscr.addstr(point[0] + i, point[1], str(item))
+
+
+def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
+                    align_h=0, align_v=0, prefix=False):
+
+    if "idxFirst" not in scope.data:
+        scope.data["idxFirst"] = 0
+
+    select = scope.cursor
+    idxFirst = scope.data["idxFirst"]
+
+    # aligining
+    ## menu dimension
+    win_size = stdscr.getmaxyx()
+    height = win_size[0]
+    width = win_size[1]
+
+    if prefix:
+        for i, m in enumerate(menu):
+            menu[i] = f"{i} - {menu[i]}"
+
+    # precalc for the bounding box
+    yDimMenu = len(menu)
+    yDimMenu_fig = yDimMenu * FUTURE_FONT.height  # generalized the FUTURE_FONT
+
+    longestLine = ''
+    xDimMenu = 0
+    for i in menu:
+        if len(i) > xDimMenu:
+            xDimMenu = len(i)
+            longestLine = i
+
+    xDimMenu_fig, a = UItext.sizeText(longestLine, FUTURE_FONT)
+    figlet = False
+    n_rows = height // FUTURE_FONT.height - 2
+    bbox = UIgraph.Point(0,0)
+
+    # using figlet or not
+    if width > xDimMenu_fig * 2 and CONFtiller.FIGLET and n_rows > 3:
+        bbox.x = xDimMenu_fig
+        figlet = True
+    else:
+        n_rows = height - 2
+        bbox.x = xDimMenu
+
+    margin = UIgraph.Point(6,3)
+    n_menu, n_selection = ELEMENTS.normalize_menu(menu, scope, n_rows)
+
+    # recalculate bbox on Y
+    if figlet:
+        bbox.y = len(n_menu) * FUTURE_FONT.height
+    else:
+        bbox.y = len(n_menu)
+
+    base_point = ELEMENTS.align_bounding_box(stdscr, bbox, margin, align_h, align_v)
+    point = [base_point.y, base_point.x]
+
+    menu_select_figlet(stdscr, n_menu, n_selection, point, color_pairs, color_pairs_sel,
+                       figlet=figlet)
 
 
 def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState,
@@ -1771,7 +1955,7 @@ def screen_debugging(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
         if keyboardState.esc is True:
             # call back the old scope
             active_scope.active = False
-            screenState.screen_data["active_scope"]  = active_scope.parent_scope
+            screenState.screen_data["active_scope"] = active_scope.parent_scope
             print(type(screenState.screen_data["active_scope"]))
             screenState.screen_data["active_scope"].active = True
 
@@ -3793,22 +3977,23 @@ def screen_harvester():
     pass
 
 
-def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+def factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """menu_items: is a list of tuple (name: str, called_function: callable, scope_action callable(scope))"""
+    # use dexy logic for infine loop
     width = screenState.screen_size.x
     height = screenState.screen_size.y
 
-    full_win = createFullSubWin(stdscr, screenState, height, width)
-    full_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    factory_win = createFullSubWin(stdscr, screenState, height, width)
+    factory_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    #test_win = createFullSubWin(stdscr, screenState, height // 2, width // 2)
+    test_win = createFullSubWin(stdscr, screenState, height, width)
+    test_win.bkgd(' ', curses.color_pair(screenState.colorPairs["header"]))
 
     activeScope: Scope = screenState.activeScope
     screenState.scope_exec_args = [screenState]
 
     if len(activeScope.sub_scopes) == 0:
-        menu_items = [
-            ('blocks', screen_blocks, activate_scope),
-            ('memepool', screen_memepool, activate_scope)
-        ]
-
         for name, handler, exec_fun in menu_items:
             newScope = Scope(name, handler, screenState)
             newScope.exec = exec_fun
@@ -3820,40 +4005,267 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
         activeScope.update()
     screenState.selection = activeScope.cursor
 
-    # menu dimension
-    yDimMenu = len(activeScope.sub_scopes) * FUTURE_FONT.height
-    longestLine = ''
-    xDimMenu = 0
-    for i in activeScope.sub_scopes.keys():
-        if len(i) > xDimMenu:
-            xDimMenu = len(i)
-            longestLine = i
-
-    xDimMenu, a = UItext.sizeText(longestLine, FUTURE_FONT)
-
-    if height > yDimMenu * 2 and width > xDimMenu * 2:
-
-        xMenu = int(width / 2 - xDimMenu / 2)
-        yMenu = int(height / 2 - yDimMenu / 2)
-
-        menu_select(full_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
+    # new menu
+    menu_select_def(test_win, activeScope, list(activeScope.sub_scopes.keys()),
                     screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    True)
-    else:
-        # menu dimension
-        yDimMenu = len(activeScope.sub_scopes)
-        xDimMenu = 0
-        for i in activeScope.sub_scopes.keys():
-            if len(i) > xDimMenu:
-                xDimMenu = len(i)
+                    align_h=1, align_v=1, prefix=True)
 
-        xMenu = int(width/2 - xDimMenu / 2)
-        yMenu = int(height/2 - yDimMenu / 2)
 
-        menu_select(full_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
-                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    False)
+def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
 
+    # delete screenState size dimension? and get them from stdscr? why two places?
+    width = screenState.screen_size.x
+    height = screenState.screen_size.y
+
+    sb_win = createFullSubWin(stdscr, screenState, height, width)
+    sb_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+
+    P_text = screenState.colorPairs['tab_soft']
+    P_watch = screenState.colorPairs['error']
+    pos = UIgraph.Point(12,2)
+    ELEMENTS.create_text(sb_win, pos, "WATCH LATER", P_watch, bold=True)
+
+    ### test to load asyncronusly with a thread launched locally
+    if 'watch_later_cache' not in main_scope.data:
+        main_scope.data['watch_later_cache'] = []
+
+    def load_watch_later(thread_db_lock, sleep=0):
+        time.sleep(sleep)
+        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+        bundles = WDB.load_spend_bundles(conn, group_name='watch later')
+        print("load watch")
+        print(bundles)
+        print(len(bundles))
+        with thread_db_lock:
+            main_scope.data['watch_later_cache'] = bundles
+
+    if 'thread_db_lock' not in main_scope.data:
+        main_scope.data['thread_db_lock'] = threading.Lock()
+    thread_db_lock = main_scope.data['thread_db_lock']
+
+    if 'thread_db' not in main_scope.data:
+        main_scope.data['thread_db'] = threading.Thread(target=load_watch_later, args=(thread_db_lock,), daemon=True)
+        main_scope.data['thread_db'].start()
+    thread_db = main_scope.data['thread_db']
+
+    if not thread_db.is_alive():
+        sleep = 10  # seconds
+        main_scope.data['thread_db'] = threading.Thread(target=load_watch_later, args=(thread_db_lock, sleep), daemon=True)
+
+
+    with thread_db_lock:
+        watch_later_bundles = main_scope.data['watch_later_cache']
+
+    attrs = {
+        "id": "id",
+        "sql-id": "id",
+        "transaction id": "spend_bundle_hash",
+        "timestamp": "timestamp"
+    }
+
+    legend = []
+    for key, attribute in attrs.items():
+        legend.append(key)
+
+
+    P_text = screenState.colorPairs['tab_soft']
+    pos = UIgraph.Point(3,23)
+    tab_size = UIgraph.Point(width - 2, height - pos.y - 6)
+
+
+    def bundle_state_to_table(bundle_states: list[WDB.BundleState]):
+
+        if len(bundle_states) == 0:
+            return [], None
+
+        sps = []
+        sb_names = []
+
+        for n, sp in enumerate(bundle_states):
+            sp_t = []
+            sp_t.append(n)
+            sp_t.append(sp.id)
+            sp_t.append(sp.spend_bundle_hash)
+            sp_t.append(datetime.fromtimestamp(sp.timestamp))
+            sps.append(sp_t)
+            sb_names.append(sp.spend_bundle_hash)
+
+        return sps, sb_names
+
+
+    watch_later_bundles, sb_names = bundle_state_to_table(watch_later_bundles)
+
+
+    main_scope.update()
+    tab_scope = ELEMENTS.create_tab(sb_win,
+                                    screenState,
+                                    main_scope,  # main_scope
+                                    "sb_watch_later",
+                                    watch_later_bundles,
+                                    sb_names,
+                                    None,
+                                    False,
+                                    pos,
+                                    tab_size,
+                                    keyboardState,
+                                    open_transaction,
+                                    True,
+                                    False,
+                                    legend)
+
+
+
+
+def screen_sb_archive(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+
+    # delete screenState size dimension? and get them from stdscr? why two places?
+    width = screenState.screen_size.x
+    height = screenState.screen_size.y
+
+    sb_win = createFullSubWin(stdscr, screenState, height, width)
+    sb_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+
+    archive_loader = fullNodeState.spend_bundle_archive_loader
+
+    attrs = {
+        "id": "id",
+        "sql-id": "id",
+        "transaction id": "spend_bundle_hash",
+        "timestamp": "timestamp"
+    }
+
+    legend = []
+    for key, attribute in attrs.items():
+        legend.append(key)
+
+
+    P_text = screenState.colorPairs['tab_soft']
+    pos = UIgraph.Point(3,23)
+    tab_size = UIgraph.Point(width - 2, height - pos.y - 6)
+
+    def bundle_state_to_table(bundle_states: list[WDB.BundleState]):
+        sps = []
+        sp_names = []
+
+        for n, sp in enumerate(bundle_states):
+            sp_t = []
+            sp_t.append(n)
+            sp_t.append(sp.id)
+            sp_t.append(sp.spend_bundle_hash)
+            sp_t.append(datetime.fromtimestamp(sp.timestamp))
+            sps.append(sp_t)
+            sp_names.append(sp.spend_bundle_hash)
+
+        return sps, sp_names
+
+
+
+    main_scope.update()
+    tab_scope = ELEMENTS.create_tab(sb_win,
+                                    screenState,
+                                    main_scope,  # main_scope
+                                    "sb_archive",
+                                    None,
+                                    None,
+                                    None,
+                                    False,
+                                    pos,
+                                    tab_size,
+                                    keyboardState,
+                                    open_transaction,
+                                    True,
+                                    False,
+                                    legend,
+                                    archive_loader,
+                                    bundle_state_to_table)
+
+    #archive_loader.update_offset(tab_scope.cursor)
+    archive_loader.start_updater_thread()
+
+
+def screen_spend_bundles(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    menu_items = [
+        ('watch later', screen_sb_watch_later, activate_scope),
+        ('archive', screen_sb_archive, activate_scope),
+        ('memepool', screen_memepool, activate_scope)
+    ]
+
+    factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
+
+
+def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+
+    menu_items = [
+        ('blocks', screen_blocks, activate_scope),
+        ('memepool', screen_memepool, activate_scope),
+        ('spend bundle', screen_spend_bundles, activate_scope)
+    ]
+    factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
+
+#    width = screenState.screen_size.x
+#    height = screenState.screen_size.y
+#
+#    full_win = createFullSubWin(stdscr, screenState, height, width)
+#    full_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+#
+#    activeScope: Scope = screenState.activeScope
+#    screenState.scope_exec_args = [screenState]
+#
+#    if len(activeScope.sub_scopes) == 0:
+#
+#        for name, handler, exec_fun in menu_items:
+#            newScope = Scope(name, handler, screenState)
+#            newScope.exec = exec_fun
+#            newScope.parent_scope = activeScope
+#            activeScope.sub_scopes[name] = newScope
+#
+#    # TODO it always active?
+#    if activeScope is screenState.activeScope:
+#        activeScope.update()
+#    screenState.selection = activeScope.cursor
+#
+#    # menu dimension
+#    yDimMenu = len(activeScope.sub_scopes) * FUTURE_FONT.height
+#    longestLine = ''
+#    xDimMenu = 0
+#    for i in activeScope.sub_scopes.keys():
+#        if len(i) > xDimMenu:
+#            xDimMenu = len(i)
+#            longestLine = i
+#
+#    xDimMenu, a = UItext.sizeText(longestLine, FUTURE_FONT)
+#
+#    if height > yDimMenu * 2 and width > xDimMenu * 2:
+#
+#        xMenu = int(width / 2 - xDimMenu / 2)
+#        yMenu = int(height / 2 - yDimMenu / 2)
+#
+#        menu_select(full_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
+#                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
+#                    True)
+#    else:
+#        # menu dimension
+#        yDimMenu = len(activeScope.sub_scopes)
+#        xDimMenu = 0
+#        for i in activeScope.sub_scopes.keys():
+#            if len(i) > xDimMenu:
+#                xDimMenu = len(i)
+#
+#        xMenu = int(width/2 - xDimMenu / 2)
+#        yMenu = int(height/2 - yDimMenu / 2)
+#
+#        menu_select(full_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
+#                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
+#                    False)
+#
 
 
 def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
@@ -3904,7 +4316,11 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     mempool_items = fullNodeState.deepcopy_mempool()
 
     max_block_cost = 11_000_000_000  # 11billion - https://docs.chia.net/chia-blockchain/coin-set-model/costs/
-    sorted_mempool = sorted(mempool_items, key=lambda item: item.fee_per_cost)  # sorted by fee per cost
+    # sometime i get the strings instead of mempool dics
+    for i, e in mempool_items.items():
+        print(i)
+        print(e)
+    sorted_mempool = sorted(list(mempool_items.values()), key=lambda item: item.fee_per_cost)  # sorted by fee per cost
 
     # create mempool block
     max_cost = 0
@@ -4133,12 +4549,18 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
             print("except what?")
             traceback.print_exc()
     else:
-        current_block: WDB.BlockState = blocks_loader.get_current_item()
-        block_data = current_block.block_state_to_2d_list()
-        pos = UIgraph.Point(col, row)
-        block_legend = ['property', 'value']
-        max_y = main_win_size.y - pos.y - 3
-        tab_size = UIgraph.Point(80, max_y)
+        try:
+            current_block: WDB.BlockState = blocks_loader.get_current_item()
+            block_data = current_block.block_state_to_2d_list()
+            pos = UIgraph.Point(col, row)
+            block_legend = ['property', 'value']
+            max_y = main_win_size.y - pos.y - 3
+            tab_size = UIgraph.Point(80, max_y)
+        except:
+            print("bug while syncing, current block is None")
+            print(f"current block: {current_block}")
+
+
 
         ELEMENTS.create_tab(node_data,
                             screenState,
@@ -4164,9 +4586,304 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     #if keyboardState.esc is True:
     #    screenState.screen = 'main'
 
+def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+
+    # Steve transaction f3cf5c97a1e84186
+    # https://xchplorer.com/blocks/2bb5c71a62a7ddce42565f922126fe2866b9ae79249654bec983229d882ba18b#f3cf5c97a1e84186
+
+
+    # delete screenState size dimension? and get them from stdscr? why two places?
+    width = screenState.screen_size.x
+    height = screenState.screen_size.y
+
+    tx_win = createFullSubWin(stdscr, screenState, height, width)
+    tx_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+
+    spend_bundle_hash = main_scope.data['spend_bundle_hash']
+
+    if "watch_later" not in main_scope.data:
+        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+        if WDB.load_spend_bundle(conn, spend_bundle_hash, "watch later") is None:
+            main_scope.data["watch_later"] = False
+        else:
+            main_scope.data["watch_later"] = True
+
+
+
+    if keyboardState.key == 'w':
+        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+        if WDB.load_spend_bundle(conn, spend_bundle_hash, "watch later") is None:
+            WDB.add_spend_bundles_to_watch_later(conn, spend_bundle_hash)
+            main_scope.data['watch_later'] = True
+        else:
+            pass
+            # remove
+
+
+    if "tx_cache" not in main_scope.data:
+        main_scope.data["tx_cache"] = None
+
+    tx_cache = main_scope.data["tx_cache"]
+
+    if tx_cache is None:
+        # make a func to call only one tx
+        tx_cache = {}
+        mempool_items = fullNodeState.deepcopy_mempool()
+        if spend_bundle_hash in mempool_items:
+            tx_cache["tx"] = mempool_items[spend_bundle_hash]
+        else:
+            mempool_archive = fullNodeState.deepcopy_mempool_archive()
+            if spend_bundle_hash in mempool_archive:
+                tx_cache["tx"] = mempool_archive[spend_bundle_hash]
+            else:
+                archive_loader = fullNodeState.spend_bundle_archive_loader
+                items, first_idx = archive_loader.get_items_hot_chunks()
+                transactions = {}
+                for i in items:
+                    if i is None:
+                        continue
+                    name = i.spend_bundle_hash
+                    try:
+                        sp: SpendBundle = SpendBundle.from_bytes(i.raw_spend_bundle)
+                        sp_json = sp.to_json_dict()
+                        print(sp_json)
+                        transactions[i.spend_bundle_hash] = WDB.MempoolItem(raw_json_spendbundle=sp_json, timestamp=i.timestamp)
+                    except Exception as e:
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print('except_')
+                        print(e)
+                        traceback.print_exc()
+                        rpc = call_rpc_node('get_all_mempool_items')
+                        #for k, i in rpc.items():
+                        #    print(k)
+                        #    WDB.print_json(i)
+
+                tx_cache["tx"] = transactions[spend_bundle_hash]
+
+    main_scope.data["tx_cache"] = tx_cache
+
+    tx = tx_cache["tx"]
+    P_text = screenState.colorPairs['tab_soft']
+    P_watch = screenState.colorPairs['error']
+    pos = UIgraph.Point(2,2)
+    ELEMENTS.create_text(tx_win, pos, str(tx.spend_bundle_hash) + str(tx.additions) + str(tx.addition_amount), P_text, bold=False)
+
+    ###################### WATCH LATER FLAG ################
+    if main_scope.data['watch_later']:
+        pos = UIgraph.Point(22,2)
+        ELEMENTS.create_text(tx_win, pos, "WATCH LATER", P_watch, bold=True)
+    else:
+        pos = UIgraph.Point(22,2)
+        ELEMENTS.create_text(tx_win, pos, "WATCH NOW", P_text, bold=True)
+    pos = UIgraph.Point(2,2)
+    ########################################################
+
+
+    legend = ['action', 'coin id', 'amount', 'parent coin info', 'puzzle hash']
+    coins = []
+    # removals
+    for rem in tx.removals:
+        #pos += UIgraph.Point(0,2)
+        #ELEMENTS.create_text(tx_win, pos, str(rem), P_text, bold=False)
+
+        coin_id = calc_coin_id(uint64(rem['amount']), rem['parent_coin_info'], rem['puzzle_hash'])
+        rem = ['removal', coin_id, rem['amount'], rem['parent_coin_info'], rem['puzzle_hash']]
+        coins.append(rem)
+
+    coins.append([''] * len(legend))
+
+    # additions
+    print('addddditions')
+    print(tx.additions)
+    for add in tx.additions:
+        coin_id = calc_coin_id(uint64(add['amount']), add['parent_coin_info'], add['puzzle_hash'])
+        add = ['addition', coin_id, add['amount'], add['parent_coin_info'], add['puzzle_hash']]
+        coins.append(add)
+
+
+    pos += UIgraph.Point(0,2)
+    tab_size = UIgraph.Point(width - 2, (height - pos.y - 6) // 2)
+    main_scope.update()
+    coin_tab_scope = ELEMENTS.create_tab(tx_win,
+                                         screenState,
+                                         main_scope,
+                                         "coins_selection",
+                                         coins,
+                                         None,
+                                         None,
+                                         False,
+                                         pos,
+                                         tab_size,
+                                         keyboardState,
+                                         exit_scope,
+                                         True,
+                                         False,
+                                         legend)
+
+    sp = tx.spend_bundle
+
+    sp_coins = sp['coin_spends']
+
+    selected_id = coins[coin_tab_scope.cursor][1]
+
+    c_puzzle = "not found"
+    c_solution = "not found"
+    for c in sp_coins:
+        c_coin = c['coin']
+        c_id = calc_coin_id(uint64(c_coin['amount']), c_coin['parent_coin_info'], c_coin['puzzle_hash'])
+        if c_id == selected_id:
+            c_puzzle = Program.fromhex(c['puzzle_reveal'])
+            c_solution = Program.fromhex(c['solution'])
+
+            # unroll puzzle
+            c_puzzle_unrolled = unroll_coin_puzzle(c_puzzle)
+            c_puzzle_names = []
+            for p in c_puzzle_unrolled:
+                c_puzzle_names.append(compare_to_known_puzzle(p))
+
+
+            pos += UIgraph.Point(0, tab_size.y + 1)
+            ELEMENTS.create_text(tx_win, pos, str(c_puzzle)[:150], P_text, bold=False)
+            pos += UIgraph.Point(0,2)
+            ELEMENTS.create_text(tx_win, pos, str(c_puzzle_names), P_text, bold=False)
+            pos += UIgraph.Point(0,2)
+            ELEMENTS.create_text(tx_win, pos, str(c_solution)[:150], P_text, bold=False)
+            pos += UIgraph.Point(0,2)
+            ELEMENTS.create_text(tx_win, pos, disassemble(c_solution), P_text, bold=False)
+            # run program
+            result = c_puzzle.run(c_solution)
+            pos += UIgraph.Point(0,3)
+            result_list = list(result.as_iter())
+            ELEMENTS.create_text(tx_win, pos, "result = " + disassemble(result), P_text, bold=False)
+            pos += UIgraph.Point(0,2)
+            result_list = list(result.as_iter())
+            res = []
+            for rr in result.as_iter():
+                res.append(disassemble(rr))
+
+            ELEMENTS.create_text(tx_win, pos, f"result -----", P_text, bold=False)
+            for i in res:
+                pos += UIgraph.Point(0,1)
+                i = i.replace(' ', ',')
+                i = ast.literal_eval(i)
+                code = get_opcode_name(i[0])
+                ELEMENTS.create_text(tx_win, pos, f"{code}: {i} and type f{type(i)}", P_text, bold=False)
+
+    pos += UIgraph.Point(0,2)
+    #ELEMENTS.create_text(tx_win, pos, "spend_bundle_hash: " + str(tx.spend_bundle_hash)[:20], P_text, bold=False)
+
+
+    ### saved spendbundle -> folder with the spend save clearly
+    ### save all the mempool...
+    ### make sqlite for mempool and puzzle_reveal
 
 def screen_memepool(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
-    pass
+
+    ### view
+    # transaction id
+    # coin selector
+    # coin viewer
+
+
+    # delete screenState size dimension? and get them from stdscr? why two places?
+    width = screenState.screen_size.x
+    height = screenState.screen_size.y
+
+    meme_win = createFullSubWin(stdscr, screenState, height, width)
+    meme_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+
+    # load memepool
+    ## TODO: move the sorting of the mempool outside the UI loop
+
+    mempool_items = fullNodeState.deepcopy_mempool()
+    print()
+    print(mempool_items)
+    for i in mempool_items:
+        print(i)
+
+
+        # self.spend_bundle_hash = spend_bundle_hash
+        # self.cost = json_item['cost']
+        # self.fee = json_item['fee']
+
+        # self.addition_amount = json_item['npc_result']['conds']['addition_amount']
+        # self.removal_amount = json_item['npc_result']['conds']['removal_amount']
+        # self.additions = json_item['additions']
+        # self.removals = json_item['removals']
+        # self.spend_bundle = json_item['spend_bundle']
+        # self.added_coins_count = len(self.additions)
+        # self.removed_coins_count = len(self.removals)
+        # self.fee_per_cost = self.fee / self.cost
+
+    attrs = {
+        "transaction id": "spend_bundle_hash",
+        "cost": "cost",
+        "fee": "fee",
+        "fee per cost": "fee_per_cost"
+    }
+
+    ## tx_ID  -- INPUT coins -- amount --- OUTPUT coins -- amount --
+
+    legend = []
+    for key, attribute in attrs.items():
+        legend.append(key)
+
+    txs_data = []
+    txs_keys = []
+    for spend_bundle_hash, tx in mempool_items.items():
+        data = []
+        for key, attribute in attrs.items():
+            data.append(getattr(tx, attribute))
+
+        txs_data.append(data)
+        txs_keys.append(spend_bundle_hash)
+
+    P_text = screenState.colorPairs['tab_soft']
+    #key = list(mempool_items.keys())[0]
+    #spend_bundle = mempool_items[key].spend_bundle
+    pos = UIgraph.Point(2,3)
+    #ELEMENTS.create_text(meme_win, pos, str(spend_bundle)[:200], P_text, bold=False)
+
+    #with open('sb.json', 'w') as f:
+    #    f.write(json.dumps(spend_bundle, indent=4))
+
+    #print(json.dumps(spend_bundle, indent=4))
+    pos = UIgraph.Point(3,23)
+    tab_size = UIgraph.Point(width - 2, height - pos.y - 6)
+
+    print(txs_data)
+
+    main_scope.update()
+    ELEMENTS.create_tab(meme_win,
+                        screenState,
+                        main_scope,  # main_scope
+                        "mempool",
+                        txs_data,
+                        txs_keys,
+                        None,
+                        False,
+                        pos,
+                        tab_size,
+                        keyboardState,
+                        open_transaction,
+                        True,
+                        False,
+                        legend)
 
 
 if True:
@@ -4179,8 +4896,10 @@ if True:
 # EG: func_input_proces_visual, func_input_process_insert
 # and call it when the scope is active
 def keyboard_processing(screen_state: ScreenState, keyboard_state: KeyboardState,
-                     active_scope: Scope, key):
+                        active_scope: Scope, key):
 
+    if key >= 0:
+        keyboard_state.key = chr(key)
 
     if key == curses.KEY_ENTER or key == 10 or key == 13:
         keyboard_state.enter = True
@@ -4188,6 +4907,8 @@ def keyboard_processing(screen_state: ScreenState, keyboard_state: KeyboardState
     if key == 27:
         keyboard_state.esc = True
         return
+    if key == 6:  # ctrl-f
+        CONFtiller.FIGLET = not CONFtiller.FIGLET
 
     match active_scope.mode:
         case ScopeMode.INSERT:
@@ -4281,7 +5002,7 @@ def interFace(stdscr):
         frame_time = 0
         frame_time_max = 0
         frame_time_display = 0
-        frame_count = 0
+        frame_time_total = 0
         frame_time_real_display = 0
         frame_time_real_max = 0
         frame_time_curses_max = 0
@@ -4305,6 +5026,12 @@ def interFace(stdscr):
                                          daemon=True)
         wallet_thread.start()
 
+        ### create DB for spend_bundle
+        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+        WDB.create_spend_bundle_db(conn)
+        
+        logging(server_logger, "DEBUG", f"NODE STATE {DB_SB}' initialized successfully.")
+        conn.close()
 
         key = 0
 
@@ -4681,8 +5408,8 @@ def interFace(stdscr):
                 frame_time_real_max = frame_time
 
             # update counter
-            if frame_count == 30:
-                frame_count = 0
+            if frame_time_total > 0.1: # update rate
+                frame_time_total = 0
 
                 # curses
                 frame_time_curses_display = frame_time_curses_max
@@ -4697,7 +5424,7 @@ def interFace(stdscr):
                 frame_time_real_max = 0
 
 
-            frame_count += 1
+            frame_time_total += frame_time
 
             frame_start = time.perf_counter()
 
