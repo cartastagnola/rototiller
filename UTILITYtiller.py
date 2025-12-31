@@ -70,10 +70,34 @@ def binary_search_r(lst, target):
             high = mid
     return high
 
+#####################################################
 
-def human_mojo(num: int) -> str:
-    # suffixes
-    suffixes = ['', 'K', 'M', 'B', 'XCH']
+
+### numbers
+def classify_number(s: str):
+    if not isinstance(s, str) or not s:
+        return "invalid"
+
+    # decimal int (no prefix)
+    if s.isdigit():
+        return "int"
+
+    # hex (with or without 0x)
+    t = s.removeprefix("0x").removeprefix("0X")
+    if t and all(c in "0123456789abcdefABCDEF" for c in t):
+        return "hex"
+
+    return "invalid"
+
+
+def truncate(n, decimals=0):
+    """You can use negative to truncate on the left side"""
+    multiplier = 10**decimals
+    return int(n * multiplier) / multiplier
+
+
+def humanizer(num: int, suffixes: list[str]) -> str:
+
     magnitude = 0
 
     while abs(num) >= 1000 and magnitude < len(suffixes) - 1:
@@ -82,6 +106,28 @@ def human_mojo(num: int) -> str:
 
     # format with 3 significant digits
     return f"{num:.3g}{suffixes[magnitude]}"
+
+
+def human_mojo(num: int) -> str:
+    # suffixes
+    suffixes = ['', 'K', 'M', 'B', 'XCH']
+    return humanizer(num, suffixes)
+
+
+def human_int(num: int) -> str:
+    # suffixes
+    suffixes = ['', 'K', 'M', 'B', 'T']
+    return humanizer(num, suffixes)
+
+
+def timestamp_to_date(timestamp):
+    try:
+        datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        print(e)
+        print(timestamp)
+        print(type(timestamp))
+    return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def time_ago(ts):

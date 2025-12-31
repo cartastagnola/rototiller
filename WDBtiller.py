@@ -2,6 +2,7 @@ import os
 import sqlite3
 import json
 import zstd
+import copy
 from datetime import datetime
 import time
 
@@ -21,7 +22,7 @@ from chia.consensus.default_constants import DEFAULT_CONSTANTS
 from chia.types.spend_bundle_conditions import SpendBundleConditions, SpendConditions
 
 
-
+from UTILITYtiller import timestamp_to_date
 from CONFtiller import (
     server_logger, ui_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB
 )
@@ -501,7 +502,6 @@ def create_spend_bundle_db(conn):
             "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id));"
 
         )
-        print('OMO')
 
         # spend bundle TABLE spend_bundles
         cursor.execute(
@@ -958,7 +958,7 @@ class BlockState:
         ## 6 - block
         ## 7 - block_record
 
-        self.header_hash = raw_data[0]
+        self.header_hash = "0x" + bytes32(raw_data[0]).hex()
         self.height = raw_data[2]
         self.sub_epoch_summary = raw_data[3]
 
@@ -1006,7 +1006,7 @@ class BlockState:
         self.weight_b = block['reward_chain_block']['weight']  # redundant
         self.transactions_generator = block['transactions_generator']  # chialisp
         self.transactions_generator_ref_list = block['transactions_generator_ref_list']  # ref to other block if needed
-        if block['transactions_info'] == "None":
+        if block['transactions_info'] is not None:
             self.aggregate_signature = block['transactions_info']['aggregated_signature']
             self.cost = block['transactions_info']['cost']  # total cost
             self.fees_b = block['transactions_info']['fees']
@@ -1017,6 +1017,34 @@ class BlockState:
 
     def __str__(self):
         return f"Block height: {self.height:,}; sp: {self.signage_point_index}; ts: {self.timestamp} and {self.timestamp_b} ; header: {self.header_hash}"
+
+    def operational_error(self):
+        op_error = copy.deepcopy(self)
+        op_error.header_hash = '0x0000000000000000000942b19f16b83a316acfa31e067c0b766c4dda034dc37f'
+        op_error.height = 675317
+        op_error.timestamp = 1616132171
+        op_error.preimage = 'bitcoin_hash:0000000000000000000942b19f16b83a316acfa31e067c0b766c4dda034dc37f,bram_message:"Operational error causes Fed payment system to crash" We stand on the shoulders of giants, now let\'s get farming!'
+        op_error.genesis_challange = '0xccd5bb71183532bff220ba46c268991a3ff07eb358e8255a65c30a2dce0e5fbb'
+        return op_error
+
+    def b_block_to_2d_list(self):
+        keys = []
+        values = []
+
+        keys.append('bitcoin_hash')
+        values.append(self.header_hash)
+        keys.append('height')
+        values.append(self.height)
+        keys.append('timestamp')
+        values.append(self.timestamp)
+        keys.append('date')
+        values.append(timestamp_to_date(self.timestamp))
+        keys.append('preimage')
+        values.append(self.preimage)
+        keys.append('genesis challange')
+        values.append(self.genesis_challange)
+
+        return [keys, values]
 
     def block_state_to_2d_list(self):
         keys = []
@@ -1056,6 +1084,12 @@ class BlockState:
         values.append(self.weight)
         keys.append('timestamp')
         values.append(self.timestamp)
+
+        keys.append('date')
+        if self.timestamp:
+            values.append(timestamp_to_date(self.timestamp))
+        else:
+            values.append(None)
 
         # block:
         keys.append('farmer_puzzle_hash_b')
@@ -1114,8 +1148,6 @@ def make_sql_fetcher(table, sorting_column=None):
         if not filters:
             filters = {}
 
-        print(f" fileter : {filters}")
-        print("HHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
         where_clauses = []
         values = []
 
@@ -1135,10 +1167,10 @@ def make_sql_fetcher(table, sorting_column=None):
 
         cur = conn.cursor()
         query = f"SELECT * FROM {table} {where_sql}"
+        print(query)
+        print(values)
         #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
 
-        print(f"questy: {query}")
-        print(f"valuesty: {values}")
         cur.execute(query, values)
         items = cur.fetchall()
         return items
@@ -1295,17 +1327,23 @@ class DataChunkLoader:
         with self.lock:
             self.current_offset = offset
 
-    def update_offset_and_item(self, offset: int):
-        with self.lock:
-            self.current_offset = offset
-        ### TODO
-        ### check if the new offset is still in the cache, if not fetch it
-        conn = self.create_sql_conneciton()
-        fetched_chunk = self.fetch_chunk(conn, self.current_offset)
-        print(f"new offset: {self.current_offset}")
-        with self.lock:
-            self.main_chunk_pointer = 2  # arbitrarly start from the middle chunk
-            self.chunk_arena[self.main_chunk_pointer] = fetched_chunk
+        # check if the new offset is still in the cache, if not fetch it
+        current_chunk_idx = self.get_current_chunk().chunk_idx
+        new_current_chunk_idx = self.current_offset // self.chunk_size
+
+        # update cache if outside
+        if abs(current_chunk_idx - new_current_chunk_idx) > 1:
+            conn = self.create_sql_conneciton()
+
+            # fetch the whole chunk
+            ##fetched_chunk = self.fetch_chunk(conn, self.current_offset)
+
+            # fetch the only the offset item in the chunk
+            fetched_chunk = self.fetch_only_current_offset(conn)
+
+            with self.lock:
+                self.main_chunk_pointer = 2  # arbitrarly start from the middle chunk
+                self.chunk_arena[self.main_chunk_pointer] = fetched_chunk
 
     # probably it is very slow
     def update_total_row_count(self, conn):
@@ -1346,6 +1384,21 @@ class DataChunkLoader:
 
         return Chunk(chunk_idx, chunk_first_idx, self.chunk_size, data)
 
+    def fetch_only_current_offset(self, conn):
+        chunk_idx = self.current_offset // self.chunk_size
+        chunk_first_idx = chunk_idx * self.chunk_size
+
+        data_offset = self.fetch_db(conn, self.current_offset, 1)
+        if self.data_struct is not None:
+            data_offset = self.data_struct(data_offset[0])
+
+        data = [None] * self.chunk_size
+        offset_local_idx = self.current_offset - chunk_first_idx
+        data[offset_local_idx] = data_offset
+
+        return Chunk(chunk_idx, chunk_first_idx, self.chunk_size, data)
+
+
     def fetch_item_chunk(self, data_index):
         """Fetch a particular item only if its chunk is already in the cache,
         Return False if the related chunk is not in the cache"""
@@ -1363,7 +1416,7 @@ class DataChunkLoader:
                         return True
                     data = self.fetch_db(conn, data_index, 1)
                     if self.data_struct is not None:
-                        data = self.data_struct(data[0], False)
+                        data = self.data_struct(data[0],False)
                     item_local_idx = data_index % self.chunk_size
                     chunk.data.insert(item_local_idx, data)
                     conn.close()
@@ -1371,15 +1424,22 @@ class DataChunkLoader:
             conn.close()
             return False
 
-    # this updater work only for consecutive chunks and only when moving block by block...
-    ## change... if the new chunk idx is in the boundary of the cache, move pointes
-    ## else init the chunk and load only the current offset. then launch the global update of the loader
+
     def update_current_chunk_pointer(self):
         current_chunk_idx = self.get_current_chunk().chunk_idx
+
+        # DEBUG
+        current_chunk_idx = self.get_current_chunk().chunk_idx
+        new_current_chunk_idx = self.current_offset // self.chunk_size
+
+        if abs(current_chunk_idx - new_current_chunk_idx) > 1:
+            raise "The offset is not in a consecutive chunk"
+
         if self.current_offset // self.chunk_size > current_chunk_idx:
             self.main_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
         elif self.current_offset // self.chunk_size < current_chunk_idx:
             self.main_chunk_pointer = (self.main_chunk_pointer - 1) % self.chunk_arena_size
+
 
     def get_current_item(self):
         with self.lock:
@@ -1400,8 +1460,7 @@ class DataChunkLoader:
                 if chunk_idx == i.chunk_idx:
                     data_idx = idx % self.chunk_size
                     return i.data[data_idx]
-                else:
-                    return None
+            return None
 
     def get_items_hot_chunks(self):
         """Return (data, chunk_idx, n_chunks) where:
@@ -1413,6 +1472,12 @@ class DataChunkLoader:
 
             data = []
             chunk_idx = None
+            print("pre")
+            print(pre_chunk)
+            print("current")
+            print(current_chunk)
+            print("current offset")
+            print(self.current_offset)
             if pre_chunk and pre_chunk.chunk_idx < current_chunk.chunk_idx:
                 data.extend(pre_chunk.data)
                 chunk_idx = pre_chunk.chunk_idx
@@ -1424,7 +1489,6 @@ class DataChunkLoader:
 
             return data, chunk_idx * self.chunk_size
 
-    # for now used only for spend bundle archive
     def start_updater_thread(self):
         with self.lock:
             if self.update_loader_thread is None or not self.update_loader_thread.is_alive():
@@ -1441,7 +1505,6 @@ class DataChunkLoader:
             self.update_current_chunk_pointer()
             current_chunk: Chunk = self.get_current_chunk()
 
-            # TODO: is this the place to update also the offset wiht scope.cursor?
             current_chunk_pointer = self.main_chunk_pointer % self.chunk_arena_size
             pre_chunk_pointer = (self.main_chunk_pointer - 1) % self.chunk_arena_size
             post_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
@@ -1450,25 +1513,26 @@ class DataChunkLoader:
             post_chunk: Chunk = self.chunk_arena[post_chunk_pointer]
 
         if current_chunk is None:
-            print("chunk is None")
-            return None
+            raise "can we be None? the chunk is None"
 
         # current chunk, fetch again if not full
         if not current_chunk.is_full():
             fetched_chunk = self.fetch_chunk(conn, self.current_offset)
+            if fetched_chunk is None:
+                print("fetched chunk was None")
             with self.lock:
                 self.chunk_arena[current_chunk_pointer] = fetched_chunk
 
         # add logic to deal with empty chunks
         # post chunk
-        if not post_chunk or not post_chunk.is_full or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
+        if not post_chunk or not post_chunk.is_full() or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
             fetched_chunk = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
             with self.lock:
                 self.chunk_arena[post_chunk_pointer] = fetched_chunk
- 
+
         # pre chunk, do not fetch if we are at the beginning
         if current_chunk.chunk_idx > 0:
-            if not pre_chunk or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
+            if not pre_chunk or not pre_chunk.is_full() or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
                 fetched_chunk = self.fetch_chunk(conn, self.current_offset - self.chunk_size)
                 with self.lock:
                     self.chunk_arena[pre_chunk_pointer] = fetched_chunk
@@ -1480,6 +1544,118 @@ class DataChunkLoader:
 
 
 if __name__ == "__main__":
+
+
+
+    # hash
+
+    db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
+    # read only read
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+    hash = "0x186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    hash = "186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    hash = bytes32.fromhex(hash)
+    table = 'full_blocks'
+    sorting_column = 'height'
+    fetcher = make_sql_fetcher(table, sorting_column)
+    obj = fetcher(conn, 0, 12_000_000, filters={'header_hash': hash})
+    #obj = fetcher(conn, 0, 2, filters={'height': 100})
+    print(obj)
+    print('jkjkjjjkj')
+    print('jkjkjjjkj')
+    print('jkjkjjjkj')
+    print('jkjkjjjkj')
+    print('jkjkjjjkj')
+    print('jkjkjjjkj')
+    fetcher = make_sql_fetcher(table)
+    obj = fetcher(conn, 0, 1, filters={'header_hash': hash})
+    print(len(obj))
+    print(obj)
+
+
+    def is_hex_bytes(s: str) -> bool:
+        if not isinstance(s, str):
+            return False
+        s = s.removeprefix("0x")
+        return len(s) % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in s)
+
+    def classify_number(s: str):
+        if not isinstance(s, str) or not s:
+            return "invalid"
+
+        # decimal int (no prefix)
+        if s.isdigit():
+            return "int"
+
+        # hex (with or without 0x)
+        t = s.removeprefix("0x").removeprefix("0X")
+        if t and all(c in "0123456789abcdefABCDEF" for c in t):
+            return "hex"
+
+        return "invalid"
+
+
+    hash = "0x186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    print(is_hex_bytes(hash))
+    print(classify_number(hash))
+    hash = "1234"
+    print(is_hex_bytes(hash))
+    print(classify_number(hash))
+    hash = "186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    print(is_hex_bytes(hash))
+    print(classify_number(hash))
+    hash = "186c22eb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    print(3, " ", is_hex_bytes(hash))
+    print(classify_number(hash))
+    hash = "186c2aeb8k4c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    print(is_hex_bytes(hash))
+    print(classify_number(hash))
+    hash = "186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
+    hash = bytes32.fromhex(hash)
+    print(is_hex_bytes(hash))
+    print(classify_number(hash))
+
+    print(obj[0][2])
+
+    exit()
+
+
+    # test ddos db
+
+    table_name = 'full_blocks'
+    chunk_size = 30  # height * 2  # to be sure to have at least 2 full screen of data
+    offset = 100000  #34000
+    sorting_column = 'height'
+    filters = {'in_main_chain': 1}
+    sqlite_path ="file:/mnt/chiaDB/mainnet_sync/db/blockchain_v2_mainnet.sqlite?mode=ro"
+    data_loader: DataChunkLoader = DataChunkLoader(sqlite_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=BlockState)
+
+
+    last_item = data_loader.get_current_item()
+    print(f"last item = {last_item}")
+
+    delta = 160
+
+    for i in range(1000):
+        data_loader.update_offset(data_loader.current_offset + delta)
+        data_loader.update_loader()
+        last_item = data_loader.get_current_item()
+        print(f"last item = {last_item}")
+
+        time.sleep(0.01)
+
+    exit()
+
+
+
+
+
+
+
+
+
+
 
     #### test rebuild spendbundle info
     ## fee
@@ -1529,7 +1705,7 @@ if __name__ == "__main__":
 
 #def validate_clvm_and_signature(
 #    new_spend: SpendBundle,
-#    max_cost: int,
+
 #    constants: ConsensusConstants,
 #    peak_height: int,
 #) -> tuple[SpendBundleConditions, list[tuple[bytes32, GTElement]], float]: ...

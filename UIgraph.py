@@ -15,11 +15,7 @@ from typing import List, Tuple, Dict, Union
 
 from PIL import Image
 
-sys.path.append('/home/boon/gitRepos/')
-import dex as dex
-
-debug = False
-dicPath = 'tradesHistory.json'
+import DEXtiller as dex
 
 
 def dumpJson(dic):
@@ -249,7 +245,6 @@ def addSubPixel_fromDic(stdscr, screenState, image_buffer: List[Tuple[int,int,in
             if row_char[col][0] is None:
                 row_char[col] = (default_color, row_char[col][1])
 
-            print(row_char[col], " row char col, what is it?")
             if row_char[col] not in custom_colors.pairs.keys():
                 if row_char[col][0] not in custom_colors.colors.keys():
                     addCustomColor(row_char[col][0], custom_colors)
@@ -308,7 +303,7 @@ def drawLine2pts_aliasing_sub(stdscr, screenState, point0, point1, color_pair):
                 color_idx = addCustomColor(c, screenState.cursesColors)
                 addCustomColorTuple(
                     (color_idx,
-                    color_bk),
+                     color_bk),
                     screenState.cursesColors)
         except Exception as e:
             print("lie mei")
@@ -540,7 +535,7 @@ def drawLine2pts_aliasing(stdscr, screenState, point0, point1, color_pair):
                 color_idx = addCustomColor(c, screenState.cursesColors)
                 addCustomColorTuple(
                     (color_idx,
-                    screenState.colors["background"]),
+                     screenState.colors["background"]),
                     screenState.cursesColors)
         except Exception as e:
             print("lie mei")
@@ -986,17 +981,6 @@ def drawPriceGraph(stdscr, screenState, data_prices, data_timestamps, days, P_co
             #stdscr.addstr(12, 10, f"berto",12)
 
 
-# timestamp filters
-# different api use different timestamp unit..
-# tf_second = 1000
-tf_second = 1
-tf_hour = tf_second * 60 * 60
-tf_4hours = tf_second * 60 * 60 * 4
-tf_day = tf_hour * 24
-tf_week = tf_day * 7
-tf_month = tf_day * 30 # approx
-tf_year = tf_day * 365 # approx
-
 class Candle:
     """Store the open, close, min and max price of a candle"""
     def __init__(self):
@@ -1090,8 +1074,6 @@ def initCandles(trades, begin, end, timeFrame):
         candle.min = candle.open
         candle.max = candle.open
         candle.timestamp = time
-        print(time)
-        print(timeFrame)
         candle.tf = timeFrame
         candle.ntrades = len(group)
         priceSum = 0
@@ -1130,74 +1112,9 @@ def candlesRange(candlesList):
 
     return min, max
 
-        
-
-
-history = {}
-
-if False:
-    tick = dex.Ticker('SBX', 'XCH')
-    dex.updateTickerTradesHistory(tick)
-    dumpJson({"trades" : tick.historical_trades})
-    #print(tick.historical_trades )
-    history = tick.historical_trades
-else:
-    loadJson(history)
-
-trades = history['trades']['trades']
-#for i in trades:
-#    print(i["type"], "al", i['price'], " and ", i['trade_timestamp'])
-print(trades[0])
-sorted_trades = sorted(trades, key=lambda x: x["trade_timestamp"])
-#for i in sorted_trades:
-#    print(i["type"], "al", i['price'], " and ", i['trade_timestamp'])
 
 
 
-
-
-
-
-
-##############################################################
-##############################################################
-#################Filtering of outlier ########################
-
-
-import numpy as np
-
-filtered_trades = []
-n_trades = len(sorted_trades)
-print("number of trades before filtereing ", n_trades)
-trades_price = np.zeros(n_trades)
-trades_volume = np.zeros(n_trades)
-
-sample = 5
-
-for n, i in enumerate(sorted_trades):
-    trades_price[n] = i['price']
-
-for n, i in enumerate(sorted_trades):
-    trades_volume[n] = i['base_volume']
-
-# esclude the first 5 and the last 5
-
-for i in range(sample, n_trades - sample):
-    sumWeight = 0
-    sumVolume = 0
-    for u in range(i - sample, i + sample):
-        sumWeight += trades_price[u] * trades_volume[u]
-        sumVolume += trades_volume[u]
-    avg_price = sumWeight / sumVolume
-    delta = abs(trades_price[i] - avg_price) /  avg_price
-    if delta < 0.35: # this is the value that is filtered
-        filtered_trades.append(sorted_trades[i])
-
-n_ftrades = len(filtered_trades)
-print("number of trades after filtereing ", n_ftrades)
-
-# replace the original trades with the filtered ones, to regactor in a function
-#
 #####################33 test to find min a max price #############################
 def minmax(trades):
     min = trades[0]["price"]
@@ -1209,32 +1126,21 @@ def minmax(trades):
             min = i["price"]
     return min, max
 
-print(len(trades))
-print(minmax(trades))
-print(len(filtered_trades))
-print(minmax(filtered_trades))
-
-trades = filtered_trades
 
 ##### convolve implementation - to move or to delete #########################
 def convolve_simple(signal, kernel):
     # Length of the input signal and kernel
     signal_len = len(signal)
-    print('signal len ', signal_len)
     kernel_len = len(kernel)
-    print('kernel len ', kernel_len)
 
     # Output length after convolution
     output_len = signal_len + kernel_len - 1
-    print('output_len ', output_len)
 
     # Initialize the result array
     result = np.zeros(output_len)
 
     # Flip the kernel
-    print(kernel)
     kernel = np.flip(kernel)
-    print(kernel)
 
     # Perform convolution
     for i in range(output_len):
@@ -1243,112 +1149,6 @@ def convolve_simple(signal, kernel):
                 result[i] += signal[i - j] * kernel[j]
 
     return result
-
-# Example usage:
-signal = np.array([1, 2, 1, 2, 1, 3, 1, 1, 2])
-kernel = np.array([0.6, 1, 0.5])
-
-result_simple = convolve_simple(signal, kernel)
-result_np = np.convolve(signal, kernel, mode='full')
-
-# Compare results
-print("Result (Simple):", result_simple)
-print("Result (NumPy):", result_np)
-
-
-
-##### convolve implementation - to move or to delete #########################
-##############################################################################
-##############################################################################
-##############################################################################
-##############################################################################
-##############################################################################
-
-
-
-
-
-
-########################test by filtering one day ############################33
-day = datetime.datetime(2024,1,6)
-day_ts = day.timestamp()
-
-def filterPerDay(day_ts, trades):
-
-    end_day = day_ts + tf_day
-    day_trades  = []
-    for i in trades:
-       if i["trade_timestamp"] > day_ts and i["trade_timestamp"] < end_day:
-           day_trades.append(i)
-
-    return day_trades
-
-dd = filterPerDay(day_ts, trades)
-
-print(dd)
-sumP = 0
-sumV = 0
-for i in dd:
-    sumP += i["price"] * i["base_volume"]
-    sumV += i["base_volume"]
-    print(i["price"])
-avg = sumP / sumV
-print("avg ", avg)
-
-pp = []
-for i in dd:
-    dv = i["price"] /  avg
-    print("dv ", dv, " with price " , i["price"])
-    pv = i["price"] - avg
-    if dv < 1.55: # this is the value that is filtered
-        pp.append(i)
-
-for i in pp:
-    print(i["price"])
-###############################################################################33
-
-# i have to delete the dic entry in the dumpJson
-#
-
-now = int(time.time()) # * 1000 not needed useing history from offers
-print("now", now)
-
-#change data and time
-date = datetime.datetime(2024,1,9)
-now = date.timestamp()
-
-n_candle = 100
-tf = tf_day
-begin = now - n_candle * tf
-
-print(trades[2])
-tf_trades = filterTrades(trades, begin, now, tf)
-
-cands = initCandles(trades, begin, now, tf)
-cands = sorted(cands, key=lambda x: x.timestamp)
-for i in cands:
-    print(i)
-print('cada a sorted')
-print(len(cands))
-
-#############
-############# print trade data
-#ticker = dex.Ticker('SBX', 'XCH')
-
-#for i in trades:
-#    print(i['price'], " ", datetime.datetime.fromtimestamp(i['trade_timestamp'] /1000), " ", i['type'], " ", i['target_volume'])
-
-print(len(cands))
-#print(now)
-#print(tf)
-#print(begin)
-#print(tf_trades)
-#
-#
-
-
-
-
 
 
 def menu(stdscr):
@@ -1665,7 +1465,170 @@ class StdOutWrapper:
         """I think it is reversed the order, i should change it"""
         return '\n'.join(self.text.split('\n')[beg:end]) + '\n'
 
+
 if __name__ == "__main__":
+
+    debug = False
+    dicPath = 'tradesHistory.json'
+
+
+
+# timestamp filters
+# different api use different timestamp unit..
+# tf_second = 1000
+    tf_second = 1
+    tf_hour = tf_second * 60 * 60
+    tf_4hours = tf_second * 60 * 60 * 4
+    tf_day = tf_hour * 24
+    tf_week = tf_day * 7
+    tf_month = tf_day * 30 # approx
+    tf_year = tf_day * 365 # approx
+
+
+    history = {}
+
+    if False:
+        tick = dex.Ticker('SBX', 'XCH')
+        dex.updateTickerTradesHistory(tick)
+        dumpJson({"trades": tick.historical_trades})
+        history = tick.historical_trades
+    else:
+        loadJson(history)
+
+    trades = history['trades']['trades']
+    print(trades[0])
+    sorted_trades = sorted(trades, key=lambda x: x["trade_timestamp"])
+
+
+############################################################################
+############################################################################
+###################### Filtering of outlier ################################
+
+
+    import numpy as np
+
+    filtered_trades = []
+    n_trades = len(sorted_trades)
+    print("number of trades before filtereing ", n_trades)
+    trades_price = np.zeros(n_trades)
+    trades_volume = np.zeros(n_trades)
+
+    sample = 5
+
+    for n, i in enumerate(sorted_trades):
+        trades_price[n] = i['price']
+
+    for n, i in enumerate(sorted_trades):
+        trades_volume[n] = i['base_volume']
+
+# esclude the first 5 and the last 5
+
+    for i in range(sample, n_trades - sample):
+        sumWeight = 0
+        sumVolume = 0
+        for u in range(i - sample, i + sample):
+            sumWeight += trades_price[u] * trades_volume[u]
+            sumVolume += trades_volume[u]
+        avg_price = sumWeight / sumVolume
+        delta = abs(trades_price[i] - avg_price) /  avg_price
+        if delta < 0.35: # this is the value that is filtered
+            filtered_trades.append(sorted_trades[i])
+
+    n_ftrades = len(filtered_trades)
+
+# replace the original trades with the filtered ones, to regactor in a function
+#
+
+
+    trades = filtered_trades
+
+
+
+    # Example usage:
+    signal = np.array([1, 2, 1, 2, 1, 3, 1, 1, 2])
+    kernel = np.array([0.6, 1, 0.5])
+
+    result_simple = convolve_simple(signal, kernel)
+    result_np = np.convolve(signal, kernel, mode='full')
+
+    # Compare results
+    print("Result (Simple):", result_simple)
+    print("Result (NumPy):", result_np)
+
+
+
+##### convolve implementation - to move or to delete #########################
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
+##############################################################################
+
+
+
+
+
+
+########################test by filtering one day ############################33
+    day = datetime.datetime(2024,1,6)
+    day_ts = day.timestamp()
+
+    def filterPerDay(day_ts, trades):
+
+        end_day = day_ts + tf_day
+        day_trades  = []
+        for i in trades:
+           if i["trade_timestamp"] > day_ts and i["trade_timestamp"] < end_day:
+               day_trades.append(i)
+
+        return day_trades
+
+    dd = filterPerDay(day_ts, trades)
+
+    sumP = 0
+    sumV = 0
+    for i in dd:
+        sumP += i["price"] * i["base_volume"]
+        sumV += i["base_volume"]
+    avg = sumP / sumV
+
+    pp = []
+    for i in dd:
+        dv = i["price"] /  avg
+        pv = i["price"] - avg
+        if dv < 1.55: # this is the value that is filtered
+            pp.append(i)
+
+###############################################################################33
+
+    # i have to delete the dic entry in the dumpJson
+    #
+
+    now = int(time.time()) # * 1000 not needed useing history from offers
+    print("now", now)
+
+    #change data and time
+    date = datetime.datetime(2024,1,9)
+    now = date.timestamp()
+
+    n_candle = 100
+    tf = tf_day
+    begin = now - n_candle * tf
+
+    print(trades[2])
+    tf_trades = filterTrades(trades, begin, now, tf)
+
+    cands = initCandles(trades, begin, now, tf)
+    cands = sorted(cands, key=lambda x: x.timestamp)
+
+    #############
+    ############# print trade data
+    #ticker = dex.Ticker('SBX', 'XCH')
+
+    #for i in trades:
+    #    print(i['price'], " ", datetime.datetime.fromtimestamp(i['trade_timestamp'] /1000), " ", i['type'], " ", i['target_volume'])
+
+    print(len(cands))
 
     main()
 

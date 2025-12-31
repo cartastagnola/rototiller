@@ -195,12 +195,12 @@ async def fetch_rpc_wallet(method_name, *args, **kwargs):
 
 # rpc call from list
 # if the items is an empty list the output of the rpc call is unaltered
-rpc_call_daemon = {
+rpc_calls_daemon = {
     "get_key": ["key"],
     "get_wallet_addresses": ["wallet_addresses"]
 }
 
-rpc_call_full_node = {
+rpc_calls_full_node = {
     "get_blockchain_state": ["blockchain_state"],
     "get_network_info": [],
     "get_block": ["block"],
@@ -212,10 +212,11 @@ rpc_call_full_node = {
     "get_all_mempool_tx_ids": ["tx_ids"],
     "get_routes": ["routes"],
     "get_additions_and_removals": [],
-    "get_puzzle_and_solution": ["coin_solution"]
+    "get_puzzle_and_solution": ["coin_solution"],
+    "healthz": [],
 }
 
-rpc_call_wallet = {
+rpc_calls_wallet = {
     "get_sync_status": [],
     "log_in": ["fingerprint"],
     "get_public_keys": ["public_key_fingerprints"],
@@ -233,7 +234,7 @@ def call_rpc_daemon(method_name, *args, **kwargs):
     then all the parameters as: block_header='0xa89...'"""
 
     rpc_result = asyncio.run(fetch_rpc_daemon(method_name, **kwargs))
-    output_filter = rpc_call_daemon[method_name]
+    output_filter = rpc_calls_daemon[method_name]
 
     if len(output_filter) == 1:
         return rpc_result[output_filter[0]]
@@ -250,7 +251,7 @@ def call_rpc_node(method_name, *args, **kwargs):
     then all the parameters as: block_header='0xa89...'"""
 
     rpc_result = asyncio.run(fetch_rpc_node(method_name, **kwargs))
-    output_filter = rpc_call_full_node[method_name]
+    output_filter = rpc_calls_full_node[method_name]
 
     if len(output_filter) == 1:
         return rpc_result[output_filter[0]]
@@ -267,7 +268,7 @@ def call_rpc_wallet_with_output(method_name, *args, **kwargs):
     then all the parameters as: block_header='0xa89...'"""
 
     rpc_result = asyncio.run(fetch_rpc_wallet(method_name, **kwargs))
-    output_filter = rpc_call_wallet[method_name]
+    output_filter = rpc_calls_wallet[method_name]
 
     if len(output_filter) == 1:
         return rpc_result[output_filter[0]]

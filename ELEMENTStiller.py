@@ -7,7 +7,7 @@ from math import floor
 
 import dex as dex
 import UIgraph as UIgraph
-import UItext as UItext
+import TEXTtiller as TEXT
 
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Union, Callable
@@ -19,8 +19,8 @@ import CONFtiller
 
 from UItiller import (
     Scope, activate_scope, screen_coin_wallet, ScreenState, KeyboardState,
-    activate_grandparent_scope, open_coin_wallet, exit_scope)
-from UTILITYtiller import time_ago, human_mojo, Timer
+    activate_grandparent_scope, activate_scope_next_sibling, open_coin_wallet, exit_scope)
+from UTILITYtiller import time_ago, human_mojo, human_int, Timer, truncate
 import DEBUGtiller as DEBUGtiller
 import PLATFORMtiller as PLAT
 import WDBtiller as WDB
@@ -222,8 +222,6 @@ def align_bounding_box(stdscr, bbox: UIgraph.Point, margin: UIgraph.Point,
     margin.y is used as distance from the top margin or lower margin"""
 
     win_dim = get_win_dimension(stdscr)
-    print(win_dim)
-    print(bbox)
     assert win_dim.x > bbox.x and win_dim.y > bbox.y
 
     pos_x = None
@@ -244,13 +242,13 @@ def align_bounding_box(stdscr, bbox: UIgraph.Point, margin: UIgraph.Point,
             pos_y = int((win_dim.y - bbox.y) // 2)
         case 2:
             pos_y = win_dim.y - margin.y - bbox.y
-    print(f"x{pos_x} y {pos_y}")
 
     return UIgraph.Point(pos_x, pos_y)
 
 
 def create_text_aligned(stdscr, margin: UIgraph.Point, text: str, P_text_color,
-                        bold: bool = False, align_h: int = 0, align_v: int = 0):
+                        bold: bool = False, inv_color=False, align_h: int = 0,
+                        align_v: int = 0):
     """Create normal text with align options,
     align_h: right=0, center=1, left=2
     align_v: top=0, center=1, bottom=2
@@ -293,7 +291,7 @@ def create_text_aligned(stdscr, margin: UIgraph.Point, text: str, P_text_color,
                 pos_y = box_dim.y - margin.y - 1
 
         pos = UIgraph.Point(pos_x, pos_y)
-        create_text(stdscr, pos + UIgraph.Point(0,e), sub_text, P_text_color, bold)
+        create_text(stdscr, pos + UIgraph.Point(0,e), sub_text, P_text_color, bold, inv_color=inv_color)
 
 
 def create_blinking_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False):
@@ -318,7 +316,7 @@ def create_blinking_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold:
 
 def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardState, parent_scope: Scope, name: str,
                   pos: UIgraph.Point, pre_text: str, total_length: int, P_text_color, bold: bool = False,
-                  inverse_color: bool = False, custom_scope_function=None, invalid_data_message='INV'):
+                  inverse_color: bool = False, custom_scope_function=None):
     """prompt text"""
     # TODO limit text displayed...
     # TODO when esc, check the data, or esc and enter should be the same...
@@ -326,8 +324,9 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
     nome_str = name
     name = f"{parent_scope.id}_{name}"
 
-    P_select = screen_state.colorPairs["win_select"]
+    P_select = screen_state.colorPairs["win_selected"]
     P_error = screen_state.colorPairs["error"]
+    P_error_white = screen_state.colorPairs["error_white"]
 
     if name not in screen_state.scopes:
         scope = Scope(name, parent_scope.screen, screen_state)
@@ -335,6 +334,7 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         scope.main_scope = parent_scope
         scope.exec = activate_scope
         parent_scope.sub_scopes[name] = scope
+        scope.visible = True
 
         if custom_scope_function is None:
             scope.exec_own = exit_scope
@@ -343,10 +343,13 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         scope.data["prompt"] = ""
         scope.data["cursor"] = 0
         scope.data["valid_data"] = True
+        scope.data["invalid_data_message"] = 'INV'
 
     scope: Scope = screen_state.scopes[name]
+    scope.visible = True
     scope_exec_args = [screen_state]
     prompt = scope.data["prompt"]
+    invalid_data_message = scope.data['invalid_data_message']
 
     # check cursor position
     if scope.data['cursor'] < 0:
@@ -362,11 +365,10 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         P_select = screen_state.colorPairs["tab_dark"]
         scope.data["valid_data"] = True
 
-    #stdscr.attron(curses.color_pair(P_text_color))
-
     # text area
     field = u'\u2591' * total_length
     if scope.selected:
+        screen_state.footer_text = "| paste=ctrl-v "
         stdscr.attron(curses.A_REVERSE)
         stdscr.addstr(pos.y, pos.x, field, P_text_color)
         stdscr.attroff(curses.A_REVERSE)
@@ -387,34 +389,49 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         stdscr.attron(curses.A_REVERSE)
     stdscr.addstr(pos.y, pos.x, pre_text, curses.color_pair(P_text_color))
 
-    # prompt
-    stdscr.addstr(pos.y, pos.x + len(pre_text), prompt)
+    # trucate prompt if needed
+    field_length = len(field) - len(pre_text) - 1
+    prompt_idx = scope.data['cursor']
+    local_prompt_idx = prompt_idx
+    formatted_prompt = prompt
+
+    if prompt_idx > field_length:
+        local_prompt_idx = field_length
+        delta_cursor = len(prompt) - prompt_idx
+        formatted_prompt = prompt[len(prompt) - field_length - delta_cursor:len(prompt) - delta_cursor]
+    else:
+        if len(prompt) >= field_length:
+            formatted_prompt = prompt[:field_length]
+
+    stdscr.addstr(pos.y, pos.x + len(pre_text), formatted_prompt)
     stdscr.attroff(curses.A_REVERSE)
 
     if scope_state:
-        idx = scope.data['cursor']
-        s = scope.data['prompt']
-        if len(s) <= idx:
-            stdscr.addstr(pos.y, pos.x + len(pre_text) + idx, u'\u2588')
-            cursor_pos = pos + UIgraph.Point(len(pre_text) + idx, 0)
+        #idx = scope.data['cursor']
+        #s = scope.data['prompt']
+        if len(prompt) <= prompt_idx:  # check if we are on the peak o the string
+            stdscr.addstr(pos.y, pos.x + len(pre_text) + local_prompt_idx, u'\u2588')
+            cursor_pos = pos + UIgraph.Point(len(pre_text) + local_prompt_idx, 0)
             create_blinking_text(stdscr, cursor_pos, u'\u2588', P_text_color)
         else:
-            cursor_pos = pos + UIgraph.Point(len(pre_text) + idx, 0)
-            create_blinking_text(stdscr, cursor_pos, prompt[idx], P_text_color)
+            cursor_pos = pos + UIgraph.Point(len(pre_text) + local_prompt_idx, 0)
+            create_blinking_text(stdscr, cursor_pos, prompt[prompt_idx], P_text_color)
 
     if not scope.data['valid_data']:
         if pos.x + len(field) + len(invalid_data_message) < stdscr.getmaxyx()[1]:
             stdscr.addstr(pos.y, pos.x + len(field) + 1, invalid_data_message, curses.color_pair(P_error))
         else:
             mes = 'Invalid'
-            stdscr.addstr(pos.y, pos.x + len(field) - len(mes), mes, curses.color_pair(P_error))
+            stdscr.addstr(pos.y, pos.x + len(field) - len(mes), mes, curses.color_pair(P_error_white))
 
 
     # if pasted
     paste_scope = screen_state.scopes['paste']
-    if (keyboard_state.paste and scope_state) or screen_state.activeScope == paste_scope:
+    if (keyboard_state.paste and scope_state) or (keyboard_state.paste and scope.selected) or screen_state.activeScope == paste_scope:
         # create a new over scope where you can select the bit of info you want
-        create_paste_banner(stdscr, screen_state, scope, False)
+        def paste_action():
+            create_paste_banner(stdscr, screen_state, scope, False)
+        screen_state.pending_action.append([1, paste_action])
 
     return scope
 
@@ -423,7 +440,7 @@ def create_text_figlet(scr, pos: UIgraph.Point, figlet_font, text: str, P_text_c
     """Create figlet text."""
 
     scr.attron(curses.color_pair(P_text_color))
-    s = UItext.renderFont(text, figlet_font)
+    s = TEXT.renderFont(text, figlet_font)
     for n, line in enumerate(s):
         scr.addstr(pos.y + n, pos.x, line)
 
@@ -432,11 +449,13 @@ def create_text_double_space(scr, pos: UIgraph.Point, text: str,
                              P_text_color, P_background_color,
                              edge_type: int, bold: bool = False):
     """What?
-    edge_type: 0 firt row, 1 middle row, 2 end row, 3 single row"""
+    edge_type: 0 first row, 1 middle row, 2 end row, 3 single row"""
+    ### TODO: use only a single color for the background and create the pair here
+    ### the example is in the screen_wallet
 
     col = pos.x
     row = pos.y
-    text = f" {text} " # add the frame
+    text = f" {text} "  # add the frame
     text_len = len(text)
     scr.attron(curses.color_pair(P_background_color) | curses.A_BOLD)
 
@@ -494,7 +513,7 @@ def text_double_space(scr, pos: UIgraph.Point, text: str,
             scr.addstr(row, col, u'\u2580' * (text_len))
         except:
             # curses bug
-            print("its bug")
+            print("its a bug")
             pass
         row = pos.y + row_height // 2
 
@@ -563,6 +582,7 @@ def create_tab(scr,
         scope.main_scope = parent_scope
         scope.exec = activate_scope
         parent_scope.sub_scopes[tab_name] = scope
+        scope.visible = True
 
         scope.exec_own = scope_activation_func
 
@@ -580,8 +600,10 @@ def create_tab(scr,
             data_table_color = transpose_table(data_table_color)
 
     ### Manage dataloader
-    ### TODO: should all data be loaded using a loader?
-    scope = screenState.scopes[tab_name]
+    ### TODO: create a different fun the init a loader as a list and then call create_tab
+    scope: Scope = screenState.scopes[tab_name]
+    scope.set_visible()
+
     tab_scope_is_active = False
     scope_exec_args = [screenState]
     chunk_size = 1
@@ -614,6 +636,7 @@ def create_tab(scr,
         scope.update_no_sub(total_item_count, circular=circular_selection)
         screenState.scope_exec_args = scope_exec_args
         tab_scope_is_active = True
+        screenState.footer_text = "| copy=y "
     ### end scope stuff ####
 
     # it needs to be after the scope update
@@ -630,7 +653,6 @@ def create_tab(scr,
                 new_empty_line.append('')
             new_empty_line[0] = "empty table"
             dataTable.append(new_empty_line)
-
 
 
     ### make empty data_table_color if...
@@ -683,7 +705,7 @@ def create_tab(scr,
     P_soft_bg = screenState.colorPairs["tab_soft_bg"]
     P_select = screenState.colorPairs["tab_select"]
     P_selected = screenState.colorPairs["tab_selected"]
-    P_win_selected = screenState.colorPairs["win_select"]
+    P_win_selected = screenState.colorPairs["win_selected"]
     if tab_scope_is_active:
         P_win_selected = screenState.colorPairs["body"]
     P_win_background = screenState.colorPairs["tab_soft"]
@@ -739,7 +761,7 @@ def create_tab(scr,
     count = 0
 
     ### max dim for the table
-    max_table_width = parent_win_dim.x - position.x - 3  # CONST for borders
+    max_table_width = parent_win_dim.x - position.x - 2  # CONST for borders
     x_tabSize = max_table_width
 
     table = scr.subwin(y_tabSize, x_tabSize, abs_pos_y, abs_pos_x)
@@ -751,8 +773,6 @@ def create_tab(scr,
                    curses.color_pair(P_win_selected))
         scr.addstr(pos_y + y_tabSize, pos_x + x_tabSize, u'\u2598',
                    curses.color_pair(P_win_selected))
-        #scr.addstr(0, 0, "#!@!@!@!@!@!@!@",
-        #           curses.color_pair(P_win_selected))
         for i in range(y_tabSize):
             scr.addstr(pos_y + i, pos_x + x_tabSize, u'\u258c',
                        curses.color_pair(P_win_selected))
@@ -797,7 +817,7 @@ def create_tab(scr,
 
     for data_row, data_idx in zip(sliced_dataTable, sliced_idx_dataTable):
         C_custom_bk = table_bk_colors[row % 2]
-        P_current_attron = curses.color_pair(table_color_pairs[row % 2])  # colling it P_... is misleading
+        P_current_attron = curses.color_pair(table_color_pairs[row % 2])  # calling it P_... is misleading
         if data_idx == select and tab_scope_is_active:
             P_current_attron = curses.color_pair(P_select)
             scope_exec_args.append(data_table_keys[data_idx] if data_table_keys else None)
@@ -850,7 +870,7 @@ def create_tab(scr,
     ### position bar
     P_soft = screenState.colorPairs["tab_soft_bg"]
     P_dark = screenState.colorPairs["tab_dark"]
-    P_win_selected = screenState.colorPairs["win_select"]
+    P_win_selected = screenState.colorPairs["win_selected"]
 
     row_selected = select
     # idx_first_element
@@ -894,13 +914,16 @@ def create_tab(scr,
 
     # if yanked
     copy_scope = screenState.scopes['copy']
-    if (keyboardState.yank and tab_scope_is_active) or screenState.activeScope == copy_scope:
+    if (keyboardState.yank and tab_scope_is_active) or (scope.selected and screenState.activeScope == copy_scope):
         # create a new over scope where you can select the bit of info you want
-        create_copy_banner(table, screenState, scope, current_selection_data, False)
+        def copy_action():
+            create_copy_banner(table, screenState, scope, current_selection_data, False)
+        screenState.pending_action.append([1, copy_action])
 
     return scope
 
 
+# now we save the banner in screenState.pending_action, so only init should not be neccessary anymore...
 def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, only_init: bool):
     ### name
     tab_name = "paste"
@@ -957,7 +980,7 @@ def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, o
     width = int(win_dim.x * 0.85)
     height = 10
     pos_x = (win_dim.x - width) // 2
-    pos_y = win_dim.y // 2 + height // 2
+    pos_y = win_dim.y // 2 - height // 2
 
     banner = stdscr.subwin(height, width, pos_y, pos_x)
 
@@ -967,29 +990,34 @@ def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, o
         create_text(banner, UIgraph.Point(0, i), ' ' * ban_dim.x, P_win_test, True)
 
     p = UIgraph.Point(0,0)
-    create_text_aligned(banner, p, "PASTE", P_win_test, True, 1)
+    create_text_aligned(banner, p, "PASTE", P_win_test, True, align_h=1)
 
     p += UIgraph.Point(0,2)
 
-    # formatting distance
+    # formatting distance, truncating if necessary
+    description_length = 19  # length of " | system clipboard"
+    max_str_length = int((width - description_length) * (2/3))
     max_length = 0
+    formatted_data = []
     for i in data:
+        if len(i) > max_str_length:
+            i = i[:max_str_length - 10] + "<...>" + i[len(i) - 5:]
         if len(i) > max_length:
             max_length = len(i)
+        formatted_data.append(i)
 
-    description_length = 15
     space = 10
     tot_length = max_length + description_length + space
     margin = floor((width - tot_length) / 2)
 
     selection = scope.cursor
 
-    for i, item in enumerate(data):
+    for i, item in enumerate(formatted_data):
         if i == 0:
             first_item = 0
             pre_fix = "System clipboard"
             p_text = p + UIgraph.Point(0, 1)
-            create_text_aligned(banner, p_text, "/" * (max_length + description_length), P_win_test, True, 1)
+            create_text_aligned(banner, p_text, "/" * (max_length + description_length), P_win_test, True, align_h=1)
         else:
             first_item = 1
             pre_fix = "Roto clipboard"
@@ -998,8 +1026,8 @@ def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, o
         else:
             color_pair = P_win_test
         p_text = p + UIgraph.Point(margin, i + first_item)
-        create_text_aligned(banner, p_text, f"{1 + i} | {str(item)}", color_pair, True, 0)
-        create_text_aligned(banner, p_text, f"{pre_fix}", color_pair, True, 2)
+        create_text_aligned(banner, p_text, f"{1 + i} | {str(item)}", color_pair, True, align_h=0)
+        create_text_aligned(banner, p_text, f"{pre_fix}", color_pair, True, align_h=2)
 
 
 def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, data,
@@ -1049,6 +1077,11 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         screenState.scope_exec_args = scope_exec_args
         tab_scope_is_active = True
 
+    # TODO
+    # update cursor_x
+    # temp fix for keyboard execution left/right inverted
+    cursor_x = scope.cursor_x * -1 % len(data)
+
     if only_init:
         return scope
 
@@ -1069,12 +1102,6 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
     temp_vec = stdscr.getbegyx()
     win_pos = UIgraph.Point(temp_vec[1], temp_vec[0])
 
-    #print(height, width, pos_y, pos_x)
-    #print('table dimension (x,y): ', win_dim.x, ' ', win_dim.y)
-    #print('table position (x,y): ', win_pos.x, ' ', win_pos.y)
-    #print('sub win dimension: ')
-    #print('height, width, y,  x')
-    #print(height, width, pos_y, pos_x)
     banner = stdscr.subwin(height, width, pos_y, pos_x)
 
     temp_vec = banner.getmaxyx()
@@ -1083,22 +1110,47 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         create_text(banner, UIgraph.Point(0, i), ' ' * ban_dim.x, P_win_test, True)
 
     p = UIgraph.Point(0,0)
-    create_text_aligned(banner, p, "COPY", P_win_test, True, 1)
+    create_text_aligned(banner, p, "COPY", P_win_test, True, align_h=1)
 
 
     # add text alignment to the functions.... and then add the copy title
     p = UIgraph.Point(0,2)
-    create_text_aligned(banner, p, str(data), P_win_test, True, 1)
+    #create_text_aligned(banner, p, str(data), P_win_test, True, align_h=1)
 
     # in line selector
     # data should be already in the form of string
     spacing = 3
+    overlength_spacer = 10  # len of '<...>' + 5 chars
     separator = '|'
+
+    # format the data in way that everything is always visible, no need for scrolling
+    max_str_length = int(width / len(data))
+    overlenght_word_count = 0
+    other_word_tot_length = 0
+    for i in data:
+        if len(i) > max_str_length:
+            overlenght_word_count += 1
+        else:
+            other_word_tot_length += len(i)
+
+    if overlenght_word_count == 0:
+        max_str_length = floor((width - spacing * len(data)) / len(data))
+    else:
+        max_str_length = floor((width - spacing * len(data) - other_word_tot_length -
+            overlength_spacer * overlenght_word_count) / overlenght_word_count)
+
+    formatted_data = []
+    for i in data:
+        if len(i) > max_str_length:
+            i = i[:max_str_length - 10] + "<...>" + i[len(i) - 5:]
+        formatted_data.append(i)
+
+
 
     data_len = []
     total_len = 0
 
-    for i in data:
+    for i in formatted_data:
         data_len.append(len(i))
         total_len += len(i) + spacing
 
@@ -1108,18 +1160,18 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         pos_x = 2
         # TODO: implement logic to keep elements centererd on a multiline case
 
-    p = UIgraph.Point(pos_x, 4)
+    p = UIgraph.Point(pos_x, 2)
     create_text(banner, p, separator, P_win_test, True)
     p += UIgraph.Point(1,0)
-    for n, d in enumerate(data):
+    for n, d in enumerate(formatted_data):
         text = f" {d} {separator}"
         if p.x + len(text) >= ban_dim.x:
             p = UIgraph.Point(pos_x, p.y + 2)
             # add also the separator at the beginning of the line
         create_text(banner, p, text, P_win_test, True)
-        if scope.cursor_x == 0 or scope.cursor_x == n:
+        if cursor_x == 0 or cursor_x == n:
             selection_len = len(text) - len(separator)
-            if scope.cursor_x == 0:
+            if cursor_x == 0:
                 selection_len = len(text)
             create_text(banner, p + UIgraph.Point(0,1), u'\u2580' * selection_len, P_win_test, True)
         p += UIgraph.Point(len(text), 0)
@@ -1211,7 +1263,7 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
     P_dark_bg = screenState.colorPairs["tab_dark_bg"]
     P_select = screenState.colorPairs["tab_select"]
     P_selected = screenState.colorPairs["tab_selected"]
-    P_win_selected = screenState.colorPairs["win_select"]
+    P_win_selected = screenState.colorPairs["win_selected"]
     if tab_scope_is_active:
         P_win_selected = screenState.colorPairs["body"]
     P_win_background = screenState.colorPairs["tab_soft"]
@@ -1524,7 +1576,7 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
                 prices = list(coin_prices.values())
                 timestamp = list(coin_prices.keys())
                 if len(prices) < 1:
-                    print("hahaha")
+                    pass
                     # prices = [chia_current_price_currency]
                     # timestamp = [chia_coins_data.current_price_date]
                 #wallet_win.addstr(pos.y, 10, f"the cat is: {prices}")
@@ -2092,6 +2144,7 @@ def draw_rect(stdscr, point: UIgraph.Point, dim: UIgraph.Point, P_color):
 
 
 def create_block_band(stdscr,
+                      keyboardState: KeyboardState,
                       screenState: ScreenState,
                       parent_scope: Scope,
                       name: str,
@@ -2099,9 +2152,9 @@ def create_block_band(stdscr,
                       size: UIgraph.Point,
                       mempool_blocks: list[WDB.MempoolBlock],
                       blocks_loader: WDB.DataChunkLoader,
-                      current_peak: int):
+                      current_peak: int,
+                      node_synced: bool):
     """Block band navigator mempool.space style..."""
-    ### what to do with the db path? place in CONFIG?
     global DEBUG_OBJ
     DEBUG_OBJ.text = (f" first peak: {current_peak} | ")
 
@@ -2110,8 +2163,7 @@ def create_block_band(stdscr,
     base_point = UIgraph.Point(1,1)
 
     name_str = name
-    #name = f"{parent_scope.id}_{name}"
-    name = f"{name}"
+    # the band has a fixed name to reference the scope from other threads
 
     # last item is not well implemented. The idea was to remove the parameter
     # current_peak
@@ -2119,6 +2171,7 @@ def create_block_band(stdscr,
     #current_peak = last_block.height
 
     # precalc indexes of mempool, separator
+    # TODO if syncing remove the mempool block
     mempool_blocks_count = len(mempool_blocks)
     separator = 1
     total_elements_count = current_peak + mempool_blocks_count + separator
@@ -2128,12 +2181,15 @@ def create_block_band(stdscr,
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        scope.exec = activate_scope
+        #scope.exec = activate_scope
+        scope.exec = activate_scope_next_sibling
         scope.cursor = current_peak + separator  # separator default selection
+        parent_scope.cursor_x = current_peak + separator  # separator default selection
         parent_scope.sub_scopes[name] = scope
+        scope.visible = True
 
-        scope.exec_own = activate_grandparent_scope  # da cambiare
-
+        ## TODO; activate next scope
+        scope.exec_own = activate_scope_next_sibling
 
         scope.data["idx_last_item"] = current_peak + separator + min(mempool_blocks_count, 2)  # show max 2 mempool block by default
         scope.data["last_peak"] = current_peak
@@ -2143,8 +2199,10 @@ def create_block_band(stdscr,
         scope.data["thread_update_loader"] = None
 
     scope: Scope = screenState.scopes[name]
+    scope.visible = False  # not selectable...
     scope_is_active = False
     scope_exec_args = [screenState]
+
 
     if 'lapper' not in scope.data:
         scope.data["lapper"] = Timer('block_band')
@@ -2152,89 +2210,99 @@ def create_block_band(stdscr,
     lapper.start()
 
 
+    ### this should not trigger anymore
     if scope is screenState.activeScope:
-        scope.update_no_sub(total_elements_count, False)
+        scope.update_no_sub(total_elements_count + 1, False)
         screenState.scope_exec_args = scope_exec_args
         scope_is_active = True
+
+    ### keyboard
+    screenState.footer_text = "| go to peak=home or 0"
+    if keyboardState.home:
+        scope.cursor = current_peak + separator
+        parent_scope.cursor_x = current_peak + separator
+        scope.data["idx_last_item"] = current_peak + separator + min(mempool_blocks_count, 2)  # show max 2 mempool block by default
+        blocks_loader.update_offset(current_peak)
+        blocks_loader.start_updater_thread()
 
 
     lapper.clocking("init")
 
+    #check cursor boundaries
+    if parent_scope.cursor_x < -1:
+        parent_scope.cursor_x = -1
+    elif parent_scope.cursor_x >= total_elements_count:
+        parent_scope.cursor_x = total_elements_count
+
     idx_last_item = scope.data["idx_last_item"]
     last_peak = scope.data["last_peak"]
     selected_idx = scope.cursor
-    if scope.cursor > (last_peak + separator + mempool_blocks_count):
+    selected_idx = parent_scope.cursor_x
+    #if scope.cursor > (last_peak + separator + mempool_blocks_count):
+    if parent_scope.cursor_x > (last_peak + separator + mempool_blocks_count):
         selected_idx = last_peak + separator + mempool_blocks_count
 
     prev_idx_selected = scope.data["prev_idx_selected"]
     scope.data["prev_idx_selected"] = selected_idx
     DEBUG_OBJ.text += (
-        f" mmm... what's up? | current {current_peak}, last {last_peak} | cursor: {scope.cursor}  "
+        f" mmm... what's up? | current {current_peak}, last {last_peak} | cursor: {scope.cursor} | parent cursor_x: {parent_scope.cursor_x} "
     )
+
+    # check if the peak is moved
     if current_peak > last_peak:
-        DEBUG_OBJ.text += (
-            f"current > last peak | "
-        )
-        # update the current chunk if it cointains the peak
-        logging(ui_logger, "DEBUG", f"RAISE bigger {current_peak - last_peak}")
         scope.data['last_peak'] = current_peak
+        delta = current_peak - last_peak
 
+        # move selected block if we are at peak
         if selected_idx == (last_peak + separator):
-
-            DEBUG_OBJ.text += ( f" we want peak | ")
 
             delta = current_peak - last_peak
             selected_idx += delta
             scope.cursor = selected_idx
+            parent_scope.cursor_x = selected_idx
             scope.data['on_peak'] = True
 
             idx_last_item += delta
-            # update the data_loader peak and update
+
             blocks_loader.update_offset(selected_idx - separator)
-            blocks_loader.update_loader()
-            logging(ui_logger, "DEBUG", f"RAISE loader tot items {blocks_loader.total_row_count}")
-    #if current_peak > last_peak or (selected_idx % blocks_loader.chunk_size) == 0:
-            # blocks_loader.fetch_item_chunk(current_peak)
-            # these it always run when we are multiple of the chunk_size
-            # move it to the server_thread, and add the mean to update the offset
-            #blocks_loader.update_loader()
-        else:
-            logging(ui_logger, "DEBUG", f"RAISE not RUN block.current_offset: {blocks_loader.current_offset}")
+            logging(server_logger, "DEBUG", "THREAD - start peak one")
+            blocks_loader.start_updater_thread()
+
+        elif selected_idx > (last_peak + separator):
+            selected_idx += delta
+            scope.cursor = selected_idx
+            parent_scope.cursor_x = selected_idx
+            scope.data['on_peak'] = True
+
+            blocks_loader.update_offset(selected_idx - separator)
+            logging(server_logger, "DEBUG", "THREAD - on the meme")
+            blocks_loader.start_updater_thread()
 
     # if not at peak
-    #lapper.clocking('pre update')
     if selected_idx < (last_peak + separator):
-        #lapper.clocking('init update')
         scope.data['on_peak'] = False
         # with the new peak from the db we do not need it anymore
-        #lapper.clocking('offset1')
-        loader_offset_update = threading.Thread(target=blocks_loader.update_offset, args=(selected_idx - separator,), daemon=True)
-        #blocks_loader.update_offset(selected_idx - separator)
-        #lapper.clocking('offset2')
+        loader_offset_update = threading.Thread(target=blocks_loader.update_offset, args=(selected_idx,), daemon=True)
         loader_offset_update.start()
-        #lapper.clocking('offset3')
-        logging(ui_logger, "DEBUG", f"RAISE NOT PEAK: {blocks_loader.current_offset}")
 
-        # update only if you move more then half of the chunk size
+        # update only if you move more then half of the chunk size or if you are close to the peak
         delta = selected_idx - prev_idx_selected
         scope.data["loader_update_counter"] += delta
-        if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2:
-            if scope.data['thread_update_loader'] is None or not scope.data['thread_update_loader'].is_alive():
-                scope.data['thread_update_loader'] = threading.Thread(target=blocks_loader.update_loader, daemon=True)
-                block_loader_update_thread = scope.data['thread_update_loader']
-                #lapper.clocking('start threading')
-                block_loader_update_thread.start()
-                #lapper.clocking('end threading')
-                scope.data["loader_update_counter"] = 0
-                logging(ui_logger, "DEBUG", f"UPDATE RUNNING")
-            else:
-                logging(ui_logger, "DEBUG", f"update already running")
-        #lapper.clocking('end update')
+
+        # update when:
+        # the movement is more then half the chunk size
+        # selected is close to the peak
+        if (current_peak - last_peak) > blocks_loader.chunk_size:
+            logging(server_logger, "DEBUG", f"JUMPPPP is: {current_peak - last_peak}")
+        #if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2 or (current_peak - selected_idx) < blocks_loader.chunk_size:
+        if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2 or (current_peak - selected_idx) < blocks_loader.chunk_size:
+            logging(server_logger, "DEBUG", "THREAD - passed the cound or the chunk size")
+            blocks_loader.start_updater_thread()
+            scope.data["loader_update_counter"] = 0
     else:
         scope.data['on_peak'] = True
 
 
-    #lapper.clocking()
     if mempool_blocks_count == 0:
         pass
         # recalculate first idx item
@@ -2247,40 +2315,40 @@ def create_block_band(stdscr,
     # current height + 2 > 1 memepool block
     # current height + 3 > if it exists, show next memepool block
 
-    # scrolling:
-    # block input as hashtable
-    # keep: selected block and first block, if next block, out of screen
-    ## change first block value
-    ## memepool -> possible height, but make it clear it is memepool
-
     # i need a variable to comunicate with the back end to give me the right block
     # maybe it is better to create a feeder function that use the current idx of
     # the selected block
 
-    # idea
-    # get the dim of the win
-    # calculate number of block in the memepool
-    # dispaly at least one validated block
-    # from the starting point draw the rectangles
-    # indicate the beginning of a sub-slot and also of a slot
-    # make another graph the show when sub-slot and slot are not
-    # the same
-    # show when there are 2 block for the same signage point
-
-    P_text = screenState.colorPairs["body"]
+    P_text = screenState.colorPairs["body"]  # use for tx block
+    P_block = screenState.colorPairs["block_band"]  # use for tx block
+    P_block_mini = screenState.colorPairs["block_band_mini"]
     P_selected = screenState.colorPairs["win_selected"]
+    P_selected_inactive = screenState.colorPairs["win_selected_inactive"]
     P_tab_active = screenState.colorPairs["tab_dark"]
+    P_tab_active = screenState.colorPairs["scope_selected"]
     P_not_selected = screenState.colorPairs["tab_soft_bg"]
     #P_yellow_bee = screenState.colorPairs["block_band"]
     P_azzure = screenState.colorPairs["up"]
     P_white = screenState.colorPairs["down"]
+    P_separator = screenState.colorPairs["tab_soft_bg"]
+    P_btc = screenState.colorPairs["btc"]
+    P_btc_text = screenState.colorPairs["btc_text"]
+    P_btc_inv = screenState.colorPairs["btc_inv"]
 
     #win_band.bkgd(' ', curses.color_pair(P_yellow_bee))
 
     ### highlight scope if selected
     P_option = P_not_selected
+    #P_selected_block = P_selected_inactive
+    #P_selected_block_vertical = P_not_selected
+    P_selected_block = P_selected
+    P_selected_block_vertical = P_selected
+
+    # now it should never be selected
     if scope.selected & scope_is_active:
         P_option = P_tab_active
+        P_selected_block = P_selected
+        P_selected_block_vertical = P_selected
     elif scope.selected:
         P_option = P_selected
 
@@ -2294,28 +2362,33 @@ def create_block_band(stdscr,
 
 
 
-    #lapper.clocking('pre hot')
+    # load blocks
     block_states, first_idx = blocks_loader.get_items_hot_chunks()
-    #lapper.clocking('post hot chunks')
+
+    if first_idx == 0:
+        first_idx = -1
+        if block_states[0]:
+            block_states.insert(0, block_states[0].operational_error())
 
 
-    # rectangle block dimension
+    # calc rectangle block dimension
     name_block_len = len(f'{current_peak}')  # check how big is the block name
-    rec_dim_x = int(name_block_len + name_block_len % 2) + 4
+    name_block_len = name_block_len + name_block_len // 3 + 2  # add separator and margin
+    name_block_len = max(name_block_len, 11)
+    rec_dim_x = int(name_block_len + name_block_len % 2)
     rec_dim_y = int(rec_dim_x / 2)
     rec_dim = UIgraph.Point(rec_dim_x, rec_dim_y)
     rec_mini_dim = UIgraph.Point(6, 3)
-    block_spacer = 2
+    block_spacer = 3
 
+    ##############################################
     ### estimate number of block on the screen
+    #############################################
     idx_first_block = idx_last_item - first_idx
     local_peak = current_peak - first_idx
     local_idx_mempool = mempool_idx - first_idx
     items_count = 0
     tot_blocks_lenght = base_point.x
-
-    bbb = []
-    ccc = []
 
     ##### mempool and separator
     while True:
@@ -2324,23 +2397,18 @@ def create_block_band(stdscr,
         if local_idx_block >= local_idx_mempool:
             block_lenght = rec_dim.x
         elif local_idx_block == local_peak + separator:
-            block_lenght = 5  # to change if the geometry of the spacer change
+            block_lenght = 6  # to change if the geometry of the spacer change
         elif local_idx_block < local_peak + separator:
             break
 
-        if size.x < (tot_blocks_lenght + block_lenght + 2):  # 2 is the selection
+        if size.x < (tot_blocks_lenght + block_lenght + block_spacer):
             break
         else:
             tot_blocks_lenght += block_lenght + block_spacer
             items_count += 1
-            bbb.append(block_lenght)
-            ccc.append(tot_blocks_lenght)
 
 
     ##### blocks
-    print("BLOCK PRE CALC")
-    print(f"curren idx: {items_count}")
-    print(f"len states: {len(block_states)}")
     while True:
         local_idx_block = idx_first_block - items_count
         block = None
@@ -2352,30 +2420,12 @@ def create_block_band(stdscr,
             if block.is_transaction_block is True:
                 a = 1
         except Exception as e:
-            print("PREEEEEEEEEEEEEEEEEEEEE")
             print(f"exception: {e}")
             if block is None:
-                print("DDDDDDDDDDDDDDDDDDD")
                 print(f"fisrt block: {idx_first_block} items count {items_count}, n. of blocks {len(block_states)}")
                 print(f"local idx: {local_idx_block}")
                 print(f"calc idx first block: last item {idx_last_item}, first_idx {first_idx}")
                 print(f"lcoal_peak {local_peak} and current peak {current_peak}")
-                #for n, i in enumerate(block_states):
-                #    print(n, ' - ', i)
-            #print(f"len loader")
-
-            #for n, i in enumerate(block_states):
-            #    print(n, i)
-            #blocks_loader.update_loader()
-            #bbb, fff = blocks_loader.get_items_hot_chunks()
-            #print(f" first idx: {fff}")
-            #for n, i in enumerate(bbb):
-            #    print(n, i)
-            #print(f"current idx itmes: {items_count}")
-            #print(f"peak {current_peak}")
-            #print(f"len bb {len(block_states)}")
-            #print(f"local idx first block {idx_first_block}")
-            #print(f"local idx block {local_idx_block}")
 
 
         if block is None or block.is_transaction_block:
@@ -2388,29 +2438,18 @@ def create_block_band(stdscr,
         else:
             tot_blocks_lenght += block_lenght + block_spacer
             items_count += 1
-            bbb.append(block_lenght)
-            ccc.append(tot_blocks_lenght)
 
+    ########################## estimation end #######################
+    #lapper.clocking('post loop')
 
     # indexes
 
-    #items_count -= 1
-    #items_count = 10  # should be a number big enough to cover all screen...
     idx_first_item = idx_last_item - items_count   # the last block is the first
     DEBUG_OBJ.text += ( f" | last item: {idx_last_item} | item count: {items_count} | first_itme: {idx_first_item}")
     ### recalculate firt and last element
     idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element_BAND(selected_idx, idx_last_item, items_count)
-    #idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element(selected_idx, idx_last_item, items_count)
     DEBUG_OBJ.text += ( f" | after LI: {idx_last_item} | after IC: {items_count} | first_itme: {idx_first_item}")
-    #idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element(selected_idx, idx_first_item, items_count)
-    #### update first item when window is resized
-    #### TODO: modify for blocks
-    #tab_length = idx_last_item - idx_first_item
-    #if tab_length < visible_row_count:
-    #    idx_first_item = max(idx_first_item - (visible_row_count - tab_length), 0)
-    #    idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element(selected_idx, idx_first_item, visible_row_count)
 
-    #idx_last_item = idx_first_item + items_count
     ### update first item
     scope.data["idx_last_item"] = idx_last_item
 
@@ -2424,49 +2463,58 @@ def create_block_band(stdscr,
 
     DEBUG_OBJ.text += (f" | local LI: {idx_last_item} | local IC: {items_count} | first_itme: {idx_first_item}")
 
-    # rectangle block dimension
-    name_block_len = len(f'{current_peak_global}')  # check how big is the block name
-    rec_dim_x = int(name_block_len + name_block_len % 2) + 4
-    rec_dim_y = int(rec_dim_x / 2)
-    rec_dim = UIgraph.Point(rec_dim_x, rec_dim_y)
-    rec_mini_dim = UIgraph.Point(6, 3)
-
     current_idx = idx_last_item
 
-    print('LOOP BEGINNING')
-    print(f'current index: {current_idx}')
-    print(f'current peak local idx: {current_peak}')
-    print(f'current peak global idx: {current_peak_global}')
-
     #lapper.clocking('pre calc posiitons')
+    # block blipping
     DEBUG_OBJ.text += (f" | current idx at mem: {current_idx} | actual mem: {mempool_idx} ")
     while current_idx >= mempool_idx:
-        if base_point.x + rec_dim.x > size.x:
-            break
-        idx_item_mempool = current_idx - mempool_idx
-        if len(mempool_blocks) > 0:
-            mempool_block: WDB.MempoolBlock = mempool_blocks[idx_item_mempool]
+        if node_synced:
+            if base_point.x + rec_dim.x > size.x:
+                break
+            idx_item_mempool = current_idx - mempool_idx
+            if len(mempool_blocks) > 0:
+                mempool_block: WDB.MempoolBlock = mempool_blocks[idx_item_mempool]
+                total_cost = mempool_block.total_cost
 
-            p = base_point
-            create_text(win_band, p, f'mempool_block_{idx_item_mempool}', P_azzure, True)
-            p = p + UIgraph.Point(0, 1)
-            create_text(win_band, p, f'{len(mempool_block.transactions)}', P_azzure, True)
-            p = p + UIgraph.Point(0, 1)
-            draw_rect(win_band, p, rec_dim, P_azzure)
+                p = base_point
+                create_text(win_band, p, f'mempool_{idx_item_mempool}', P_azzure, True)
+                p = p + UIgraph.Point(0, 1)
+                draw_rect(win_band, p, rec_dim, P_azzure)
+                p = p + UIgraph.Point(0, 1)
+                create_text(win_band, p, f'txs: {human_int(len(mempool_block.transactions))}', P_azzure, True, inv_color=True)
 
-        else:
-            logging(ui_logger, "DEBUG", f"RAISE Mempool empty: ___")
-            p = base_point
-            create_text(win_band, p, f'mempool_empty', P_azzure, True)
-            p = p + UIgraph.Point(0, 1)
-            draw_rect(win_band, p, rec_dim, P_azzure)
+                #p = p + UIgraph.Point(0, 1)
+                #create_text(win_band, p, f'fee: {human_mojo(block.fees)}', P_azzure, True, inv_color=True)
+                p = p + UIgraph.Point(0, 1)
+                create_text(win_band, p, f'cost: {human_int(total_cost)}', P_azzure, True, inv_color=True)
+                p = p + UIgraph.Point(0, 1)
+                fullness = truncate(total_cost / BLOCK_MAX_COST * 100, 2)
+                fullness = f"{fullness:.3g}%"
+                create_text(win_band, p, f'used: {fullness}', P_azzure, True, inv_color=True)
 
-        if current_idx == selected_idx_local:
-            p = p + UIgraph.Point(0, rec_dim.y)
-            create_text(win_band, p, ' ' * rec_dim.x, P_selected, True, inv_color=True)
+            else:
+                logging(ui_logger, "DEBUG", f"RAISE Mempool empty: ___")
+                p = base_point
+                create_text(win_band, p, f'mempool_empty', P_azzure, True)
+                p = p + UIgraph.Point(0, 1)
+                draw_rect(win_band, p, rec_dim, P_azzure)
 
-        base_point += UIgraph.Point(rec_dim.x + 2, 0)
+            if current_idx == selected_idx_local:
+                p = base_point
+                mem_text = f'mempool_{idx_item_mempool}'
+                mem_text = f"{mem_text}{' ' * (rec_dim.x - len(mem_text))}"
+                create_text(win_band, p, mem_text, P_selected_block, True, inv_color=True)
 
+                p = p + UIgraph.Point(0, rec_dim.y + 1)
+                create_text(win_band, p, ' ' * rec_dim.x, P_selected_block, True, inv_color=True)
+
+                ps = base_point
+                for i in range(rec_dim.y + 2):
+                    pp = ps + UIgraph.Point(rec_dim.x, i)
+                    create_text(win_band, pp, u'\u258c', P_selected_block_vertical, True, inv_color=False)
+
+            base_point += UIgraph.Point(rec_dim.x + 2, 0)
 
         current_idx -= 1
 
@@ -2487,9 +2535,8 @@ def create_block_band(stdscr,
         #    base_point += UIgraph.Point(2 + 2, 0)
 
         ##################### band stripe ##############################
-        ## it neew to be even the height of the line to be nice
 
-        P_option = P_white
+        P_option = P_separator
         if current_idx == selected_idx_local:
             P_option = P_selected
 
@@ -2498,11 +2545,14 @@ def create_block_band(stdscr,
             p = base_point
             if i % 2:
                 create_text(win_band, p + UIgraph.Point(0, i), u'\u25E2', P_option, True)
+                create_text(win_band, p + UIgraph.Point(1, i), u'\u25E4', P_option, True)
+                create_text(win_band, p + UIgraph.Point(2, i), u'\u25E2', P_option, True)
             else:
                 create_text(win_band, p + UIgraph.Point(0, i), u'\u25E4', P_option, True)
-        base_point += UIgraph.Point(1 + 3, 0)
+                create_text(win_band, p + UIgraph.Point(1, i), u'\u25E2', P_option, True)
+                create_text(win_band, p + UIgraph.Point(2, i), u'\u25E4', P_option, True)
 
-        #print(f"separator")
+        base_point += UIgraph.Point(6, 0)
 
         ##################### band stripe double ##############################
         #    for i in range(rec_dim.y + 3):
@@ -2521,78 +2571,32 @@ def create_block_band(stdscr,
     ######### blocks ###############
 
     #lapper.clocking("blocks")
-    print("BLOCK BLIPPING")
-    print(f"curren idx: {current_idx}")
-    print(f"len states: {len(block_states)}")
-    for n, i in enumerate(block_states):
-        print(n, i)
     count = 0
     DEBUG_OBJ.text += (f" | idx block : {current_idx} ")
+
     if current_idx > len(block_states):
         ## implement logic to brake the loop and load the data, or skip it and wait for the upodate of the cache
-        raise Exception("The block idx asked is outside the cache. Try to expand it")
-    while current_idx > 0:
-        # select the rec_dim before and then keep only one
-        try:
-            block: WDB.BlockState = block_states[current_idx]
-        except:
-            print()
-            print("FAILED block retrive")
-            print(f"idx; {current_idx}")
-           # print(f"len block_states: {len(block_states)}")
-           # print(f"current idx: {current_idx}")
-           # print(f"peak {current_peak}")
-           # print(f"real peak {current_peak_global}")
-           # print(f"len bb {len(block_states)}")
-           # for n, i in enumerate(block_states):
-           #     print(n, i)
-            #blocks_loader.update_loader()
-            #bbb, fff = blocks_loader.get_items_hot_chunks()
-            #print(f" first idx: {fff}")
-            #for n, i in enumerate(bbb):
-            #    print(n, i)
+        print(f"current_idx; {current_idx}")
+        print(f"len block states: {len(block_states)}")
+        DEBUG_OBJ.text += (f" HAHAHAHAHAHAHA: current idx {current_idx} and n. states {len(block_states)} ")
+        #raise Exception("The block idx asked is outside the cache. Increase the cache")
 
+    while current_idx >= 0:
 
-        #print(f"c. idx {current_idx}")
-        #print(f"len b states {len(block_states)}")
-        #print(block_states)
-        # TODO DEBUG, it should be process only the first ten, not until 0
-        # print(count)
         count += 1
+        block = None
 
-        # lapper.clocking("blocks A")
-        try:
-            if block is None or block.is_transaction_block is True:
-                a = 1
-        except:
-            print("block is NOOOONEEEE")
-            print(f"current idx: {current_idx}")
-            print(f"peak {current_peak}")
-            print(f"real peak {current_peak_global}")
-            print(f"len bb {len(block_states)}")
-            #for n, i in enumerate(block_states):
-            #    print(n, i)
-            #blocks_loader.update_loader()
-            #bbb, fff = blocks_loader.get_items_hot_chunks()
-            #print(f" first idx: {fff}")
-            #for n, i in enumerate(bbb):
-            #    print(n, i)
+        if current_idx < len(block_states):
+            block: WDB.BlockState = block_states[current_idx]
 
+        ######## DEBUG ONLY
+        #with open('block_loader.txt', 'w') as f:
+        #    for n, i in enumerate(block_states):
+        #        if i is not None:
+        #            i = str(i)[:35]
+        #        f.write(f'{n} - {i} \n')
 
-        #lapper.clocking("blocks B")
-        with open('block_loader.txt', 'w') as f:
-            for n, i in enumerate(block_states):
-                if i is not None:
-                        i = str(i)[:35]
-                f.write(f'{n} - {i} \n')
-
-        #lapper.clocking("blocks C")
         if block is None:
-
-            # add the code to reload the missing block. When updating the block loader
-            # it should replace all the current chunk and the None elements should disapear, but it is
-            # not happening. Check if it is a problem of the sqlite cache by reloading from
-            # the db the data blocks again
 
             if base_point.x + rec_dim.x > size.x:
                 break
@@ -2607,7 +2611,7 @@ def create_block_band(stdscr,
             p1 = base_point
             P_option = P_text
             if current_idx == selected_idx_local:
-                P_option = P_selected
+                P_option = P_selected_block
 
                 b_height = f'No data...'
                 b_height = f"{b_height}{' ' * (rec_dim.x - len(b_height))}"
@@ -2620,13 +2624,40 @@ def create_block_band(stdscr,
                 ps = base_point
                 for i in range(rec_dim.y + 2):
                     pp = ps + UIgraph.Point(rec_dim.x, i)
-                    create_text(win_band, pp, u'\u258c', P_option, True, inv_color=False)
+                    create_text(win_band, pp, u'\u258c', P_selected_block_vertical, True, inv_color=False)
 
+            base_point += UIgraph.Point(rec_dim.x + 2, 0)
 
-            #if current_idx == selected_idx_local:
-            #    p = p + UIgraph.Point(0, rec_dim.y)
-            #    create_text(win_band, p, 'bo', P_text, True, inv_color=True)
-            #    DEBUG_OBJ.text += f"current block x: {p.x} y: {p.y}"
+        elif block.height == 675317 and selected_idx < 675317:
+            if base_point.x + rec_dim.x > size.x:
+                break
+
+            p = base_point
+            p = p + UIgraph.Point(0, 1)
+            draw_rect(win_band, p, rec_dim, P_btc_inv)
+
+            time_passed = time_ago(datetime.fromtimestamp(block.timestamp))
+            p1 = base_point
+            P_option = P_btc_text
+            if current_idx == selected_idx_local:
+                P_option = P_selected_block
+
+                b_height = f'{block.height:_}'
+                b_height = f"{b_height}{' ' * (rec_dim.x - len(b_height))}"
+                time_passed = f"{time_passed}{' ' * (rec_dim.x - len(time_passed))}"
+
+                create_text(win_band, p1, b_height, P_option, True, inv_color=True)
+                p1 += UIgraph.Point(0, rec_dim.y + 1)
+                create_text(win_band, p1, f'{time_passed}', P_option, True, inv_color=True)
+                ps = base_point
+                for i in range(rec_dim.y + 2):
+                    pp = ps + UIgraph.Point(rec_dim.x, i)
+                    create_text(win_band, pp, u'\u258c', P_selected_block_vertical, True, inv_color=False)
+            else:
+                b_height = f'{block.height:_}'
+                create_text(win_band, p1, b_height, P_option, True)
+                p1 += UIgraph.Point(0, rec_dim.y + 1)
+                create_text(win_band, p1, f'{time_passed}', P_option, True)
 
             base_point += UIgraph.Point(rec_dim.x + 2, 0)
 
@@ -2635,7 +2666,6 @@ def create_block_band(stdscr,
                 break
 
             p = base_point
-            # create_text(win_band, p, f'{block.height:_}', P_text, True)
             p = p + UIgraph.Point(0, 1)
             draw_rect(win_band, p, rec_dim, P_text)
             p = p + UIgraph.Point(0, 1)
@@ -2643,89 +2673,71 @@ def create_block_band(stdscr,
             p = p + UIgraph.Point(0, 1)
             create_text(win_band, p, f'fee: {human_mojo(block.fees)}', P_text, True, inv_color=True)
             p = p + UIgraph.Point(0, 1)
-            create_text(win_band, p, f'cost: {block.cost}', P_text, True, inv_color=True)
+            create_text(win_band, p, f'cost: {human_int(block.cost)}', P_text, True, inv_color=True)
             p = p + UIgraph.Point(0, 1)
-            print("transaction block")
-            print(block)
-            print(block.cost)
-            create_text(win_band, p, f'idx: {current_idx}', P_text, True, inv_color=True)
-            #create_text(win_band, p, f'fullness: {block.cost/BLOCK_MAX_COST * 100}%', P_text, True, inv_color=True)
+            fullness = truncate(block.cost / BLOCK_MAX_COST * 100, 2)
+            fullness = f"{fullness:.3g}%"
+            create_text(win_band, p, f'used: {fullness}', P_text, True, inv_color=True)
+
+            # block debugging
+            #create_text(win_band, p, f'idx: {current_idx}', P_text, True, inv_color=True)
 
             time_passed = time_ago(datetime.fromtimestamp(block.timestamp))
             p1 = base_point
             P_option = P_text
             if current_idx == selected_idx_local:
-                P_option = P_selected
+                P_option = P_selected_block
 
                 b_height = f'{block.height:_}'
                 b_height = f"{b_height}{' ' * (rec_dim.x - len(b_height))}"
+                time_passed = f"{time_passed}{' ' * (rec_dim.x - len(time_passed))}"
+
                 create_text(win_band, p1, b_height, P_option, True, inv_color=True)
                 p1 += UIgraph.Point(0, rec_dim.y + 1)
-
-                time_passed = f"{time_passed}{' ' * (rec_dim.x - len(time_passed))}"
                 create_text(win_band, p1, f'{time_passed}', P_option, True, inv_color=True)
-
                 ps = base_point
                 for i in range(rec_dim.y + 2):
                     pp = ps + UIgraph.Point(rec_dim.x, i)
-                    create_text(win_band, pp, u'\u258c', P_option, True, inv_color=False)
+                    create_text(win_band, pp, u'\u258c', P_selected_block_vertical, True, inv_color=False)
             else:
                 b_height = f'{block.height:_}'
                 create_text(win_band, p1, b_height, P_option, True)
                 p1 += UIgraph.Point(0, rec_dim.y + 1)
                 create_text(win_band, p1, f'{time_passed}', P_option, True)
 
-
-            #if current_idx == selected_idx_local:
-            #    p = p + UIgraph.Point(0, rec_dim.y)
-            #    create_text(win_band, p, 'bo', P_text, True, inv_color=True)
-            #    DEBUG_OBJ.text += f"current block x: {p.x} y: {p.y}"
-
             base_point += UIgraph.Point(rec_dim.x + 2, 0)
         else:
             if base_point.x + rec_mini_dim.x > size.x:
                 break
             p = base_point + UIgraph.Point(0, 3)
-            create_text(win_band, p, f'..{str(block.height)[-1:]}', P_text, True)
+            b_height = f'..{str(block.height)[-2:]}'
+            create_text(win_band, p, b_height, P_block_mini, True)
             p = p + UIgraph.Point(0, 1)
-            draw_rect(win_band, p, rec_mini_dim, P_text)
-            create_text(win_band, p, f'sp{block.signage_point_index}', P_text, True, inv_color=True)
-            p = p + UIgraph.Point(0, 1)
-            create_text(win_band, p, f'x{current_idx}', P_text, True, inv_color=True)
+            draw_rect(win_band, p, rec_mini_dim, P_block_mini)
+            create_text(win_band, p, f'sp{block.signage_point_index}', P_block_mini, True, inv_color=True)
+            # debugging local_idx
+            #p = p + UIgraph.Point(0, 1)
+            #create_text(win_band, p, f'x{current_idx}', P_block_mini, True, inv_color=True)
 
 
             p1 = base_point + UIgraph.Point(0, 3)
             if current_idx == selected_idx_local:
-                b_height = f'..{str(block.height)[-1:]}'
+                P_option = P_selected_block
                 b_height = f"{b_height}{' ' * (rec_mini_dim.x - len(b_height))}"
-                create_text(win_band, p1, b_height, P_selected, True, inv_color=True)
+                create_text(win_band, p1, b_height, P_option, True, inv_color=True)
                 p1 += UIgraph.Point(0, 4)
-                #p = p + UIgraph.Point(0, rec_mini_dim.y)
-                create_text(win_band, p1, ' ' * rec_mini_dim.x, P_selected, True, inv_color=True)
+                create_text(win_band, p1, ' ' * rec_mini_dim.x, P_option, True, inv_color=True)
                 pp = base_point + UIgraph.Point(0, 3)
                 for i in range(rec_mini_dim.y + 2):
                     ps = pp + UIgraph.Point(rec_mini_dim.x, i)
-                    create_text(win_band, ps, u'\u258c', P_selected, True, inv_color=False)
+                    create_text(win_band, ps, u'\u258c', P_selected_block_vertical, True, inv_color=False)
 
             base_point += UIgraph.Point(rec_mini_dim.x + 2, 0)
-
-        # lapper.clocking("blocks D")
 
         current_idx -= 1
 
     lapper.clocking('the very end')
-    # scope selection
-    ## delete
-    #edge_size = 2
-    #x_size = win_size.x - edge_size * 2
-    #base_point = UIgraph.Point(edge_size, rec_dim.y + 4 + 2)
-    #if scope_is_active:
-    #    create_text(win_band, base_point, u'\u2584' * x_size, P_text, True)
-    #else:
-    #    create_text(win_band, base_point, u'\u2580' * x_size, P_azzure, True)
-
     lapper.end()
-    print(lapper)
 
     return scope
 

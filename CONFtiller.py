@@ -1,18 +1,19 @@
 import LOGtiller as LOG
 from enum import Enum
-import sqlite3
+from pathlib import Path
 import json
+import TEXTtiller as TEXT
 
 
 from chia.util.config import load_config
 from chia.util.default_root import DEFAULT_ROOT_PATH
 #from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 
-DEBUGGING = True
+DEBUGGING = False
 
 # LOGGING
+# logging is initialized here
 LOGGING_LEVEL = "DEBUG"
-a = LOG.LoggingLevels.INFO
 server_logger = LOG.AsyncLogger("./server_log.log", LOGGING_LEVEL)
 server_logger_thread = LOG.launchLoggerThread(server_logger, "hole")
 
@@ -30,11 +31,6 @@ full_node_port = config['full_node']['port']  # "8444"
 full_node_rpc_port = config["full_node"]["rpc_port"]  # 8555
 wallet_rpc_port = config["wallet"]["rpc_port"]  # 9256
 chain_network = config["full_node"]["selected_network"]
-
-
-# UI
-FIGLET = True  # EVAL: trying using a global instead of a value in screenState
-# to make it working ui should import it without using FROM CONFtiller import ...
 
 
 # COSTANT
@@ -73,6 +69,29 @@ XCH_MOJO = 1_000_000_000_000
 
 ## block max cost
 BLOCK_MAX_COST = 11_000_000_000
+
+# FIGLET FONTs
+FIGLET = True  # EVAL: trying using a global instead of a value in screenState
+# to make it working ui should import it without using FROM CONFtiller import ...
+
+# init fingletfont
+path_figlet_font = Path("figlet_fonts/")
+DOOM_FONT = TEXT.Font()
+TEXT.loadFontFTL(path_figlet_font / "doom.flf", DOOM_FONT)
+
+FUTURE_FONT = TEXT.Font()
+TEXT.loadFontFTL(path_figlet_font / "future.tlf", FUTURE_FONT)
+
+SMALL_FONT = TEXT.Font()
+TEXT.loadFontFTL(path_figlet_font / "small.flf", SMALL_FONT)
+
+STANDARD_FONT = TEXT.Font()
+TEXT.loadFontFTL(path_figlet_font / "standard.flf", STANDARD_FONT)
+
+SMBLOCK_FONT = TEXT.Font()
+TEXT.loadFontFTL(path_figlet_font / "smblock.tlf", SMBLOCK_FONT)
+
+
 
 
 # create a files for types or something similar

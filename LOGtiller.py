@@ -50,6 +50,32 @@ def writeLoggerToFile(logger: AsyncLogger, string: str):
             pass
         time.sleep(1)
 
+def rotate_log(file_path):
+    # 10 MB in bytes (10 * 1024 * 1024)
+    MAX_SIZE = 10 * 1024 * 1024 
+
+    if not os.path.exists(file_path):
+        # Create it if it doesn't exist
+        open(file_path, 'a').close()
+        return
+
+    # Check the size
+    if os.path.getsize(file_path) > MAX_SIZE:
+        new_path = file_path + ".1"
+
+        # Remove old .log.1 if it already exists to avoid errors
+        if os.path.exists(new_path):
+            os.remove(new_path)
+
+        # Rename original to .log.1
+        os.rename(file_path, new_path)
+
+        # Create a new empty log file
+        open(file_path, 'w').close()
+        print(f"Log rotated: {file_path} -> {new_path}")
+    else:
+        print("Log size is within limits.")
+
 
 def launchLoggerThread(logger: AsyncLogger, string: str):
     loop_thread = threading.Thread(target=writeLoggerToFile, args=(logger, string), daemon=True)

@@ -39,24 +39,27 @@ from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 from chia.util.config import load_config
 from chia.util.default_root import DEFAULT_ROOT_PATH
 
-import UItext as UItext
+import TEXTtiller as TEXT
 import UIgraph as UIgraph
 import LOGtiller as LOGtiller
 from CONFtiller import (
     server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_BLOCKCHAIN_RO,
     DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO,
     CAT_MOJO, config, self_hostname, full_node_port, full_node_rpc_port, wallet_rpc_port,
-    DEFAULT_ROOT_PATH, TXS_MEMPOOL_DELAY, FIGLET)
+    DEFAULT_ROOT_PATH, TXS_MEMPOOL_DELAY, FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST)
 import CONFtiller
-import DEBUGtiller as DEBUGtiller
 import ELEMENTStiller as ELEMENTS
 import WDBtiller as WDB
 import DEXtiller as DEX
 from RPCtiller import call_rpc_node, call_rpc_daemon
-from UTILITYtiller import binary_search_l, Timer, calc_coin_id
+from UTILITYtiller import binary_search_l, Timer, calc_coin_id, classify_number
 from PUZZLEtiller import compare_to_known_puzzle, unroll_coin_puzzle, get_opcode_name
+from COLORStiller import init_colors
 
 from pympler import asizeof
+
+
+import DEBUGtiller as DEBUGtiller
 
 def deep_getsizeof(object, seen=None):
     if seen is None:
@@ -95,63 +98,6 @@ def loadAllTickers():
     tickers = json.loads(r.text)["tickers"]
     return tickers
 
-
-# store elements
-cat_test = {
-    "a628c1c2c6fcb74d53746157e438e108eab5c0bb3e5c80ff9b1910b3e4832913":
-    ("SBX", "Spacebucks"),
-    "db1a9020d48d9d4ad22631b66ab4b9ebd3637ef7758ad38881348c5d24c38f20":
-    ("DBX", "dexie bucks"),
-    "e0005928763a7253a9c443d76837bdfab312382fc47cab85dad00be23ae4e82f":
-    ("MBX", "Moonbucks"),
-    "b8edcc6a7cf3738a3806fdbadb1bbcfc2540ec37f6732ab3a6a4bbcd2dbec105":
-    ("MZ", "Monkeyzoo Token"),
-    "e816ee18ce2337c4128449bc539fbbe2ecfdd2098c4e7cab4667e223c3bdc23d":
-    ("HOA", "HOA COIN"),
-    "ccda69ff6c44d687994efdbee30689be51d2347f739287ab4bb7b52344f8bf1d":
-    ("BEPE", "BEPE"),
-    "8ebf855de6eb146db5602f0456d2f0cbe750d57f821b6f91a8592ee9f1d4cf31":
-    ("MRMT", "Marmot Coin"),
-    "fa4a180ac326e67ea289b869e3448256f6af05721f7cf934cb9901baa6b7a99d":
-    ("wUSDC.b", "Base warp.green USDC"),
-    "e233f9c0ebc092f083aaacf6295402ed0a0bb1f9acb1b56500d8a4f5a5e4c957":
-    ("MWIF", "MWIF"),
-    "d1adf97f603cdec4998a63eb8ffdd19480a60e20751c8ec8386283b1d86bf3f9":
-    ("MOG", "MOG"),
-    "4cb15a8ecc85068fb1f98c09a5e489d1ad61b2af79690ce00f9fc4803c8b597f":
-    ("wmilliETH", "Ethereum warp.green milliETH"),
-    "70010d83542594dd44314efbae75d82b3d9ae7d946921ed981a6cd08f0549e50":
-    ("LOVE", "LOVE"),
-    "a66ce97b58a748b3bb2a8224713620cca0ca00cb87e75837b1f04e3a543aaa40":
-    ("BANANA", "BANANA"),
-    "ec9d874e152e888231024c72e391fc484e8b6a1cf744430a322a0544e207bf46":
-    ("PEPE", "PepeCoin"),
-    "ea830317f831a23b178aa653e50484568d30d2c5b34d8140e71247ead05961c7":
-    ("CC", "Caesar Coin"),
-    "b0495abe70851d43d8444f785daa4fb2aaa8dae6312d596ee318d2b5834cc987":
-    ("DBW", "DBW"),
-    "509deafe3cd8bbfbb9ccce1d930e3d7b57b40c964fa33379b18d628175eb7a8f":
-    ("CH21", "Chia Holiday 2021")
-}
-
-######
-'''
-what could be the temp status of the wallet/
-'''
-# check the correct size for each property
-
-# store for the cat names
-cat_names: Dict[str, Tuple[str, str]]
-cat_names = {
-    "a628c1c2c6fcb74d53746157e438e108eab5c0bb3e5c80ff9b1910b3e4832913":
-    ("SBX", "Spacebucks"),
-    "db1a9020d48d9d4ad22631b66ab4b9ebd3637ef7758ad38881348c5d24c38f20":
-    ("DBX", "dexie bucks"),
-    "e0005928763a7253a9c443d76837bdfab312382fc47cab85dad00be23ae4e82f":
-    ("MBX", "Moonbucks")
-}
-
-print(cat_names["db1a9020d48d9d4ad22631b66ab4b9ebd3637ef7758ad38881348c5d24c38f20"][1])
 
 @dataclass
 class TransactionRecordRoto:
@@ -292,6 +238,7 @@ class KeyboardState:
     mouse: bool = False
     enter: bool = False
     esc: bool = False
+    home: bool = False
 
 
 class FullNodeMeta:
@@ -371,35 +318,42 @@ class FullNodeState:
 
 
     def update_mempool(self):
-        # removed expired transactions older then
-        logging(server_logger, "DEBUG", f"NODE STATE - updating mempool")
-        new_mempool = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
-        added_tx = new_mempool.keys() - self.mempool_items.keys()
-        removed_txs = self.mempool_items.keys() - new_mempool.keys()
         with self.lock:
-            logging(server_logger, "DEBUG", f"NODE STATE - lock")
-            conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-            for tx in added_tx:
-                logging(server_logger, "DEBUG", f"NODE STATE - tx: {tx}")
-                self.mempool_items[tx] = new_mempool[tx]
-                # add to the db
-                raw_sb = new_mempool[tx].spend_bundle
-                logging(server_logger, "DEBUG", f"NODE STATE - raw_sb: {raw_sb}")
-                sb = SpendBundle.from_json_dict(new_mempool[tx].spend_bundle)
-                logging(server_logger, "DEBUG", f"NODE STATE - {type(sb)}")
-                WDB.insert_spend_bundle(conn, sb)
-                logging(server_logger, "DEBUG", f"NODE STATE - inserting SB")
+            self.mempool_items = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
 
-            conn.close()
-        for tx in removed_txs:
-            # here we should modify the status of the sb also in the db, as invalid or blocked
-            if self.mempool_items[tx].removed_at is None:
-                with self.lock:
-                    self.mempool_items[tx].removed_at = time.time()
-            else:
-                if self.mempool_items[tx].removed_at - time.time() > TXS_MEMPOOL_DELAY:
-                    with self.lock:
-                        self.mempool_archive = self.mempool_items.pop(tx)
+        # removed expired transactions older then
+        # TODO:
+        # - add property in_mempool
+        # - remove apptoved txs after 15s
+
+        #logging(server_logger, "DEBUG", f"NODE STATE - updating mempool")
+        #new_mempool = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
+        #added_tx = new_mempool.keys() - self.mempool_items.keys()
+        #removed_txs = self.mempool_items.keys() - new_mempool.keys()
+        #with self.lock:
+        #    logging(server_logger, "DEBUG", f"NODE STATE - lock")
+        #    conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+        #    for tx in added_tx:
+        #        logging(server_logger, "DEBUG", f"NODE STATE - tx: {tx}")
+        #        self.mempool_items[tx] = new_mempool[tx]
+        #        # add to the db
+        #        raw_sb = new_mempool[tx].spend_bundle
+        #        logging(server_logger, "DEBUG", f"NODE STATE - raw_sb: {raw_sb}")
+        #        sb = SpendBundle.from_json_dict(new_mempool[tx].spend_bundle)
+        #        logging(server_logger, "DEBUG", f"NODE STATE - {type(sb)}")
+        #        WDB.insert_spend_bundle(conn, sb)
+        #        logging(server_logger, "DEBUG", f"NODE STATE - inserting SB")
+
+        #    conn.close()
+        #for tx in removed_txs:
+        #    # here we should modify the status of the sb also in the db, as invalid or blocked
+        #    if self.mempool_items[tx].removed_at is None:
+        #        with self.lock:
+        #            self.mempool_items[tx].removed_at = time.time()
+        #    else:
+        #        if self.mempool_items[tx].removed_at - time.time() > TXS_MEMPOOL_DELAY:
+        #            with self.lock:
+        #                self.mempool_archive = self.mempool_items.pop(tx)
 
 
 
@@ -408,8 +362,8 @@ class FullNodeState:
             pass
             # take SB
             # take input coin
-        # fill coin types
-# take solution coin
+            # fill coin types
+            # take solution coin
 
         pass
 
@@ -423,16 +377,22 @@ class FullNodeState:
 
     def update_chain_state(self):
         blockchain_state = call_rpc_node('get_blockchain_state')
+        print(blockchain_state)
         with self.lock:
             full_node_meta = self.full_node_meta
-            full_node_meta.peak_height = blockchain_state['peak']['height']
-            full_node_meta.peak_header_hash = blockchain_state['peak']['header_hash']
-            full_node_meta.peak_timestamp = blockchain_state['peak']['timestamp']
-            full_node_meta.finished_challenge_slot_hashes = blockchain_state['peak']['finished_challenge_slot_hashes']
-            full_node_meta.finished_infused_challenge_slot_hashes = blockchain_state['peak']['finished_infused_challenge_slot_hashes']
-            full_node_meta.finished_reward_slot_hashes = blockchain_state['peak']['finished_reward_slot_hashes']
-            full_node_meta.prev_hash = blockchain_state['peak']['prev_hash']
-            full_node_meta.prev_transaction_block_hash = blockchain_state['peak']['prev_transaction_block_hash']
+            if blockchain_state['peak'] is not None:
+                full_node_meta.peak_height = blockchain_state['peak']['height']
+                full_node_meta.peak_header_hash = blockchain_state['peak']['header_hash']
+                if blockchain_state['peak']['timestamp'] is not None:
+                    full_node_meta.peak_timestamp = blockchain_state['peak']['timestamp']
+                full_node_meta.finished_challenge_slot_hashes = blockchain_state['peak']['finished_challenge_slot_hashes']
+                full_node_meta.finished_infused_challenge_slot_hashes = blockchain_state['peak']['finished_infused_challenge_slot_hashes']
+                full_node_meta.finished_reward_slot_hashes = blockchain_state['peak']['finished_reward_slot_hashes']
+                full_node_meta.prev_hash = blockchain_state['peak']['prev_hash']
+                full_node_meta.prev_transaction_block_hash = blockchain_state['peak']['prev_transaction_block_hash']
+            else:
+                full_node_meta.peak_height = None
+
             full_node_meta.difficulty = blockchain_state["difficulty"]
             full_node_meta.synced = blockchain_state["sync"]["synced"]
             full_node_meta.sync_mode = blockchain_state["sync"]["sync_mode"]
@@ -497,7 +457,9 @@ class ScreenState:
     scope_exec_args: List  # args that are used when executing scope.exec_child
     screen_data: Dict[str, str]  # it should be a dic of lists of anything
     coins_data: Dict[str, CoinPriceData]
+    footer_text: str
     roto_clipboard: deque
+    pending_action: List[Union[int, Callable]]
 
     def __init__(self):
         self.init = False
@@ -518,8 +480,10 @@ class ScreenState:
         self.scope_exec_args = []
         self.screen_data = {}
         self.coins_data = {}
+        self.footer_text = ""
+        self.pending_action = []
 
-        # init copy
+        # init copy/paste
         self.roto_clipboard = deque(maxlen=5)
         self.scopes['copy'] = None
         self.scopes['paste'] = None
@@ -531,7 +495,9 @@ class Scope():
     def __init__(self, name: str, screen_handler: Callable[..., None],
                  screenState: ScreenState):
         self.name = name
-        self.selected = False
+        # remove selected flag
+        self.selected = False  # make a method to check if it is selected by the parent
+        self.visible = False
         self.mode = ScopeMode.VISUAL
         self.parent_scope = None
         self.main_scope = self
@@ -552,8 +518,47 @@ class Scope():
         # default esc behaviuor
         self.exec_esc = exit_scope
 
+    def set_visible(self):
+        parent_scope: Scope = self.parent_scope
+        if self.name not in parent_scope.sub_scopes:
+            parent_scope.sub_scopes[self.name] = self 
+        self.visible = True
+
+    def reset_sub_scope_visibility(self):
+        """Reset the valie of 'visible' for all the subscope"""
+        for key, item in self.sub_scopes.items():
+            item.visible = False
+
+    def filter_sub_scope_by_visibility(self):
+        """Remove sub scope that are not visible"""
+        print("FILTERINGGGG")
+        keys = list(self.sub_scopes.keys())
+        print(keys)
+        for key in keys:
+            print(f"key {key}")
+            print(f"visible value {self.sub_scopes[key].visible}")
+            if not self.sub_scopes[key].visible:
+                print(f"deleting the {key} key")
+                self.sub_scopes.pop(key)
+
     ### consider to move this logic in each elements, should be more flexible
     def update(self):
+        """Update the counter using the number of sub scopes"""
+
+        self.filter_sub_scope_by_visibility()
+
+        for key, item in self.sub_scopes.items():
+            item.selected = False
+        if len(self.sub_scopes) != 0:
+            self.cursor = self.cursor % len(self.sub_scopes)
+            sel_scope = list(self.sub_scopes.keys())[self.cursor]
+            self.sub_scopes[sel_scope].selected = True
+
+        self.reset_sub_scope_visibility()
+
+    ### menu should be not create sub scope, but create the scope only once
+    ### selected
+    def update_legacy(self):
         """Update the counter using the number of sub scopes"""
         for key, item in self.sub_scopes.items():
             item.selected = False
@@ -607,6 +612,83 @@ def activate_scope(scope: Scope, screenState: ScreenState):
     return scope
 
 
+def activate_scope_from_sibling(scope: Scope, screenState: ScreenState):
+    screenState.activeScope = scope
+    parent = scope.parent_scope
+    count = 0
+    for key, item in parent.sub_scopes.items():
+        if item == scope:
+            parent.cursor = count
+            scope.selected = True
+        else:
+            item.selected = False
+        count += 1
+    return scope
+
+
+def activate_scope_next_sibling(scope: Scope, screenState: ScreenState, *args):
+    ### used in the block band
+    parent = scope.parent_scope
+
+    count = 0
+    next_item = False
+    next_scope = None
+    for key, item in parent.sub_scopes.items():
+        if item == scope:
+            parent.cursor = count + 1
+            scope.selected = False
+            next_item = True
+        elif next_item:
+            screenState.activeScope = item
+            item.selected = True
+            next_item = False
+            next_scope = item
+        else:
+            item.selected = False
+        count += 1
+    return next_scope
+
+
+def activate_scope_prev_sibling(scope: Scope, screenState: ScreenState, *args):
+    ### used in the block band
+    parent = scope.parent_scope
+
+    count = 0
+    prev_item_id = False
+    prev_scope = None
+    for key, item in parent.sub_scopes.items():
+        if item == scope:
+            prev_item_id = count - 1
+            parent.cursor = prev_item_id
+            scope.selected = False
+        else:
+            item.selected = False
+        count += 1
+
+    prev_scope = list(parent.sub_scopes.values())[prev_item_id]
+    screenState.activeScope = prev_scope
+    prev_scope.selected = True
+    return prev_scope
+
+
+def select_next_scope(scope: Scope, screenState: ScreenState, *args):
+    ### used in the block band
+    parent = scope.parent_scope
+    screenState.activeScope = parent
+    parent.cursor += 1
+
+    return parent
+
+
+def select_prev_scope(scope: Scope, screenState: ScreenState, *args):
+    ### used in the block band
+    parent = scope.parent_scope
+    screenState.activeScope = parent
+    parent.cursor -= 1
+
+    return parent
+
+
 def activate_pk(scope: Scope, screenState: ScreenState):
     """Acvtivate the scope and set the active pk in the ScreenState"""
     screenState.activeScope = scope
@@ -633,7 +715,6 @@ def activate_scope_and_set_pk(scope: Scope, screenState):
     screenState.active_pk[0] = int(scope.name)  # Maibe use the possibility to
     # change the args input of the scope exec
     return scope
-
 
 
 # used to open a coin view from a tab
@@ -663,9 +744,6 @@ def exit_scope(scope: Scope, screen_state: ScreenState, *args):
     if scope.parent_scope:
         screen_state.activeScope = scope.parent_scope
         return scope.parent_scope
-
-# to remove it as global
-tickers = 0
 
 
 def convert_ts_to_date(ts):
@@ -818,29 +896,9 @@ def fetch_coin_data(data_lock, coins_data, tail):
             coins_data[tail].historic_price = dict(zip(historic_timestamp, historic_price))
 
 
-            # DEBUGGING PRICES XCH
-            #try:
-            #    write_prices(f"{tail}-XCH", coins_data[tail].historic_price)
-            #except Exception as e:
-            #    print("type of var: ", type(coins_data[tail].historic_price))
-            #    print(e)
-            #    traceback.print_exc()
-
             historic_price_currency = convert_historic_price_to_currency(
                 historic_timestamp_chia, historic_price_chia,
                 historic_timestamp, historic_price)
-            ### DEBUG BY SAVING THE CONVERSION
-            #historic_price_currency = convert_historic_price_to_currency_DEB(
-            #    historic_timestamp_chia, historic_price_chia,
-            #    historic_timestamp, historic_price, name=f"DEB_{tail}")
-
-            # DEBUGGING PRICES USD
-            #try:
-            #    write_prices(f"{tail}-USD", historic_price_currency)
-            #except Exception as e:
-            #    print("type of var: ", type(historic_price_currency))
-            #    print(e)
-            #    traceback.print_exc()
 
             coins_data[tail].historic_price_currency = historic_price_currency
             coins_data[tail].historic_range_price_data = (begin, end)
@@ -984,7 +1042,7 @@ def fetch_chia_data(data_lock, coins_data):
 
 def fetch_addresses(data_lock, fingerprint: int, pk_state_id: int):
     """Fetch addresses for each fingerprints until the last FREE_ADD addresses are unused"""
-    ### to implement the logic to load until last unused
+    ### to implement the logic to load until last 100 are unused
     conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
     non_observer = False
     logging(server_logger, "DEBUG", "fetching addresses from daemon")
@@ -1436,7 +1494,7 @@ def menu_select(stdscr, menu, select, point, color_pairs, color_pairs_sel,
             else:
                 stdscr.attron(curses.color_pair(color_pairs))
             text = (str(i) + " - " + str(item))
-            s = UItext.renderFont(text, FUTURE_FONT)
+            s = TEXT.renderFont(text, FUTURE_FONT)
             for n, line in enumerate(s):
                 stdscr.addstr(point[0] + i * s_height + n, point[1], line)
     else:
@@ -1463,7 +1521,7 @@ def menu_select_figlet(stdscr, menu, select, point, color_pairs, color_pairs_sel
             else:
                 stdscr.attron(curses.color_pair(color_pairs))
             text = str(item)
-            s = UItext.renderFont(text, FUTURE_FONT)
+            s = TEXT.renderFont(text, FUTURE_FONT)
             for n, line in enumerate(s):
                 stdscr.addstr(point[0] + i * s_height + n, point[1], line)
     else:
@@ -1505,13 +1563,13 @@ def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
             xDimMenu = len(i)
             longestLine = i
 
-    xDimMenu_fig, a = UItext.sizeText(longestLine, FUTURE_FONT)
+    xDimMenu_fig, a = TEXT.sizeText(longestLine, FUTURE_FONT)
     figlet = False
     n_rows = height // FUTURE_FONT.height - 2
     bbox = UIgraph.Point(0,0)
 
     # using figlet or not
-    if width > xDimMenu_fig * 2 and CONFtiller.FIGLET and n_rows > 3:
+    if width > xDimMenu_fig * 2 and CONFtiller.FIGLET and n_rows > 3 and width > 100:
         bbox.x = xDimMenu_fig
         figlet = True
     else:
@@ -1548,15 +1606,15 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
 
     if len(activeScope.sub_scopes) == 0:
         menu_items = [
-            ('wallet', screen_fingers, activate_scope),
             ('full node', screen_full_node, activate_scope),
-            ('harvester analytics', screen_harvester, activate_scope),
-            ('dex', screen_dex, activate_scope)
         ]
         if DEBUGGING:
             menu_items += [
+                ('wallet', screen_fingers, activate_scope),
+                ('harvester analytics', screen_harvester, activate_scope),
+                ('dex', screen_dex, activate_scope),
                 ("tabs", screen_tabs, activate_scope),
-                ('debugging screen', screen_debugging, activate_scope)
+                #('debugging screen', DEBUGtiller.screen_debugging, activate_scope),
             ]
 
         for name, handler, exec_fun in menu_items:
@@ -1567,7 +1625,7 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
 
     # TODO it always active?
     if activeScope is screenState.activeScope:
-        activeScope.update()
+        activeScope.update_legacy()
     screenState.selection = activeScope.cursor
 
     # menu dimension
@@ -1579,9 +1637,9 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
             xDimMenu = len(i)
             longestLine = i
 
-    xDimMenu, a = UItext.sizeText(longestLine, FUTURE_FONT)
+    xDimMenu, a = TEXT.sizeText(longestLine, FUTURE_FONT)
 
-    if height > yDimMenu * 2 and width > xDimMenu * 2:
+    if height > yDimMenu * 2 and width > xDimMenu * 2 and width > 100:
 
         xMenu = int(width / 2 - xDimMenu / 2)
         yMenu = int(height / 2 - yDimMenu / 2)
@@ -1603,27 +1661,6 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
         menu_select(menu_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
                     screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
                     False)
-
-    # CUSTOM CHAR test, among them there is the little square and others
-    menu_win.attron(curses.color_pair(1))
-    menu_win.addstr(2, 4, u'\u1F973'.encode('utf-8'))
-    menu_win.addstr(4, 4, u'\u2580'.encode('utf-8'))
-    menu_win.addstr(4, 5, u'\u2584'.encode('utf-8'))
-    menu_win.addstr(4, 6, u'\u2575'.encode('utf-8'))
-    menu_win.addstr(4, 7, u'\u2577'.encode('utf-8'))
-    menu_win.addstr(4, 8, u'\u2502'.encode('utf-8'))
-    menu_win.addstr(4, 9, u'\u2502'.encode('utf-8'))
-    menu_win.addstr(4, 9, u'\u2584'.encode('utf-8'))
-    menu_win.addstr(4, 27, "the cube")
-    menu_win.addstr(5, 4, u'\u2581'.encode('utf-8'))
-    menu_win.addstr(6, 4, u'\u2582'.encode('utf-8'))
-    menu_win.addstr(7, 4, u'\u2583'.encode('utf-8'))
-    menu_win.addstr(8, 4, u'\u2585'.encode('utf-8'))
-    menu_win.addstr(8, 7, "il cinque")
-    menu_win.addstr(9, 4, u'\u25C0'.encode('utf-8'))
-    menu_win.addstr(10, 4, u'\u26F3'.encode('utf-8'))
-    menu_win.addstr(11, 4, u'\u26A1'.encode('utf-8'))
-    menu_win.addstr(12, 4, u'\U0001F331'.encode('utf-8'))
 
 
 def screen_dex(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
@@ -1696,33 +1733,6 @@ def screen_dex(stdscr, keyboardState, screenState: ScreenState, fullNodeState: F
         screenState.screen = 'main'
 
 
-# init fingletfont
-DOOM_FONT = UItext.Font()
-# import Path or do something else
-pathA = Path("figlet_fonts/doom.flf")
-UItext.loadFontFTL(pathA, DOOM_FONT)
-
-FUTURE_FONT = UItext.Font()
-# import Path or do something else
-pathA = Path("figlet_fonts/future.tlf")
-UItext.loadFontFTL(pathA, FUTURE_FONT)
-
-SMALL_FONT = UItext.Font()
-# import Path or do something else
-pathA = Path("figlet_fonts/small.flf")
-UItext.loadFontFTL(pathA, SMALL_FONT)
-
-STANDARD_FONT = UItext.Font()
-# import Path or do something else
-pathA = Path("figlet_fonts/standard.flf")
-UItext.loadFontFTL(pathA, STANDARD_FONT)
-
-SMBLOCK_FONT = UItext.Font()
-# import Path or do something else
-pathA = Path("figlet_fonts/smblock.tlf")
-UItext.loadFontFTL(pathA, SMBLOCK_FONT)
-
-
 def screen_intro(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
     """Intro screen"""
 
@@ -1732,14 +1742,14 @@ def screen_intro(stdscr, keyboardState, screenState: ScreenState, fullNodeState:
     # intro
     text = 'rototiller'
 
-    sizeX, sizeY = UItext.sizeText(text, DOOM_FONT)
+    sizeX, sizeY = TEXT.sizeText(text, DOOM_FONT)
     stdscr.bkgd(' ', curses.color_pair(screenState.colorPairs["intro"]))
 
     screenState.scope_exec_args = [screenState]
 
     if height > sizeY * 2 and width > sizeX * 2:
 
-        s = UItext.renderFont(text, DOOM_FONT)
+        s = TEXT.renderFont(text, DOOM_FONT)
         s_height = len(s)
         s_length = len(s[0])
 
@@ -1797,7 +1807,7 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
             else:
                 stdscr.attron(curses.color_pair(color_pairs))
             text = (str(i) + " - " + str(item))
-            s = UItext.renderFont(text, FUTURE_FONT)
+            s = TEXT.renderFont(text, FUTURE_FONT)
             for n, line in enumerate(s):
                 stdscr.addstr(point.y + i * s_height + n, point.x, line)
     else:
@@ -1813,891 +1823,6 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
             else:
                 stdscr.attron(curses.color_pair(color_pairs) | curses.A_BOLD)
             stdscr.addstr(point.y + i, point.x, (str(i) + " - " + str(item)))
-
-
-def screen_debugging_insert(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
-
-    width = screenState.screen_size.x
-    height = screenState.screen_size.y
-
-    debug_win = createFullSubWin(stdscr, screenState, height, width)
-    debug_win.erase()  # delete if not using newwin, it flicker
-    debug_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
-
-    active_scope: Scope = screenState.activeScope
-    main_scope = active_scope.main_scope
-    screenState.scope_exec_args = [screenState]
-
-    def get_N_scope_mod(scope: Scope):
-        scope.active = False
-        active_scope_key = list(scope.sub_scopes.keys())[scope.cursor]
-
-        new_scope = scope.sub_scopes[active_scope_key]
-        if len(new_scope.sub_scopes) > 0:
-            new_scope.active = True
-            return new_scope
-        else:
-            new_scope.bool = not new_scope.bool
-            scope.active = True
-            return scope
-
-    main_scope.update()
-
-
-def screen_debugging(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
-
-    width = screenState.screen_size.x
-    height = screenState.screen_size.y
-
-    #debug_win = createFullSubWin(stdscr, screenState, height, width)
-    #debug_win = curses.newwin(height // 2,
-    debug_win = stdscr.subwin(height // 2,
-                              width // 2,
-                              height // 4,
-                              width // 4)
-    debug_win.erase()  # delete if not using newwin, it flicker
-    debug_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
-
-
-    #dub_win = stdscr.subwin(20, 30, 13, 5)
-    #dub_win.erase()  # delete if not using newwin, it flicker
-    #dub_win.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
-
-    #rub_win = dub_win.subwin(14, 20, 13, 7)
-    #rub_win.erase()  # delete if not using newwin, it flicker
-    #rub_win.bkgd(' ', curses.color_pair(screenState.colorPairs["header"]))
-
-
-    #rub_win.addstr(0,2, "poins")
-
-    active_scope: Scope = screenState.activeScope
-    main_scope = active_scope.main_scope
-    screenState.scope_exec_args = [screenState]
-
-    def get_N_scope_mod(scope: Scope):
-        scope.active = False
-        active_scope_key = list(scope.sub_scopes.keys())[scope.cursor]
-
-        new_scope = scope.sub_scopes[active_scope_key]
-        if len(new_scope.sub_scopes) > 0:
-            new_scope.active = True
-            return new_scope
-        else:
-            new_scope.bool = not new_scope.bool
-            scope.active = True
-            return scope
-
-    main_scope.update()
-
-    # asset view
-    if False:
-        try:
-            pass
-        except Exception as e:
-            print("exception while testing the asset view")
-            print("The exception: ", e)
-            traceback.print_exc()
-
-    ###################### coins #########################
-    if False:
-
-        debug_win.addstr(3,8, f"coins")
-        result = asyncio.run(call_rpc_wallet('log_in', fingerprint=291595168))["fingerprint"]
-        debug_win.addstr(3,9, "logged in")
-        coins = asyncio.run(
-            call_rpc_wallet('get_spendable_coins', wallet_id=2))
-        if coins:
-            coins = coins["confirmed_records"]
-            debug_win.addstr(3, 10, f"coins are :{str(coins)}")
-            for i, c in enumerate(coins):
-                debug_win.addstr(3 + i,10, f"coins are :{str(c['coin']['amount'])}")
-        else:
-            debug_win.addstr(3,10, f"no coins to show, rpc failed")
-
-    ######################################################
-    ###################### scope #########################
-    if False:
-        list01 = ["rosso", "lbu", "orao", "tempera"]
-        list02 = ["cane", "orso", "ramarro"]
-        list03 = ["birillo", "finestra", "catamarano"]
-
-        gen_id = 0
-        debug_win.addstr(3,10, f"scope is {main_scope.id}, cursor: {main_scope.cursor}")
-        debug_win.addstr(2,10, f"scope is {active_scope.id}, cursor: {active_scope.cursor}")
-
-        point_xy = UIgraph.Point(30, 5)
-        menu_select_s(debug_win, screenState, "list_A", list01, point_xy,
-                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    main_scope, False)
-
-        point_xy = UIgraph.Point(30, 15)
-        menu_select_s(debug_win, screenState, "list_B", list02, point_xy,
-                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    main_scope, False)
-
-        point_xy = UIgraph.Point(30, 25)
-        menu_select_s(debug_win, screenState, "list_C", list03, point_xy,
-                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    main_scope, False)
-
-        point_xy = UIgraph.Point(30, 30)
-        #def create_button(stdscr, screenState, name: str, point: UIgraph.Point, active: bool):
-        ELEMENTS.create_button(stdscr, screenState, main_scope, "button_1", point_xy, False)
-
-
-        if keyboardState.enter is True:
-            screenState.screen_data["active_scope"] = active_scope.exe(active_scope)
-            #screenState.screen = screenState.menu[screenState.selection]
-        if keyboardState.moveUp:
-            active_scope.cursor -= 1
-        if keyboardState.moveDown:
-            active_scope.cursor += 1
-        if keyboardState.esc is True:
-            # call back the old scope
-            active_scope.active = False
-            screenState.screen_data["active_scope"] = active_scope.parent_scope
-            print(type(screenState.screen_data["active_scope"]))
-            screenState.screen_data["active_scope"].active = True
-
-        #screenState.screen_data["active_scope"] = active_scope
-
-    ###################### drawing lines #########################
-    if False:
-        pt1 = UIgraph.Point(100, 20)
-
-        if "DW" not in screenState.screen_data:
-            screenState.screen_data["DW"] = {}
-            screenState.screen_data["DW"]["pt2"] = UIgraph.Point(30, 30)
-
-        pt2 = screenState.screen_data["DW"]["pt2"]
-
-        if keyboardState.mouse:
-            _, mx, my, _, _ = curses.getmouse()
-            pt2 = UIgraph.Point(mx, my)
-            screenState.screen_data["DW"]["pt2"] = pt2
-
-        try:
-            print("poin")
-            UIgraph.drawPointBox(debug_win, screenState, pt1, screenState.colorPairs['test'])
-            UIgraph.drawPointBox(debug_win, screenState, pt2, screenState.colorPairs['test'])
-            print("int")
-        except Exception as e:
-            print("except point")
-            print(e)
-            traceback.print_exc()
-
-        try:
-            pass
-            #UIgraph.drawLine2pts(debug_win, pt1, pt2)
-        except Exception as e:
-            print("aaaaaa")
-            print(e)
-
-        pp = UIgraph.Point(3,3)
-        pp2 = UIgraph.Point(1,4)
-        try:
-            #UIgraph.drawLine2pts_subpixel(debug_win, pt1, pt2)
-            #UIgraph.drawLine2pts_subpixel(debug_win, pt1 + pp, pt2 + pp2)
-            for i in range(0):
-                pp = UIgraph.Point(i,i)
-                pp2 = UIgraph.Point(i+1,i+1)
-                UIgraph.drawLine2pts_subpixel(debug_win, pt1 + pp, pt2 + pp2)
-        except Exception as e:
-            print("new aaaaaaaaaa")
-            print(e)
-            traceback.print_exc()
-
-        pt3 = UIgraph.Point(90, 22)
-
-    #    pt4 = UIgraph.Point(pt2.x + 5, pt2.y + 10)
-        pt4 = UIgraph.Point(pt2.x, pt2.y)
-
-
-        try:
-            #UIgraph.drawLine2pts_aliasing(debug_win, screenState, pt3, pt4, screenState.colorPairs['body'])
-            #UIgraph.drawLine2pts(debug_win, pt3, pt4)
-            pass
-        except Exception as e:
-            print("aaaaaa")
-            print(e)
-            traceback.print_exc()
-        deltaP = UIgraph.Point(5,5)
-        deltaP = UIgraph.Point(0,0)
-        p_bug = UIgraph.Point(58,12)
-        try:
-            UIgraph.drawLine2pts_aliasing_sub(debug_win, screenState, pt3 + deltaP,
-                                            pt4 + deltaP, screenState.colorPairs['body'])
-            #UIgraph.drawLine2pts(debug_win, pt3, pt4)
-        except Exception as e:
-            print(e)
-            traceback.print_exc()
-
-        ppp = [UIgraph.Point(10,20), UIgraph.Point(30,40)]
-        for p in ppp:
-            UIgraph.drawPointBox(debug_win, screenState, p, screenState.colorPairs['test'])
-
-        for idx,p in enumerate(ppp):
-            ppp[idx] = UIgraph.Point(p.x, p.y * 2)
-
-
-        try:
-            pass
-            #UIgraph.drawPoints_sub(debug_win, screenState, ppp, (200,0,200))
-            #UIgraph.drawLine2pts(debug_win, pt3, pt4)
-        except Exception as e:
-            print("aaaaaaaaaa sub")
-            print(e)
-            traceback.print_exc()
-
-    ######################### graph ##################33333333
-    if False:
-        #for cat in cat_test.keys():
-        #    a = DEX.fetchDexiNameFromTail(cat)
-        #    print(a)
-        #    DEX.getHistoricPriceFromTail(cat, 7)
-        print(cat_test.keys())
-        cat = list(cat_test.keys())[0]
-        #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
-        #UIgraph.drawPriceGraph(stdscr, screenState, prices, timestamp, 7)
-        y0 = 2
-        for i in range(7):
-            graph_win = debug_win.subwin(5, 20, y0, 40)
-            graph_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
-            graph_win.erase()
-            cat = list(cat_test.keys())[i]
-            if cat not in screenState.coins_data:
-                y0 += 6
-                continue
-            coin_data = screenState.coins_data[cat]
-            prices = list(coin_data.historic_price.values())
-            timestamp = list(coin_data.historic_price.keys())
-            if len(prices) < 1:
-                prices = [coin_data.current_price]
-                timestamp = [coin_data.current_price_date]
-            debug_win.addstr(y0,70, f"the cat is: {cat}")
-            debug_win.addstr(y0 + 1,70, f"len: {len(prices)}; time {timestamp[0]} and prices; {prices[0]}")
-            #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
-            UIgraph.drawPriceGraph(graph_win, screenState, prices, timestamp, 7)
-            y0 += 6
-
-        #graph_win = stdscr.subwin(10, 20, 8, 30)
-        #graph_win.bkgd(' ', curses.color_pair(screenState.colorPairs["test_red"]))
-        #cat = list(cat_test.keys())[0]
-        #prices, timestamp = DEX.getHistoricPriceFromTail(cat, 7)
-        #UIgraph.drawPriceGraph(graph_win, screenState, prices, timestamp, 7)
-
-
-    ###################### buttons ###################33
-    if False:
-
-        try:
-
-            pos_x = 2
-            pos_y = 2
-
-            size_x = 70
-            size_y = 1
-
-            xch_amount = "xch 1230.43"
-            btc_amount = "BTC 0.44321"
-            usd_amount = "$ 23.234.38"
-
-            items = [xch_amount, btc_amount, usd_amount]
-            item_colors = ['xch', 'btc', 'dollar']
-            spaces = 2
-            pre_text = "Total wallet value: "
-
-            debug_win.addstr(pos_y + 1, pos_x, pre_text, curses.A_BOLD)
-
-            pos_x += len(pre_text) + 2 * spaces
-
-
-            length = 0
-
-            for item in items:
-                length += len(item) + 2 * spaces
-
-            for item, item_color in zip(items, item_colors):
-                length = len(item) + 2 * spaces
-                y = pos_y
-                x = pos_x
-                text_color_pair = UIgraph.customColorsPairs_findByValue(
-                    screenState.cursesColors,
-                    screenState.colorPairs[item_color])
-                text_color_background = text_color_pair[1]
-                default_background = UIgraph.customColors_findByValue(
-                    screenState.cursesColors,
-                    screenState.colors["background"])
-
-                # upper row
-
-                new_pair = (text_color_background, default_background)
-                print('new pair ', new_pair)
-                frame_color_pair = UIgraph.addCustomColorTuple(
-                    new_pair,
-                    screenState.cursesColors
-                )
-
-
-                debug_win.addstr(y,x, u'\u2584' * length,
-                                    curses.color_pair(frame_color_pair))
-
-                # text
-                debug_win.addstr(y + 1,x, f"  {item}  ",
-                                 curses.color_pair(
-                                    screenState.colorPairs[item_color]) |
-                                 curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(y + 2,x, u'\u2580' * length,
-                                 curses.color_pair(frame_color_pair))
-                pos_x += length
-
-
-
-
-            ### press the button
-
-            pos_x = 2
-            pos_y = 5
-
-            but = 'press the button'
-            space = 2
-            length = len(but) + space * 2
-
-            text_color_pair = UIgraph.customColorsPairs_findByValue(
-                screenState.cursesColors,
-                screenState.colorPairs['xch'])
-            text_color_background = text_color_pair[1]
-            text_color = text_color_pair[0]
-            default_background = UIgraph.customColors_findByValue(
-                screenState.cursesColors,
-                screenState.colors["background"])
-            default_selected = UIgraph.customColors_findByValue(
-                screenState.cursesColors,
-                screenState.colors["yellow_bee"])
-            multiplier = 1.2
-            text_color_background_clear = tuple(int(i * 1.2) for i in text_color_background)
-            text_color_background_dark = tuple(int(i * 0.8) for i in text_color_background)
-
-            UIgraph.addCustomColor(
-                text_color_background_clear,
-                screenState.cursesColors)
-            UIgraph.addCustomColor(
-                text_color_background_dark,
-                screenState.cursesColors)
-
-            frame_cp_clear = UIgraph.addCustomColorTuple(
-                (text_color_background_clear, default_background),
-                screenState.cursesColors
-            )
-            frame_cp_dark = UIgraph.addCustomColorTuple(
-                (text_color_background_dark, default_background),
-                screenState.cursesColors
-            )
-            frame_cp_cl = UIgraph.addCustomColorTuple(
-                (text_color_background_dark, text_color_background_clear),
-                screenState.cursesColors
-            )
-            frame_cp_std = UIgraph.addCustomColorTuple(
-                (text_color_background, default_background),
-                screenState.cursesColors
-            )
-            text_dark = UIgraph.addCustomColorTuple(
-                (text_color, text_color_background_dark),
-                screenState.cursesColors
-            )
-            text_clear = UIgraph.addCustomColorTuple(
-                (text_color, text_color_background_clear),
-                screenState.cursesColors
-            )
-            frame_selected = UIgraph.addCustomColorTuple(
-                (text_color_background_clear, default_selected),
-                screenState.cursesColors
-            )
-            frame_selected_2 = UIgraph.addCustomColorTuple(
-                (text_color_background_dark, default_selected),
-                screenState.cursesColors
-            )
-            frame_selected_backgroung = UIgraph.addCustomColorTuple(
-                (default_selected, default_background),
-                screenState.cursesColors
-            )
-
-
-            # upper row
-            debug_win.addstr(pos_y, pos_x, u'\u2588' * length,
-                                curses.color_pair(frame_cp_clear))
-            x = pos_x + length - 1
-            debug_win.addstr(pos_y, x, u'\u25E2',
-                                curses.color_pair(frame_cp_cl))
-
-            # text
-            x = pos_x
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_clear) |
-                                curses.A_BOLD)
-            x += 1
-            debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                curses.color_pair(
-                                    screenState.colorPairs['xch']) |
-                                curses.A_BOLD)
-            x += length - 2
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_dark) |
-                                curses.A_BOLD)
-
-            # lower row
-            debug_win.addstr(pos_y + 2, pos_x, u'\u2588' * length,
-                                curses.color_pair(frame_cp_dark))
-            debug_win.addstr(pos_y + 2, pos_x, u'\u25E2',
-                                curses.color_pair(frame_cp_cl))
-
-
-            #raise
-
-
-            ########## test 2 ###############3
-            pos_x += length + 2
-
-            # upper row
-            debug_win.addstr(pos_y, pos_x, u'\u2584' * length,
-                                curses.color_pair(frame_cp_clear))
-
-            # text
-            x = pos_x
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_clear) |
-                                curses.A_BOLD)
-            x += 1
-            debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                curses.color_pair(
-                                    screenState.colorPairs['xch']) |
-                                curses.A_BOLD)
-            x += length - 2
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_dark) |
-                                curses.A_BOLD)
-
-            # lower row
-            debug_win.addstr(pos_y + 2, pos_x, u'\u2580' * length,
-                                curses.color_pair(frame_cp_dark))
-
-            ########## test 3 ###############3
-            pos_x += length + 2
-
-            # upper row
-            debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 1),
-                                curses.color_pair(frame_cp_clear))
-
-            # text
-            x = pos_x
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_clear) |
-                                curses.A_BOLD)
-            x += 1
-            debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                curses.color_pair(
-                                    screenState.colorPairs['xch']) |
-                                curses.A_BOLD)
-            x += length - 2
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_dark) |
-                                curses.A_BOLD)
-
-            # lower row
-            debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-                                curses.color_pair(frame_cp_dark))
-
-
-            ########## test 4 ###############3
-            pos_x += length + 2
-
-            # upper row
-            debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 1),
-                                curses.color_pair(frame_cp_dark))
-
-            # text
-            x = pos_x
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_dark) |
-                                curses.A_BOLD)
-            x += 1
-            debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                curses.color_pair(
-                                    screenState.colorPairs['xch']) |
-                                curses.A_BOLD)
-            #x += length - 2
-            #debug_win.addstr(pos_y + 1, x, u'\u2588',
-            #                    curses.color_pair(frame_cp_dark) |
-            #                    curses.A_BOLD)
-
-            # lower row
-            #debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-            #                    curses.color_pair(frame_cp_dark))
-
-
-            pos_x += length + 2
-            if "test_wallet" not in screenState.screen_data:
-                screenState.screen_data["test_wallet"] = False
-            if keyboardState.moveLeft is True:
-                screenState.screen_data["test_wallet"] = True
-            if keyboardState.moveRight is True:
-                screenState.screen_data["test_wallet"] = False
-
-            if screenState.screen_data["test_wallet"]:
-                # upper row
-                debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 1),
-                                    curses.color_pair(frame_cp_dark))
-
-                # text
-                x = pos_x
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-                x += 1
-                debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                    curses.color_pair(
-                                        screenState.colorPairs['xch']) |
-                                    curses.A_BOLD)
-                x += length - 2
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-                                    curses.color_pair(frame_cp_dark))
-            else:
-                # upper row
-                debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 1),
-                                    curses.color_pair(frame_cp_clear))
-
-                # text
-                x = pos_x
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_clear) |
-                                    curses.A_BOLD)
-                x += 1
-                debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                    curses.color_pair(
-                                        screenState.colorPairs['xch']) |
-                                    curses.A_BOLD)
-                x += length - 2
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-                                    curses.color_pair(frame_cp_dark))
-
-            ##################################################################
-
-            pos_x += length + 2
-
-            if screenState.screen_data["test_wallet"]:
-                # upper row
-                debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 0),
-                                    curses.color_pair(frame_cp_dark))
-
-                # text
-                x = pos_x
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-                x += 1
-                debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                    curses.color_pair(
-                                        screenState.colorPairs['xch']) |
-                                    curses.A_BOLD)
-                x += length - 2
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(pos_y + 2, pos_x + 0, u'\u2580' * (length - 0),
-                                    curses.color_pair(frame_cp_dark))
-            else:
-                # upper row
-                debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 0),
-                                    curses.color_pair(frame_cp_clear))
-
-                # text
-                x = pos_x
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_clear) |
-                                    curses.A_BOLD)
-                x += 1
-                debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                    curses.color_pair(
-                                        screenState.colorPairs['xch']) |
-                                    curses.A_BOLD)
-                x += length - 2
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_clear) |
-                                    curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(pos_y + 2, pos_x + 0, u'\u2580' * (length - 0),
-                                    curses.color_pair(frame_cp_clear))
-
-
-
-            ##################################################################
-            pos_x += length + 2
-
-            if screenState.screen_data["test_wallet"]:
-                # upper row
-                debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 0),
-                                    curses.color_pair(frame_cp_dark))
-
-                # text
-                x = pos_x
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-                x += 1
-                debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                    curses.color_pair(text_dark) |
-                                    curses.A_BOLD)
-                x += length - 2
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(pos_y + 2, pos_x + 0, u'\u2580' * (length - 0),
-                                    curses.color_pair(frame_cp_dark))
-            else:
-                # upper row
-                debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 0),
-                                    curses.color_pair(frame_cp_dark))
-
-                # text
-                x = pos_x
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_dark) |
-                                    curses.A_BOLD)
-                x += 1
-                debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                    curses.color_pair(text_clear) |
-                                    curses.A_BOLD)
-                x += length - 2
-                debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                    curses.color_pair(frame_cp_clear) |
-                                    curses.A_BOLD)
-
-                # lower row
-                debug_win.addstr(pos_y + 2, pos_x + 0, u'\u2580',
-                                    curses.color_pair(frame_cp_dark))
-                debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-                                    curses.color_pair(frame_cp_clear))
-
-
-
-            ########## test 8 ###############3
-            pos_x += length + 2
-
-            # upper row
-            debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 0),
-                                curses.color_pair(frame_cp_dark))
-            # text
-            x = pos_x
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_dark) |
-                                curses.A_BOLD)
-            x += 1
-            debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                curses.color_pair(text_clear) |
-                                curses.A_BOLD)
-            x += length - 2
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_clear) |
-                                curses.A_BOLD)
-            # lower row
-            debug_win.addstr(pos_y + 2, pos_x + 0, u'\u2580',
-                                curses.color_pair(frame_cp_dark))
-
-            # selection
-            debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-                                curses.color_pair(frame_selected))
-            debug_win.addstr(pos_y + 1, pos_x + length, u'\u258c',
-                                curses.color_pair(frame_selected_backgroung))
-            debug_win.addstr(pos_y + 2, pos_x + length, u'\u258c',
-                                curses.color_pair(frame_selected_backgroung))
-
-            ########## test 9 ###############3
-            pos_x += length + 2
-
-            # upper row
-            debug_win.addstr(pos_y, pos_x, u'\u2584' * (length - 0),
-                                curses.color_pair(frame_cp_dark))
-            # text
-            x = pos_x
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_dark) |
-                                curses.A_BOLD)
-            x += 1
-            debug_win.addstr(pos_y + 1, x, f" {but} ",
-                                curses.color_pair(text_clear) |
-                                curses.A_BOLD)
-            x += length - 2
-            debug_win.addstr(pos_y + 1, x, u'\u2588',
-                                curses.color_pair(frame_cp_clear) |
-                                curses.A_BOLD)
-            # lower row
-            debug_win.addstr(pos_y + 2, pos_x + 0, u'\u2580',
-                                curses.color_pair(frame_cp_dark))
-
-            # selection
-            debug_win.addstr(pos_y + 2, pos_x, u'\u2580',
-                                curses.color_pair(frame_selected_2))
-            debug_win.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 1),
-                                curses.color_pair(frame_selected))
-            debug_win.addstr(pos_y + 0, pos_x + length, u'\u2596',
-                                curses.color_pair(frame_selected_backgroung))
-            debug_win.addstr(pos_y + 1, pos_x + length, u'\u258c',
-                                curses.color_pair(frame_selected_backgroung))
-            debug_win.addstr(pos_y + 2, pos_x + length, u'\u258c',
-                                curses.color_pair(frame_selected_backgroung))
-
-        except:
-            print("cazzi amazzi")
-            traceback.print_exc()
-
-    if False:
-
-        try:
-            # menu button
-            er_menu = ['steakkk', 'proof of steak', 'salad', 'cheese', 'pizza']
-            ELEMENTS.create_button_menu(stdscr, screenState, main_scope, "burton menu", er_menu,
-                          UIgraph.Point(5,8))
-
-            menu_select(stdscr, er_menu, screenState.selection, [5, 50],
-                        screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                        False)
-
-            ELEMENTS.menu_select(stdscr, er_menu, main_scope, UIgraph.Point(60, 10),
-                        screenState.colorPairs['body'], screenState.colorPairs["body_sel"])
-
-            # normal button
-            ELEMENTS.create_button(stdscr, screenState, main_scope, "burton",
-                          UIgraph.Point(30,10))
-
-
-            legend = ["bab", "okment", "t-1"]
-
-            color_up = screenState.colors['azure_up']
-            color_down = screenState.colors['white_down']
-            format_funcs = [
-                [(ft_standar_number_format, [], {'sig_digits': 5, 'max_size': 10})],
-                [(ft_percentage_move, [color_up, color_down], {})],
-                [(ft_standar_number_format, [], {'sig_digits': 5, 'max_size': 10})]
-            ]
-            theListTranspose = [[row[i] for row in theList]
-                                for i in range(len(theList[0]))]
-            theListTranspose, theListTransposeColor = format_tab(theListTranspose, format_funcs)
-
-            theListColor = [[row[i] for row in theListTransposeColor]
-                            for i in range(len(theListTransposeColor[0]))]
-
-            active = True
-            if ELEMENTS.read_bool_button(stdscr, screenState, main_scope, "burton"):
-
-                ELEMENTS.create_tab_large(debug_win, screenState, main_scope,
-                           "tab_a", theList2, None, theListColor, True,
-                           UIgraph.Point(10,20), UIgraph.Point(150,25),
-                           keyboardState, "test_tabs", 2, None, active, True, legend)
-            else:
-                create_tab(debug_win, screenState, main_scope,
-                           "tab_b", theList2, None, None, True,
-                           UIgraph.Point(10,25), UIgraph.Point(100,8),
-                           keyboardState, "test_tabs_small", open_coin_wallet, active, False)
-
-        except:
-            print("cazzi amazzi")
-            traceback.print_exc()
-
-    if True:
-
-        try:
-            legend = ["bab", "okment", "t-1"]
-
-            color_up = screenState.colors['azure_up']
-            color_down = screenState.colors['white_down']
-            format_funcs = [
-                [(ft_standar_number_format, [], {'sig_digits': 5, 'max_size': 10})],
-                [(ft_percentage_move, [color_up, color_down], {})],
-                [(ft_standar_number_format, [], {'sig_digits': 5, 'max_size': 10})]
-            ]
-            theListTranspose = [[row[i] for row in theList]
-                                for i in range(len(theList[0]))]
-            theListTranspose, theListTransposeColor = format_tab(theListTranspose, format_funcs)
-
-            theListColor = [[row[i] for row in theListTransposeColor]
-                            for i in range(len(theListTransposeColor[0]))]
-            active = False
-
-
-
-            # menu button
-            er_menu = ['yougurt', 'steak', 'proof of steak', 'salad', 'cheese',
-                       'pizza', 'gizza', 'terrazza', 'melgalta', 'irpensum']
-            turt_scope: Scope = ELEMENTS.create_button_menu(debug_win, screenState, main_scope, "turton menu", er_menu.copy(),
-                          UIgraph.Point(3,21))
-            ELEMENTS.create_button_menu(debug_win, screenState, main_scope, "burton menu", er_menu,
-                          UIgraph.Point(10,5))
-
-            active_text = er_menu[turt_scope.cursor]
-            ELEMENTS.text_double_space(debug_win, UIgraph.Point(7, 15), active_text,
-                                       screenState.colorPairs["body"],
-                                       screenState.colorPairs["tab_soft"],
-                                       1, False)
-
-            active_tab = er_menu[turt_scope.cursor]
-
-            ttl = [[row[i] for row in theList]
-                        for i in range(len(theList[0]))]
-
-            ELEMENTS.create_tab(debug_win, screenState, main_scope,
-                                "tab_aa", ttl, None, None, True,
-                                UIgraph.Point(2,1), UIgraph.Point(80,10),
-                                keyboardState, None, active, True, legend)
-            ELEMENTS.create_tab(debug_win, screenState, main_scope,
-                                "tab_c", theList2, None, None, False,
-                                UIgraph.Point(2,15), UIgraph.Point(50,8),
-                                keyboardState, None, active, False, legend)
-            #match active_tab:
-            match False:
-                case 'steak':
-                    ELEMENTS.create_tab(debug_win, screenState, main_scope,
-                                        "tab_a", theList, None, None, False,
-                                        UIgraph.Point(2,9), UIgraph.Point(80,10),
-                                        keyboardState, "test_tabs", active, False, legend)
-                case 'yougurt':
-                    ELEMENTS.create_tab(debug_win, screenState, main_scope,
-                                        "tab_aa", ttl, None, None, True,
-                                        UIgraph.Point(2,9), UIgraph.Point(80,10),
-                                        keyboardState, "test_tabs_aa", active, False, legend)
-                case 'proof of steak':
-                    ELEMENTS.create_tab(debug_win, screenState, main_scope,
-                                        "tab_b", theList2, None, None, False,
-                                        UIgraph.Point(2,9), UIgraph.Point(50, 6),
-                                        keyboardState, "test_tabs_small_bat",
-                                        active, False, legend)
-
-                case 'salad':
-                    ELEMENTS.create_tab(debug_win, screenState, main_scope,
-                                        "tab_c", theList2, None, None, False,
-                                        UIgraph.Point(2,15), UIgraph.Point(50,8),
-                                        keyboardState, "test_tabs_small_ee", active, False, legend)
-
-        except:
-            print("cazzi amazzi")
-            traceback.print_exc()
-    debug_win.refresh()  # delete if not using newwin. It flickers...
 
 
 def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
@@ -3114,7 +2239,7 @@ def screen_fingers(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
 
     menu_size_xy = [0, 0]
     for f in fingers_str:
-        sizeX, sizeY = UItext.sizeText(f, FUTURE_FONT)
+        sizeX, sizeY = TEXT.sizeText(f, FUTURE_FONT)
         menu_size_xy[1] += sizeY
         if menu_size_xy[0] < sizeX:
             menu_size_xy[0] = sizeX
@@ -3677,7 +2802,7 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
     P_soft_bg = screenState.colorPairs["tab_soft_bg"]
     P_select = screenState.colorPairs["tab_select"]
     P_selected = screenState.colorPairs["tab_selected"]
-    P_win_selected = screenState.colorPairs["win_select"]
+    P_win_selected = screenState.colorPairs["win_selected"]
     if tab_scope_is_active:
         P_win_selected = screenState.colorPairs["body"]
     P_win_background = screenState.colorPairs["tab_soft"]
@@ -4002,7 +3127,7 @@ def factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState: 
 
     # TODO it always active?
     if activeScope is screenState.activeScope:
-        activeScope.update()
+        activeScope.update_legacy()
     screenState.selection = activeScope.cursor
 
     # new menu
@@ -4203,95 +3328,22 @@ def screen_spend_bundles(stdscr, keyboardState, screenState, fullNodeState: Full
 
 def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
 
-    menu_items = [
-        ('blocks', screen_blocks, activate_scope),
-        ('memepool', screen_memepool, activate_scope),
-        ('spend bundle', screen_spend_bundles, activate_scope)
-    ]
+    if DEBUGGING:
+        menu_items = [
+            ('blocks', screen_blocks, activate_scope),
+            ('memepool', screen_memepool, activate_scope),
+            ('spend bundles', screen_spend_bundles, activate_scope)
+        ]
+    else:
+        menu_items = [
+            ('blocks', screen_blocks, activate_scope),
+        ]
+
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
-#    width = screenState.screen_size.x
-#    height = screenState.screen_size.y
-#
-#    full_win = createFullSubWin(stdscr, screenState, height, width)
-#    full_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
-#
-#    activeScope: Scope = screenState.activeScope
-#    screenState.scope_exec_args = [screenState]
-#
-#    if len(activeScope.sub_scopes) == 0:
-#
-#        for name, handler, exec_fun in menu_items:
-#            newScope = Scope(name, handler, screenState)
-#            newScope.exec = exec_fun
-#            newScope.parent_scope = activeScope
-#            activeScope.sub_scopes[name] = newScope
-#
-#    # TODO it always active?
-#    if activeScope is screenState.activeScope:
-#        activeScope.update()
-#    screenState.selection = activeScope.cursor
-#
-#    # menu dimension
-#    yDimMenu = len(activeScope.sub_scopes) * FUTURE_FONT.height
-#    longestLine = ''
-#    xDimMenu = 0
-#    for i in activeScope.sub_scopes.keys():
-#        if len(i) > xDimMenu:
-#            xDimMenu = len(i)
-#            longestLine = i
-#
-#    xDimMenu, a = UItext.sizeText(longestLine, FUTURE_FONT)
-#
-#    if height > yDimMenu * 2 and width > xDimMenu * 2:
-#
-#        xMenu = int(width / 2 - xDimMenu / 2)
-#        yMenu = int(height / 2 - yDimMenu / 2)
-#
-#        menu_select(full_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
-#                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-#                    True)
-#    else:
-#        # menu dimension
-#        yDimMenu = len(activeScope.sub_scopes)
-#        xDimMenu = 0
-#        for i in activeScope.sub_scopes.keys():
-#            if len(i) > xDimMenu:
-#                xDimMenu = len(i)
-#
-#        xMenu = int(width/2 - xDimMenu / 2)
-#        yMenu = int(height/2 - yDimMenu / 2)
-#
-#        menu_select(full_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
-#                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-#                    False)
-#
 
 
 def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
-# Network: mainnet    Port: 8444   RPC Port: 8555
-# Node ID: dab6ea4ed2076b13c3c15998aeb5dd0e4d7e5779aeef973beaf6147063e19629
-# Genesis Challenge: ccd5bb71183532bff220ba46c268991a3ff07eb358e8255a65c30a2dce0e5fbb
-# Current Blockchain Status: Full Node Synced
-#
-# Peak: Hash: 98b826e0132724f0895f0252f8894047b6baa0e63e27231bd7f31e3ce46424a6
-#       Time: Wed Jul 17 2024 17:03:51 CEST                  Height:    5656246
-#
-# Estimated network space: 22.902 EiB
-# Current difficulty: 16640
-# Current VDF sub_slot_iters: 578813952
-#
-#   Height: |   Hash:
-#   5656246 | 98b826e0132724f0895f0252f8894047b6baa0e63e27231bd7f31e3ce46424a6
-#   5656245 | b9f3e73a7e1c7fbc2b163ad450a57a2d631f541a1ead30d6d39c2b819454ed26
-#   5656244 | be621f7003ce70bff6d6d41566e4b510b2550c994ba091e772c4c6883bbcff95
-#   5656243 | 99035b60fc332dd4de20bae9bfe32302e69fe5ca21c57f14bb46c845ae0821a5
-#   5656242 | 477131b5d0e8cd6f38909753549356399068db3896a5bc70c8014275fa9919fc
-#   5656241 | 500c1e6d3f0c351c6809bac71a826f1c6d2f3b04b73e7e6fad598017a942dc1b
-#   5656240 | 2ce0809ed02d30e9108881c1e9197ca1b4b29e741b24cefb50108218fb09ef91
-#   5656239 | 5e07d8fd677030a7217fcafe98d77982adae4d90d8e410432180d84590d21580
-#   5656238 | 72335e955d4ed42451e87a3903855ae9d4a91d622f6a1107552f12baff602e44
-#   5656237 | 0e4cfc51ac936b939cd6dbb7853efbad4c4260f5db8d37f0716ab3c766ca53d3
 
     active_scope: Scope = screenState.activeScope
     main_scope: Scope = active_scope.main_scope
@@ -4315,11 +3367,6 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     ## TODO: move the sorting of the mempool outside the UI loop
     mempool_items = fullNodeState.deepcopy_mempool()
 
-    max_block_cost = 11_000_000_000  # 11billion - https://docs.chia.net/chia-blockchain/coin-set-model/costs/
-    # sometime i get the strings instead of mempool dics
-    for i, e in mempool_items.items():
-        print(i)
-        print(e)
     sorted_mempool = sorted(list(mempool_items.values()), key=lambda item: item.fee_per_cost)  # sorted by fee per cost
 
     # create mempool block
@@ -4329,14 +3376,10 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
         current_block: WDB.MempoolBlock = mempool_blocks[-1]
         if max_cost < item.cost:
             max_cost = item.cost
-        if current_block.total_cost + item.cost <= max_block_cost:
+        if current_block.total_cost + item.cost <= BLOCK_MAX_COST:
             current_block.add_item(item)
         else:
             mempool_blocks.append(WDB.MempoolBlock())
-
-    logging(server_logger, "DEBUG", f"mempool {mempool_blocks}")
-    logging(server_logger, "DEBUG", f"mempool block sum {mempool_blocks[0]}")
-
 
     lapper.clocking('meme')
     # load blocks
@@ -4345,6 +3388,11 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
     ### colors
     P_text = screenState.colorPairs["body"]
+    P_foot = screenState.colorPairs["footer"]
+    P_synced = screenState.colorPairs["block_band_synced"]
+    P_syncing = screenState.colorPairs["block_band_syncing"]
+    P_no_sync = screenState.colorPairs["block_band_no_sync"]
+
     ### sub win
     height = screenState.screen_size.y
     width = screenState.screen_size.x
@@ -4358,7 +3406,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     node_data = createFullSubWin(stdscr, screenState, height, width)
     node_data.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
 
-    pos = UIgraph.Point(2,2)
+    pos = UIgraph.Point(2,1)
     main_win_size = node_data.getmaxyx()
     main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
     block_band_size = UIgraph.Point(main_win_size.x - pos.x * 2, 10)
@@ -4376,23 +3424,53 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     peak_timestamp = full_node_meta.peak_timestamp
     if peak_timestamp:
         peak_timestamp = datetime.fromtimestamp(peak_timestamp).strftime('%Y-%m-%d %H:%M:%S')
-        main_scope.data["peak_timestamp"]
-    else:
-        peak_timestamp = main_scope.data["peak_timestamp"]
+        #main_scope.data["peak_timestamp"]
+    #else:
+    #    peak_timestamp = main_scope.data["peak_timestamp"]
 
     ### node summary
     local = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     sync_status = "synced"
+    peak_height_header = peak_height
+
+    P_header = P_synced
     if not synced:
         if sync_mode:
+            P_header = P_syncing
             sync_status = "syncing"
         else:
+            P_header = P_no_sync
             sync_status = "not syncing"
 
-    text = f"Peak: {peak_height}    sync status: {sync_status}   local time: {local}  chain time: {peak_timestamp}"
+        sync_max_block = full_node_meta.sync_tip_height
+        sync_current_block = full_node_meta.sync_progress_height
+        peak_height_header = f"{sync_current_block}/{sync_max_block} ({sync_max_block - sync_current_block} behind)"
 
-    ELEMENTS.create_text(node_data, pos, ' ' * block_band_size.x, P_text, True, inv_color=True)
-    ELEMENTS.create_text(node_data, pos, text, P_text, True, inv_color=True)
+
+    local_time = f"local time: {local}"
+    chain_time = f"chain time: {peak_timestamp}"
+
+    text_list = []
+    text_list.append(f"network: {network_name}")
+    text_list.append(f"sync status: {sync_status}")
+    text_list.append(f"peak: {peak_height}")
+    text_list.append(f"netspace: {space[0]:.3f}{space[1]}")
+
+    spacing = ' ' * 4
+    tot_len = len(local_time + spacing)
+    text = ''
+    for i in text_list:
+        tot_len += len(str(i))
+        if tot_len < block_band_size.x:
+            text = text + str(i) + spacing
+
+    ELEMENTS.create_text(node_data, pos, ' ' * block_band_size.x, P_header, True, inv_color=True)
+    ELEMENTS.create_text(node_data, pos, text, P_header, True, inv_color=True)
+    ELEMENTS.create_text_aligned(node_data, pos, f"chain time: {peak_timestamp}", P_header, align_h=2, bold=True, inv_color=True)
+    # local/chain time superimposition
+    pos_local = pos + UIgraph.Point(0, 1)
+    #ELEMENTS.create_text(node_data, pos_local, ' ' * block_band_size.x, P_text, True, inv_color=True)
+    ELEMENTS.create_text_aligned(node_data, pos_local, f"local time: {local}", P_text, align_h=2, bold=True, inv_color=False)
     pos += UIgraph.Point(0, 2)
 
     ### go to block
@@ -4403,9 +3481,9 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
             return scope.parent_scope
 
     pre_text = "Go to block: "
+    prompt_lenght = min(80, width - 4)
     scope_go_to = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'go to block', pos,
-                                         pre_text, 80, P_text, True, False, custom_scope_function=go_to_block,
-                                         invalid_data_message='invalid input. Use int or hash')
+                                         pre_text, prompt_lenght, P_text, True, False, custom_scope_function=go_to_block)
     pos += UIgraph.Point(0,3)
 
     def to_int(text: str):
@@ -4418,155 +3496,168 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     lapper.clocking('block loader')
     if blocks_loader is not None:
 
-        block_band_scope = ELEMENTS.create_block_band(stdscr, screenState, main_scope,
-                                   "block_band", pos, block_band_size, mempool_blocks, 
-                                   blocks_loader, height_last_block)
+        block_band_scope = ELEMENTS.create_block_band(stdscr, keyboardState, screenState, main_scope,
+                                                      "block_band", pos, block_band_size, mempool_blocks,
+                                                      blocks_loader, height_last_block, synced)
 
         if 'pressed_enter' in scope_go_to.data and scope_go_to.data['pressed_enter']:
             scope_go_to.data['pressed_enter'] = False
-            prompt = to_int(scope_go_to.data['prompt'])
-            if prompt:
+
+
+            prompt = scope_go_to.data['prompt']
+            input_type = classify_number(prompt)
+            height = None
+
+            match input_type:
+                case 'int':
+                    input = int(prompt)
+                    if input <= height_last_block and input >= 0:
+                        height = input
+                    else:
+                        scope_go_to.data['valid_data'] = False
+                        scope_go_to.data["invalid_data_message"] = 'height out of range'
+
+                case 'hex':
+
+                    prompt = prompt.removeprefix("0x").removeprefix("0X")
+                    if len(prompt) == 64:
+                        hash = bytes32.fromhex(prompt)
+                        conn = blocks_loader.create_sql_conneciton()
+                        table = 'full_blocks'
+                        fetcher = WDB.make_sql_fetcher(table)
+                        block = fetcher(conn, 0, 1, filters={'header_hash':hash})
+                        if len(block) < 1:
+                            scope_go_to.data['valid_data'] = False
+                            scope_go_to.data["invalid_data_message"] = 'hash not found'
+                        else:
+                            height = block[0][2]  # from the tuple select the third element > block_height
+                    else:
+                        scope_go_to.data['valid_data'] = False
+                        scope_go_to.data["invalid_data_message"] = 'hash must be 32 bytes'
+
+                case 'invalid':
+                    scope_go_to.data['valid_data'] = False
+                    scope_go_to.data["invalid_data_message"] = 'invalid input. Use int or hash'
+
+            if height:
                 scope_go_to.data['prompt'] = ''
                 scope_go_to.data['cursor'] = 0
-                blocks_loader.update_offset_and_item(prompt)
-                blocks_loader.update_loader()
-                block_band_scope.cursor = prompt
-                block_band_scope.data["idx_last_item"] = prompt
-            else:
-                scope_go_to.data['valid_data'] = False
+                blocks_loader.update_offset(height)
+                blocks_loader.start_updater_thread()
+                #block_band_scope.cursor = height
+                main_scope.cursor_x = height
+
+                # offset selected block on the right if possible
+                right_block_offset = 2
+                if height_last_block - height < right_block_offset:
+                    right_block_offset = 0
+                block_band_scope.data["idx_last_item"] = height + right_block_offset
+                #activate_scope_from_sibling(block_band_scope, screenState)
+                select_next_scope(scope_go_to, screenState)
 
 
-    pos += UIgraph.Point(0, block_band_size.y + 1)
+    pos += UIgraph.Point(0, block_band_size.y + 0)
 
     lapper.clocking('block band')
 
-    ELEMENTS.create_text(node_data, pos, "chia show -s:", P_text, True)
-    pos += UIgraph.Point(0, 2)
-
-    row = pos.y
-    col = 4
-
-    node_data.addstr(row, col, f"cursor position: y:{block_band_scope.cursor} x:{block_band_scope.cursor_x}")
+    # show data
 
     if block_band_scope.data['on_peak']:
-        try:
 
-            node_data.addstr(row, col, f"cursor position: y:{block_band_scope.cursor} x:{block_band_scope.cursor_x}")
-            row += 1
+        #ELEMENTS.create_text(node_data, pos, "chia show -s       ", P_text, True, inv_color=True)
+        #pos += UIgraph.Point(0, 2)
 
-            node_data.addstr(row, col, f"Network: {network_name}    Port: {full_node_port}   RPC Port: {full_node_rpc_port}")
+        # chia show data
+        chia_show_data = []
+        chia_show_label = []
 
-            row += 1
-            node_data.addstr(row, col, f"Node ID: {node_id}")
-            row += 1
-            node_data.addstr(row, col, f"Genesis Challenge: {genesis_challenge}")
-            row += 1
+        chia_show_label.append("Node ID")
+        chia_show_data.append(node_id)
 
-            peak_hash = full_node_meta.peak_header_hash
-            peak_height = full_node_meta.peak_height
-            peak_timestamp = full_node_meta.peak_timestamp
+        chia_show_label.append("Port")
+        chia_show_data.append(full_node_port)
 
-            if synced:
-                node_data.addstr(row, col, f"Current Blockchain Status: Full Node Synced. Height: {peak_height}")
-                row += 1
-                node_data.addstr(row, col, f"Peak: Hash: {peak_hash}")
-                # what kind of object is peak? block i suppose
-                # check that the challenge block info hash is the header hash
-                #node_data.addstr(row, col, f"Peak: Hash: {peak.header_hash}")
-                row += 1
-            elif peak_height is not None and sync_mode:
-                sync_max_block = full_node_meta.sync_tip_height
-                sync_current_block = full_node_meta.sync_progress_height
-                node_data.addstr(row, col, f"Current Blockchain Status: Syncing {sync_current_block}/{sync_max_block} ({sync_max_block - sync_current_block} behind)."
-                )
-                row += 1
-                node_data.addstr(row, col, f"Peak: Hash:  {peak_hash}")
-                row += 1
-            elif peak_height is not None:
-                node_data.addstr(row, col, f"Current Blockchain Status: Not Synced. Peak height: {peak_height}")
-                row += 1
-            else:
-                node_data.addstr(row, col, "Searching for an initial chain")
-                row += 1
-                node_data.addstr(row, col, "You may be able to expedite with 'chia peer full_node -a host:port' using a known node.\n")
-                row += 1
+        chia_show_label.append("RPC port")
+        chia_show_data.append(full_node_rpc_port)
 
-            node_data.addstr(row, col, f"finished challenge: {full_node_meta.finished_challenge_slot_hashes}, "
-                                       f"infused: {full_node_meta.finished_infused_challenge_slot_hashes}, "
-                                       f"reward: {full_node_meta.finished_reward_slot_hashes}")
+        chia_show_label.append("Genesis Challenge")
+        chia_show_data.append(genesis_challenge)
 
-            row += 1
-            node_data.addstr(row, col, f"prev hash: {full_node_meta.prev_hash}")
-            row += 1
-            node_data.addstr(row, col, f"prev transaction hash: {full_node_meta.prev_transaction_block_hash}")
-            row += 1
+        peak_hash = full_node_meta.peak_header_hash
+        #peak_height = full_node_meta.peak_height
+        #peak_timestamp = full_node_meta.peak_timestamp
 
-            if peak_height is not None:
-                if peak_timestamp:
-                    peak_time = peak_timestamp
-                else:
-                    curr_block: WDB.BlockState = blocks_loader.get_item_by_idx(peak_height)
-                    #curr_block_record = call_rpc_node('get_block_record', header_hash=peak['prev_hash'])
-                    prev_block_idx = peak_height - 1
-                    print("peak heihgt ", peak_height)
-                    print("curr block ", curr_block)
-                    while curr_block is not None and curr_block.is_transaction_block is not True:
-                        curr_block = blocks_loader.get_item_by_idx(prev_block_idx)
-                        prev_block_idx -= 1
-                    peak_time = curr_block.timestamp
+        if synced:
+            chia_show_label.append(f"Current Blockchain Status: Full Node Synced. Height")
+            chia_show_data.append(peak_height)
 
-                peak_time_struct = time.struct_time(time.localtime(peak_time))
+            #chia_show_label.append(f"Peak: Hash")
+            #chia_show_data.append(peak_hash)
 
-                node_data.addstr(row, col, f"      Time: {time.strftime('%a %b %d %Y %T %Z', peak_time_struct)}                 Height: {peak_height:>10}")
-                row += 1
+        elif peak_height is not None and sync_mode:
+            sync_max_block = full_node_meta.sync_tip_height
+            sync_current_block = full_node_meta.sync_progress_height
 
-                node_data.addstr(row, col, f"Estimated network space: {space}")
-                row += 1
-                #node_data.addstr(row, col, format_bytes(blockchain_state["space"]))
-                node_data.addstr(row, col, f"Current difficulty: {difficulty}")
-                row += 1
-                node_data.addstr(row, col, f"Current VDF sub_slot_iters: {sub_slot_iters}")
-                row += 1
-                #node_data.addstr(row, col, "\n  Height: |   Hash:")
+            chia_show_label.append(f"Current Blockchain Status: Syncing")
+            chia_show_data.append(f"{sync_current_block}/{sync_max_block}")
 
-            else:
-                peak_time = uint64(0)
+            chia_show_label.append("behind")
+            chia_show_data.append(f"{sync_max_block - sync_current_block}")
 
-            row += 2
-            # show last 7 blocks
-            # TODO: Load last 7 blocks
-            # last_block_records = call_rpc_node('get_block_records', start=peak_height - 7, end=peak_height)
+        elif peak_height is not None:
+            chia_show_label.append(f"Current Blockchain Status: Not Synced. Peak height")
+            chia_show_data.append(peak_height)
 
-            # for br in reversed(last_block_records):
-            #     br_hash = br['header_hash']
-            #     br_height = br['height']
-            #     br_timestamp = br['timestamp']
-            #     node_data.addstr(row, col, f"{br_height} | {br_hash} | is_tx: {br_timestamp}")
-            #     row += 1
+        else:
+            node_data.addstr(row, col,)
+            chia_show_label.append("Searching for an initial chain")
+            chia_show_data.append("You may be able to expedite with 'chia peer full_node -a host:port' using a known node.")
 
-        except Exception as e:
-            print(e)
-            print("except what?")
-            traceback.print_exc()
-    else:
-        try:
-            current_block: WDB.BlockState = blocks_loader.get_current_item()
-            block_data = current_block.block_state_to_2d_list()
-            pos = UIgraph.Point(col, row)
-            block_legend = ['property', 'value']
-            max_y = main_win_size.y - pos.y - 3
-            tab_size = UIgraph.Point(80, max_y)
-        except:
-            print("bug while syncing, current block is None")
-            print(f"current block: {current_block}")
+            chia_show_label.append(f"Finished challenge")
+            chia_show_data.append(full_node_meta.finished_challenge_slot_hashes)
+
+            chia_show_label.append("infused")
+            chia_show_data.append(full_node_meta.finished_infused_challenge_slot_hashes)
+
+            chia_show_label.append("Reward")
+            chia_show_data.append(full_node_meta.finished_reward_slot_hashes)
+
+            chia_show_label.append(f"prev hash")
+            chia_show_data.append(full_node_meta.prev_hash)
+
+            chia_show_label.append(f"prev transaction hash")
+            chia_show_data.append(full_node_meta.prev_transaction_block_hash)
+
+        if peak_height is not None:
+            chia_show_label.append(f"Peak - Hash")
+            chia_show_data.append(peak_hash)
+
+            chia_show_label.append("Peak - Time")
+            chia_show_data.append(peak_timestamp)
+
+            chia_show_label.append("Peak - Height")
+            chia_show_data.append(peak_height)
+
+            chia_show_label.append(f"Estimated network space {space[1]}")
+            chia_show_data.append(f"{space[0]:.4f}")
 
 
+            chia_show_label.append(f"Current difficulty")
+            chia_show_data.append(difficulty)
+
+            chia_show_label.append("Current VDF sub_slot_iters")
+            chia_show_data.append(sub_slot_iters)
+
+        chia_show = [chia_show_label, chia_show_data]
+        legend = ["chia show -s", ""]
+        max_y = main_win_size.y - pos.y - 3
+        tab_size = UIgraph.Point(80, len(chia_show_data) + 1)
 
         ELEMENTS.create_tab(node_data,
                             screenState,
                             main_scope,
-                            "current_bloc",
-                            block_data,
+                            "chia_show_s",
+                            chia_show,
                             None,
                             None,
                             True,
@@ -4575,8 +3666,119 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                             keyboardState,
                             exit_scope,
                             False,
-                            False,
-                            block_legend)
+                            False,)
+
+        pos += UIgraph.Point(0, len(chia_show_data) + 2)
+
+        # last 10 block
+        count = 0
+        last_10_blocks = [[],[],[]]
+        print(peak_height)
+        print("peak")
+        peak_height = int(peak_height)
+        try:
+            while count < 10:
+                h = peak_height - count
+                curr_block: WDB.BlockState = blocks_loader.get_item_by_idx(h)
+                a = curr_block.header_hash
+                last_10_blocks[0].append(h)
+                last_10_blocks[1].append(curr_block.header_hash)
+                if curr_block.is_transaction_block:
+                    last_10_blocks[2].append("trx")
+                else:
+                    last_10_blocks[2].append("")
+                count += 1
+        except Exception as e:
+            print("except last blocks")
+            print(e)
+            print("height: ", h)
+            global DEBUG_OBJ
+            DEBUG_OBJ.text += ( f"HASHHHH: {count} and {h} exc: {e}")
+
+            none_list = [None] * 10
+            #last_10_blocks = [none_list, none_list, none_list]
+            while count < 10:
+                last_10_blocks[0].append(None)
+                last_10_blocks[1].append(None)
+                last_10_blocks[2].append(None)
+                count += 1
+
+        block_legend = ['height', 'header hash', 'block type']
+        max_y = main_win_size.y - pos.y - 3
+        if max_y > 4:
+            tab_size = UIgraph.Point(80, max_y)
+
+            ELEMENTS.create_tab(node_data,
+                                screenState,
+                                main_scope,
+                                "last_blocks",
+                                last_10_blocks,
+                                None,
+                                None,
+                                True,
+                                pos,
+                                tab_size,
+                                keyboardState,
+                                exit_scope,
+                                False,
+                                False,
+                                block_legend)
+
+    else:
+
+        try:
+            if main_scope.cursor_x == -1:
+                blocks_loader.update_offset(0)
+                zero_block: WDB.BlockState = blocks_loader.get_current_item()
+                b_block: WDB.BlockState = zero_block.operational_error()
+                block_data = b_block.b_block_to_2d_list()
+                block_legend = ['property', 'value']
+            else:
+                current_block: WDB.BlockState = blocks_loader.get_current_item()
+                block_data = current_block.block_state_to_2d_list()
+                block_legend = ['property', 'value']
+
+            max_y = main_win_size.y - pos.y - 3
+            tab_size = UIgraph.Point(80, max_y)
+
+        except:
+            print("bug while syncing, current block is None")
+            print(f"current block: {current_block}")
+            print(f"current offset: {blocks_loader.current_offset}")
+            block_states, first_idx = blocks_loader.get_items_hot_chunks()
+            for n, i in enumerate(block_states):
+                print(n, ' - ', i)
+            print("it happens if the peak is updated but the block_loader is still not")
+            print("we should show no data untill it is available")
+            print("PEND")
+            print(main_scope.cursor_x)
+
+
+
+        block_scope = ELEMENTS.create_tab(node_data,
+                                          screenState,
+                                          main_scope,
+                                          "current_bloc",
+                                          block_data,
+                                          None,
+                                          None,
+                                          True,
+                                          pos,
+                                          tab_size,
+                                          keyboardState,
+                                          exit_scope,
+                                          False,
+                                          False,
+                                          block_legend)
+        # this should be an option of the create tab
+        block_scope.exec_esc = select_prev_scope
+
+    # run copy/paste action or other pending stuffs
+
+    if len(screenState.pending_action) > 0:
+        for i, fn in screenState.pending_action:
+            fn()
+        screenState.pending_action = []
 
     lapper.clocking('block data')
     lapper.end()
@@ -4611,7 +3813,6 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
             main_scope.data["watch_later"] = False
         else:
             main_scope.data["watch_later"] = True
-
 
 
     if keyboardState.key == 'w':
@@ -4895,77 +4096,94 @@ if True:
 # scope execution. Easier to change a scope behaviuor if needed.
 # EG: func_input_proces_visual, func_input_process_insert
 # and call it when the scope is active
-def keyboard_processing(screen_state: ScreenState, keyboard_state: KeyboardState,
-                        active_scope: Scope, key):
+def keyboard_processing(stdscr, screen_state: ScreenState, keyboard_state: KeyboardState,
+                        active_scope: Scope):
 
-    if key >= 0:
-        keyboard_state.key = chr(key)
+    exit_roto = False
 
-    if key == curses.KEY_ENTER or key == 10 or key == 13:
-        keyboard_state.enter = True
-        return
-    if key == 27:
-        keyboard_state.esc = True
-        return
-    if key == 6:  # ctrl-f
-        CONFtiller.FIGLET = not CONFtiller.FIGLET
+    while True:
+        key = stdscr.getch()
+        if key == -1:
+            break
 
-    match active_scope.mode:
-        case ScopeMode.INSERT:
-            match key:
-                case curses.KEY_BACKSPACE:
-                    idx = active_scope.data['cursor'] - 1
-                    if idx < 0:
-                        pass
-                    else:
+        if key >= 0:
+            keyboard_state.key = chr(key)
+
+        if key == curses.KEY_ENTER or key == 10 or key == 13:
+            keyboard_state.enter = True
+            return
+        if key == 27:
+            keyboard_state.esc = True
+            return
+        if key == 6:  # ctrl-f
+            CONFtiller.FIGLET = not CONFtiller.FIGLET
+
+        if key == ord('q'):
+            exit_roto = True
+
+        match active_scope.mode:
+            case ScopeMode.INSERT:
+                match key:
+                    case curses.KEY_BACKSPACE:
+                        idx = active_scope.data['cursor'] - 1
+                        if idx < 0:
+                            pass
+                        else:
+                            s = active_scope.data['prompt']
+                            active_scope.data['prompt'] = s[:idx] + s[idx + 1:]
+                            active_scope.data['cursor'] -= 1
+                    case curses.KEY_DC:
+                        idx = active_scope.data['cursor']
                         s = active_scope.data['prompt']
-                        active_scope.data['prompt'] = s[:idx] + s[idx + 1:]
+                        if idx > len(s):
+                            pass
+                        else:
+                            active_scope.data['prompt'] = s[:idx] + s[idx + 1:]
+                    case curses.KEY_LEFT:
                         active_scope.data['cursor'] -= 1
-                case curses.KEY_DC:
-                    idx = active_scope.data['cursor']
-                    s = active_scope.data['prompt']
-                    if idx > len(s):
+                    case curses.KEY_RIGHT:
+                        active_scope.data['cursor'] += 1
+                    case curses.KEY_UP:
                         pass
-                    else:
-                        active_scope.data['prompt'] = s[:idx] + s[idx + 1:]
-                case curses.KEY_LEFT:
-                    active_scope.data['cursor'] -= 1
-                case curses.KEY_RIGHT:
-                    active_scope.data['cursor'] += 1
-                case 22:  # ctrl-v
+                    case curses.KEY_DOWN:
+                        pass
+                    case 22:  # ctrl-v
+                        keyboard_state.paste = True
+                    case _:
+                        idx = active_scope.data['cursor']
+                        s = active_scope.data['prompt']
+                        active_scope.data['prompt'] = s[:idx] + chr(key) + s[idx:]
+                        active_scope.data['cursor'] += 1
+
+            case ScopeMode.VISUAL:
+
+                if key == ord('j') or key == curses.KEY_DOWN:
+                    keyboard_state.moveDown = True
+                if key == ord('k') or key == curses.KEY_UP:
+                    keyboard_state.moveUp = True
+                if key == ord('h') or key == curses.KEY_LEFT:
+                    keyboard_state.moveLeft = True
+                if key == ord('l') or key == curses.KEY_RIGHT:
+                    keyboard_state.moveRight = True
+                if key == curses.KEY_MOUSE:
+                    keyboard_state.mouse = True
+                if key == ord('y'):
+                    keyboard_state.yank = True
+                if key == ord('0') or key == curses.KEY_HOME:
+                    keyboard_state.home = True
+                if key == 22 or key == ord('p'):  # ctrl-v
                     keyboard_state.paste = True
-                    print('key paste')
-                case (-1):
-                    pass
-                case _:
-                    idx = active_scope.data['cursor']
-                    s = active_scope.data['prompt']
-                    active_scope.data['prompt'] = s[:idx] + chr(key) + s[idx:]
-                    active_scope.data['cursor'] += 1
 
-        case ScopeMode.VISUAL:
-
-            if key == ord('j') or key == curses.KEY_DOWN:
-                keyboard_state.moveDown = True
-            if key == ord('k') or key == curses.KEY_UP:
-                keyboard_state.moveUp = True
-            if key == ord('h') or key == curses.KEY_LEFT:
-                keyboard_state.moveLeft = True
-            if key == ord('l') or key == curses.KEY_RIGHT:
-                keyboard_state.moveRight = True
-            if key == curses.KEY_MOUSE:
-                keyboard_state.mouse = True
-            if key == ord('y'):
-                keyboard_state.yank = True
-                print('key yank')
-            if key == ord('p'):
-                keyboard_state.paste = True
-                print('key paste')
+    return exit_roto
 
 
 def keyboard_execution(screen_state: ScreenState, keyboard_state: KeyboardState,
                        active_scope: Scope):
 
+    # TODO: move keyboard execution to the active screen
+    ## and re-think the scope activation/execution
+    ## now: exec_child when there are child
+    ## or exec_own when there are no child
     if keyboard_state.enter is True:
         active_scope.exec_child(*screen_state.scope_exec_args)
         return
@@ -4981,15 +4199,31 @@ def keyboard_execution(screen_state: ScreenState, keyboard_state: KeyboardState,
     if keyboard_state.moveDown:
         active_scope.cursor += 1
         screen_state.selection = 1
+    # flipped for block_band
     if keyboard_state.moveLeft:
-        active_scope.cursor_x -= 1
-    if keyboard_state.moveRight:
         active_scope.cursor_x += 1
+    if keyboard_state.moveRight:
+        active_scope.cursor_x -= 1
 
 
 def interFace(stdscr):
 
     try:
+        #### cursor init ####
+        key = 0
+        curses.curs_set(0)  # set cursor visibility
+        stdscr.nodelay(True)
+        stdscr.erase()
+        stdscr.refresh()
+        # Enable mouse events
+        curses.mousemask(curses.ALL_MOUSE_EVENTS)
+
+        # trying to stop print
+        # curses.noecho()
+        # curses.cbreak()
+
+
+        ### wallets states ###
         data_lock = threading.Lock()
         fingers_state: List[FingerState] = []
         fingers_list: List[int] = []
@@ -4997,6 +4231,7 @@ def interFace(stdscr):
         count_server = [0]
         coins_data: Dict[str, CoinPriceData] = {}
 
+        ### timing ###
         frame_start = None
         frame_end = None
         frame_time = 0
@@ -5008,6 +4243,12 @@ def interFace(stdscr):
         frame_time_curses_max = 0
         frame_time_curses_display = 0
 
+
+        ### check full node ###
+        node_status = call_rpc_node('healthz')
+
+
+        ### wallet data ###
         # load data from WDB
         # create the WDB or load the data
         conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
@@ -5024,210 +4265,37 @@ def interFace(stdscr):
                                                coins_data,
                                                count_server),
                                          daemon=True)
-        wallet_thread.start()
+        ##### WALLET STOPPED
+        #wallet_thread.start()
 
-        ### create DB for spend_bundle
+        ### spend_bundles data ###
         conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
         WDB.create_spend_bundle_db(conn)
-        
+
         logging(server_logger, "DEBUG", f"NODE STATE {DB_SB}' initialized successfully.")
         conn.close()
 
-        key = 0
-
-        curses.curs_set(0)  # set cursor visibility
-        stdscr.nodelay(True)
-        stdscr.erase()
-        stdscr.refresh()
-        # Enable mouse events
-        curses.mousemask(curses.ALL_MOUSE_EVENTS)
-
-        # trying to stop print
-        # curses.noecho()
-        # curses.cbreak()
 
         screenState = ScreenState()
         screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
 
-        fullNodeState: FullNodeState = FullNodeState(DB_BLOCKCHAIN_RO)
+        ### TODO to fun
+        try:
+            fullNodeState: FullNodeState = FullNodeState(DB_BLOCKCHAIN_RO)
 
-        node_state_thread = threading.Thread(target=fullNodeState.update_state,
-                                             args=(screenState,), daemon=True)
-        node_state_thread.start()
+            node_state_thread = threading.Thread(target=fullNodeState.update_state,
+                                                 args=(screenState,), daemon=True)
+            node_state_thread.start()
+        except:
+            print("full node not running")
 
 
         # Start colors in curses
         curses.start_color()
-        curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
-        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_CYAN)
-        curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_RED)
-        curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_YELLOW)
-        curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLACK)
-        curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_GREEN)
-        curses.init_pair(7, curses.COLOR_GREEN, curses.COLOR_BLACK)
-
-        # curse customs colors
-        screenState.cursesColors = UIgraph.CustomColors(10)
-        white = (254, 250, 250)
-        darkBlue = (60, 70, 120)
-
-        # creare nomi delle cose da colorare piu che il nome del colore
-        # riservare altri n. colori per la palette dell'interfacci e poi altri colori
-
-        white_id = UIgraph.addCustomColor(white, screenState.cursesColors)
-        darkBlue_id = UIgraph.addCustomColor(darkBlue, screenState.cursesColors)
-        # colors: header, footer, main_screen
-
-        global white_darkBlue  # avoid using a global for colors
-        white_darkBlue = UIgraph.addCustomColorTuple(
-            (white_id, darkBlue_id),
-            screenState.cursesColors)
-        darkBlue_white = UIgraph.addCustomColorTuple(
-            (darkBlue_id, white_id),
-            screenState.cursesColors)
-
-        # screenState.colors["chia_green"] = UIgraph.addCustomColor([92, 206, 113],
-        # screenState.colors["chia_green"] = UIgraph.addCustomColor([0, 165, 37],
-        screenState.colors["chia_green"] = UIgraph.addCustomColor(
-            (47, 165, 67),
-            screenState.cursesColors)
-        screenState.colors["yellow_bee"] = UIgraph.addCustomColor(
-            (255, 190, 0),
-            screenState.cursesColors)
-        screenState.colors["red"] = UIgraph.addCustomColor(
-            (255, 0, 0),
-            screenState.cursesColors)
-        screenState.colors["orange_red"] = UIgraph.addCustomColor(
-            (244, 43, 3),
-            screenState.cursesColors)
-        screenState.colors["orange_ee"] = UIgraph.addCustomColor(
-            (244, 143, 3),
-            screenState.cursesColors)
-        screenState.colors["background"] = UIgraph.addCustomColor(
-            (0, 10, 45),
-            screenState.cursesColors)
-        screenState.colors["azure_up"] = UIgraph.addCustomColor(
-            (80, 150, 210),
-            screenState.cursesColors)
-        screenState.colors["white_down"] = UIgraph.addCustomColor(
-            (250, 245, 245),
-            screenState.cursesColors)
-        screenState.colors["tab_dark"] = UIgraph.addCustomColor(
-            (0, 10, 45),
-            screenState.cursesColors)
-        screenState.colors["tab_soft"] = UIgraph.addCustomColor(
-            (28, 36, 68),
-            screenState.cursesColors)
-        screenState.colors["tab_softer"] = UIgraph.addCustomColor(
-            (38, 46, 78),
-            screenState.cursesColors)
-        screenState.colors["tab_selected"] = UIgraph.addCustomColor(
-            (244, 43, 3),
-            screenState.cursesColors)
-        screenState.colors["bar_dark"] = UIgraph.addCustomColor(
-            (20, 25, 50),
-            screenState.cursesColors)
-        screenState.colors["bar_soft"] = UIgraph.addCustomColor(
-            (35, 40, 80),
-            screenState.cursesColors)
-        screenState.colors["orange_btc"] = UIgraph.addCustomColor(
-            (247, 148, 19),
-            screenState.cursesColors)
-        screenState.colors["white"] = UIgraph.addCustomColor(
-            (244, 245, 250),
-            screenState.cursesColors)
-        screenState.colors["blue_dollar"] = UIgraph.addCustomColor(
-            (46, 121, 204),
-            screenState.cursesColors)
-        screenState.colors["green_dollar"] = UIgraph.addCustomColor(
-            (107, 128, 104),
-            screenState.cursesColors)
-
-        screenState.colorPairs["intro"] = UIgraph.addCustomColorTuple(
-            (curses.COLOR_WHITE, screenState.colors["chia_green"]),
-            screenState.cursesColors)
-        screenState.colorPairs["chia_wallet"] = UIgraph.addCustomColorTuple(
-            (curses.COLOR_WHITE, screenState.colors["chia_green"]),
-            screenState.cursesColors)
-        screenState.colorPairs["chia_wallet_bg"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["header"] = UIgraph.addCustomColorTuple(
-            (curses.COLOR_BLACK, screenState.colors["yellow_bee"]),
-            screenState.cursesColors)
-        screenState.colorPairs["body"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["body_sel"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["background"], screenState.colors["chia_green"]),
-            screenState.cursesColors)
-        screenState.colorPairs["footer"] = UIgraph.addCustomColorTuple(
-            (curses.COLOR_BLACK, screenState.colors["orange_red"]),
-            screenState.cursesColors)
-        screenState.colorPairs["test"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["yellow_bee"], screenState.colors["orange_red"]),
-            screenState.cursesColors)
-        screenState.colorPairs["test_red"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["orange_red"], screenState.colors["orange_red"]),
-            screenState.cursesColors)
-        screenState.colorPairs["up"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["azure_up"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["down"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["white_down"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["tab_dark"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["tab_dark"]),
-            screenState.cursesColors)
-        screenState.colorPairs["tab_soft"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["tab_soft"]),
-            screenState.cursesColors)
-        screenState.colorPairs["tab_soft_bg"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["tab_soft"], screenState.colors["tab_dark"]),
-            screenState.cursesColors)
-        screenState.colorPairs["tab_dark_bg"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["tab_dark"], screenState.colors["tab_soft"]),
-            screenState.cursesColors)
-        screenState.colorPairs["tab_select"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["background"], screenState.colors["chia_green"]),
-            screenState.cursesColors)
-        screenState.colorPairs["tab_selected"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["tab_selected"]),
-            screenState.cursesColors)
-        # double, remove it
-        screenState.colorPairs["win_select"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["yellow_bee"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["error"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["red"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["bar_dark"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["bar_dark"]),
-            screenState.cursesColors)
-        screenState.colorPairs["bar_soft"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["bar_soft"]),
-            screenState.cursesColors)
-        screenState.colorPairs["xch"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["white"], screenState.colors["chia_green"]),
-            screenState.cursesColors)
-        screenState.colorPairs["btc"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["white"], screenState.colors["orange_btc"]),
-            screenState.cursesColors)
-        screenState.colorPairs["dollar"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["white"], screenState.colors["green_dollar"]),
-            screenState.cursesColors)
-        screenState.colorPairs["win_selected"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["yellow_bee"], screenState.colors["background"]),
-            screenState.cursesColors)
-        screenState.colorPairs["copy_banner"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["white"], screenState.colors["tab_softer"]),
-            screenState.cursesColors)
-        screenState.colorPairs["block_band"] = UIgraph.addCustomColorTuple(
-            (screenState.colors["chia_green"], screenState.colors["tab_softer"]),
-            screenState.cursesColors)
+        init_colors(screenState)
 
     except Exception as e:
-        print("color creation")
+        print("problems with services starting and colors creation")
         print(e)
         traceback.print_exc()
 
@@ -5241,24 +4309,28 @@ def interFace(stdscr):
 
     try:
 
-        # begin_x = 38
-        # begin_y = 40
-        height = 50
-        width = 20
-
-        # win = curses.newwin(height, width, begin_y, begin_x)
         frame_start = time.perf_counter()
-        while key != ord('q'):
-            stdscr.erase()
-            keyboardState = KeyboardState()
+        #while key != ord('q'):
+        while not key:
 
-            # update wallet data. (ADD A LOCK HERE)
+            # keyboard input processing
+            activeScope = screenState.activeScope
+            keyboardState = KeyboardState()
+            key = keyboard_processing(stdscr, screenState, keyboardState, activeScope)
+
+            stdscr.erase()
+
+            ### check service threads
+            if node_status and not node_state_thread.is_alive():
+                node_status = False
+
+            ### update wallet data. (ADD A LOCK HERE)
             for fs in fingers_state:
                 screenState.public_keys[fs.fingerprint] = fs
             if screenState.active_pk[0] == 0:
                 screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
 
-            # update coin data
+            ### update coin data
             with data_lock:
                 screenState.coins_data = coins_data
 
@@ -5266,21 +4338,46 @@ def interFace(stdscr):
             screenState.screen_size = UIgraph.Point(width, height)
             windowDim = f"width={width}; height={height}"
             # the 32 and 16 can
-            if width < 32 or height < 16:
+            if width < 80 or height < 24:
                 if width < 32 or height < 4:
                     print("The window terminal is too small")
                     break
-                    # don use curse and print too small
                 else:
                     dinky = stdscr.subwin(height, width, 0, 0)
-                    dinky.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
-                    text = "am i a dinky puppy terminal?"
-                    dinky.addstr(height // 2, width // 2 - len(text) // 2, text)
+                    dinky.bkgd(' ', curses.color_pair(screenState.colorPairs["nonode"]))
+
+                    #text = "am i a dinky puppy terminal?"
+                    #dinky.addstr(height // 2, width // 2 - len(text) // 2, text)
+                    p_h = UIgraph.Point(0, height // 2 - 1)
+                    text = "What am I, some dinky puppy terminal?"
+                    ELEMENTS.create_text_aligned(dinky, p_h, text, screenState.colorPairs["nonode"], bold=True, align_h=1, align_v=0)
+                    p_h += UIgraph.Point(0,1)
+                    text = "I can't even get these punch cards to fit in!"
+                    ELEMENTS.create_text_aligned(dinky, p_h, text, screenState.colorPairs["nonode"], bold=True, align_h=1, align_v=0)
+            elif not node_status:
+                nonode = stdscr.subwin(height, width, 0, 0)
+                nonode.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
+                text = "no active full node founded"
+                P_color = screenState.colorPairs["nonode"]
+                p = UIgraph.Point(width // 2 - len(text) // 2, height // 2)
+                ELEMENTS.create_blinking_text(nonode, p, text, P_color, bold=True)
+
+                ### check for the node at least once every 2 seconds
+                node_status = call_rpc_node('healthz')
+                if node_status:
+                    ### TODO to fun
+                    try:
+                        fullNodeState: FullNodeState = FullNodeState(DB_BLOCKCHAIN_RO)
+
+                        node_state_thread = threading.Thread(target=fullNodeState.update_state,
+                                                             args=(screenState,), daemon=True)
+                        node_state_thread.start()
+                    except:
+                        print("full node not running")
             else:
                 header = stdscr.subwin(1, width, 0, 0)
-                header.bkgd(' ', curses.color_pair(screenState.colorPairs["header"]))
-                # y, x = 0, width - len(windowDim)
-                # header.addstr(y, x, windowDim, curses.color_pair(3)) # it is not possible to write on the last char of a window
+                P_header = screenState.colorPairs["header_W"]
+                header.bkgd(' ', curses.color_pair(P_header))
                 title = 'rototiller'
                 fing_name = ""
                 if screenState.active_pk[0] != 0:
@@ -5294,7 +4391,7 @@ def interFace(stdscr):
                         traceback.print_exc()
 
                 header.addstr(0, 0, f"{title} | {fing_name}")
-                # write on the right but not in the window, but on the main screen
+                # text right aligned on the main screen
                 # fps = f"fps: {fps} | second per frame: {frame_time_display}; "
                 fps = 0
                 fps_real = 0
@@ -5304,7 +4401,9 @@ def interFace(stdscr):
                     curses_percent = frame_time_curses_display / frame_time_display
                 if frame_time_real_display > 0:
                     fps_real = 1 / frame_time_real_display
-                fps = f"fps eff./real: {fps:.1f} / {fps_real:.1f} | blit time ratio: {curses_percent*100:.1f}% | "
+                fps = f"fps eff./real: {fps:.1f} / {fps_real:.1f} "
+                if width > 100:
+                    fps = fps + f"| blit time ratio: {curses_percent*100:.1f}% | "
                 window_info = fps + windowDim
                 y, x = 0, width - len(window_info) - 1
                 header.addstr(y, x, window_info)
@@ -5313,61 +4412,63 @@ def interFace(stdscr):
                 nLinesHeader = (len(title) + len(windowDim)) // width + 1
                 screenState.headerLines = nLinesHeader
 
-                # debug footer
-                # helper
-                footerText = "Movement: down=j up=k left=h right=l confirm=enter back=esc q=quit"
+                # helper footer
+                footerText = f"Movement: ←↑↓→ or vim | confirm=enter back=esc q=quit {screenState.footer_text}"
+                screenState.footer_text = ""
                 nLines = int(len(footerText) / width + 1)
                 footer = stdscr.subwin(nLines, width, height-nLines, 0)
-                footer.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
+                P_footer = screenState.colorPairs["footer"]
+                P_footer = P_header
+                footer.bkgd(' ', curses.color_pair(P_header))
                 footer.addstr(0, 0, footerText)
 
-                # server wallet monitor
-                footerTextDebug = f"server count: {count_server[0]}"
-                if len(fingers_list) >= 1:
-                    footerTextDebug += f", finger 0: {fingers_list[0]}"
-                if len(fingers_list) >= 2:
-                    footerTextDebug += f" finger 1: {fingers_list[1]}"
-                if len(fingers_list) >= 2:
-                    footerTextDebug += f" numbers of wallets [0]: {len(fingers_state[0].wallets)}"
-                    footerTextDebug += f" numbers of wallets [1]: {len(fingers_state[1].wallets)}"
-                with data_lock:
-                    footerTextDebug += f" number of coins_data: {len(coins_data)}"
-                nLinesDebug = int(len(footerTextDebug) / width + 1)
-
-                # colors count
-                n_curses_colors = len(screenState.cursesColors.colors)
-                n_curses_colors_idx = screenState.cursesColors.colorsIndex
-                n_curses_pairs = len(screenState.cursesColors.pairs)
-                n_curses_pairs_idx = screenState.cursesColors.pairsIndex
-
-                footer_colors = f'n. of colors: {n_curses_colors}; n. of pairs: {n_curses_pairs}'
-                footer_colors += f' colors n_idx: {n_curses_colors_idx}'
-                footer_colors += f' pairs n_idx: {n_curses_pairs_idx}'
+                # debug footer
                 extraLines = 1
+                nLinesDebug = 0
+                if DEBUGGING:
+                    footerTextDebug = f"server count: {count_server[0]}"
+                    if len(fingers_list) >= 1:
+                        footerTextDebug += f", finger 0: {fingers_list[0]}"
+                    if len(fingers_list) >= 2:
+                        footerTextDebug += f" finger 1: {fingers_list[1]}"
+                    if len(fingers_list) >= 2:
+                        footerTextDebug += f" numbers of wallets [0]: {len(fingers_state[0].wallets)}"
+                        footerTextDebug += f" numbers of wallets [1]: {len(fingers_state[1].wallets)}"
+                    with data_lock:
+                        footerTextDebug += f" number of coins_data: {len(coins_data)}"
+                    nLinesDebug = int(len(footerTextDebug) / width + 1)
 
-                global DEBUG_TEXT
-                #DEBUG_TEXT = f"{DEBUG_TEXT} --- {DEBUG_OBJ.text}"
-                DEBUG_TEXT = f"obj: {DEBUG_OBJ.text} and class {DEBUGtiller.DebugGlobals.cc_text}"
+                    # colors count
+                    n_curses_colors = len(screenState.cursesColors.colors)
+                    n_curses_colors_idx = screenState.cursesColors.colorsIndex
+                    n_curses_pairs = len(screenState.cursesColors.pairs)
+                    n_curses_pairs_idx = screenState.cursesColors.pairsIndex
 
-                if len(DEBUG_TEXT) > 0:
-                    extraLinesDebug = int(len(DEBUG_TEXT) / width + 1)
-                    extraLines += extraLinesDebug
+                    footer_colors = f'n. of colors: {n_curses_colors}; n. of pairs: {n_curses_pairs}'
+                    footer_colors += f' colors n_idx: {n_curses_colors_idx}'
+                    footer_colors += f' pairs n_idx: {n_curses_pairs_idx}'
 
-                footerDebug = stdscr.subwin(nLinesDebug + extraLines, width,
-                                            height-nLines-nLinesDebug - extraLines,
-                                            0)
-                footerDebug.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
-                footerDebug.addstr(0, 0, footer_colors)
-                footerDebug.addstr(1, 0, footerTextDebug)
-                if len(DEBUG_TEXT) > 0:
-                    footerDebug.addstr(2, 0, DEBUG_TEXT)
+                    global DEBUG_TEXT
+                    #DEBUG_TEXT = f"{DEBUG_TEXT} --- {DEBUG_OBJ.text}"
+                    DEBUG_TEXT = f"obj: {DEBUG_OBJ.text} and class {DEBUGtiller.DebugGlobals.cc_text}"
 
-                screenState.footerLines = nLines + nLinesDebug
+                    if len(DEBUG_TEXT) > 0:
+                        extraLinesDebug = int(len(DEBUG_TEXT) / width + 1)
+                        extraLines += extraLinesDebug
+
+                    footerDebug = stdscr.subwin(nLinesDebug + extraLines, width,
+                                                height-nLines-nLinesDebug - extraLines,
+                                                0)
+                    footerDebug.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
+                    footerDebug.addstr(0, 0, footer_colors)
+                    footerDebug.addstr(1, 0, footerTextDebug)
+                    if len(DEBUG_TEXT) > 0:
+                        footerDebug.addstr(2, 0, DEBUG_TEXT)
+
+                    screenState.footerLines = nLines + nLinesDebug
 
 
                 # screen selection
-                activeScope = screenState.activeScope
-                keyboard_processing(screenState, keyboardState, activeScope, key)
                 activeScope.screen(stdscr, keyboardState,
                                    screenState, fullNodeState)
                 keyboard_execution(screenState, keyboardState, activeScope)
@@ -5379,7 +4480,6 @@ def interFace(stdscr):
             #curses.doupdate()
             stdscr.refresh()
             frame_curses_end = time.perf_counter()
-            key = stdscr.getch()
 
             # curses fps
             frame_time = frame_curses_end - frame_curses_start
@@ -5408,7 +4508,7 @@ def interFace(stdscr):
                 frame_time_real_max = frame_time
 
             # update counter
-            if frame_time_total > 0.1: # update rate
+            if frame_time_total > 0.1:  # update rate
                 frame_time_total = 0
 
                 # curses
@@ -5429,60 +4529,60 @@ def interFace(stdscr):
             frame_start = time.perf_counter()
 
     except Exception as e:
-        print("error in the loop")
+        print("Shit happens... in the main loop")
         print(e)
         traceback.print_exc()
 
 
-async def get_wallet(coin_id: str):
-    try:
-        full_node_client = await FullNodeRpcClient.create(
-            self_hostname, uint16(full_node_rpc_port), DEFAULT_ROOT_PATH, config)
-        coin_record = await full_node_client.get_coin_record_by_name(bytes32.fromhex(coin_id))
-        print(coin_record)
-        return coin_record.coin
-    finally:
-        full_node_client.close()
-        await full_node_client.await_closed()
+#async def get_wallet(coin_id: str):
+#    try:
+#        full_node_client = await FullNodeRpcClient.create(
+#            self_hostname, uint16(full_node_rpc_port), DEFAULT_ROOT_PATH, config)
+#        coin_record = await full_node_client.get_coin_record_by_name(bytes32.fromhex(coin_id))
+#        print(coin_record)
+#        return coin_record.coin
+#    finally:
+#        full_node_client.close()
+#        await full_node_client.await_closed()
+#
+
+#async def get_public_keys():
+#    try:
+#        wallet_client = await WalletRpcClient.create(
+#            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
+#        )
+#        response = await wallet_client.get_public_keys()
+#        return response
+#
+#    finally:
+#        wallet_client.close()
+#        await wallet_client.await_closed()
 
 
-async def get_public_keys():
-    try:
-        wallet_client = await WalletRpcClient.create(
-            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-        )
-        response = await wallet_client.get_public_keys()
-        return response
-
-    finally:
-        wallet_client.close()
-        await wallet_client.await_closed()
-
-
-async def get_logged_in_fingerprint():
-    try:
-        wallet_client = await WalletRpcClient.create(
-            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-        )
-        response = await wallet_client.get_logged_in_fingerprint()
-        return response
-
-    finally:
-        wallet_client.close()
-        await wallet_client.await_closed()
+#async def get_logged_in_fingerprint():
+#    try:
+#        wallet_client = await WalletRpcClient.create(
+#            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
+#        )
+#        response = await wallet_client.get_logged_in_fingerprint()
+#        return response
+#
+#    finally:
+#        wallet_client.close()
+#        await wallet_client.await_closed()
 
 
-async def log_in(fingerprint):
-    try:
-        wallet_client = await WalletRpcClient.create(
-            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-        )
-        response = await wallet_client.log_in(fingerprint)
-        return response
-
-    finally:
-        wallet_client.close()
-        await wallet_client.await_closed()
+#async def log_in(fingerprint):
+#    try:
+#        wallet_client = await WalletRpcClient.create(
+#            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
+#        )
+#        response = await wallet_client.log_in(fingerprint)
+#        return response
+#
+#    finally:
+#        wallet_client.close()
+#        await wallet_client.await_closed()
 
 
 async def call_rpc_wallet(method_name, *args, **kwargs):
@@ -5506,64 +4606,16 @@ async def call_rpc_wallet(method_name, *args, **kwargs):
         await wallet_client.await_closed()
 
 
-async def call_rpc_wallet_legacy(method_name, *args, **kwargs):
-    try:
-        wallet_client = await WalletRpcClient.create(
-            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-        )
-        rpc_method = getattr(wallet_client, method_name)
-        response = await rpc_method(*args, **kwargs)
-        return response
-
-    finally:
-        wallet_client.close()
-        await wallet_client.await_closed()
-
-
-async def call_rpc_fetch(method_name, *args, **kwargs):
-    """Arguments has to be passed as json with the name of the
-    parameter {"block_header:0xa892ef029.."}"""
-    try:
-        full_node_client = await FullNodeRpcClient.create(
-            self_hostname, uint16(full_node_rpc_port), DEFAULT_ROOT_PATH, config
-        )
-        #rpc_method = getattr(full_node_client, method_name)
-        #response = await rpc_method(*args, **kwargs)
-        response = await full_node_client.fetch(method_name, kwargs)
-        return response
-    except Exception as e:
-        print("sometime wrong with an rpc call using the fetch method")
-        print(e)
-
-    finally:
-        full_node_client.close()
-        await full_node_client.await_closed()
-
-
 class StdOutWrapper:
     text = ""
 
     def write(self, txt):
         self.text += txt
-        self.text = '\n'.join(self.text.split('\n')[-300:])
+        self.text = '\n'.join(self.text.split('\n')[-2000:])
 
     def get_text(self,beg=0,end=-1):
         """I think it is reversed the order, i should change it"""
         return '\n'.join(self.text.split('\n')[beg:end]) + '\n'
-
-#if __name__ == "__main__":
-#
-#    screen = curses.initscr()
-#    curses.noecho()
-#    curses.cbreak()
-#
-#    # do your stuff here
-#    # you can also output mystdout.get_text() in a ncurses widget in runtime
-#
-#    screen.keypad(0)
-#    curses.nocbreak()
-#    curses.echo()
-#    curses.endwin()
 
 
 def main():
