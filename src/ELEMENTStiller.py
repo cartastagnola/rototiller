@@ -1,29 +1,31 @@
-import sys, os, traceback
+import sys
+import os
+import traceback
 import curses
 import sqlite3
 import threading
 import multiprocessing
 from math import floor
 
-import dex as dex
-import UIgraph as UIgraph
-import TEXTtiller as TEXT
+import src.UIgraph as UIgraph
+import src.TEXTtiller as TEXT
 
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Union, Callable
 from datetime import datetime, timedelta
 
-from CONFtiller import (
-    server_logger, ui_logger, logging, ScopeMode, SQL_TIMEOUT, BLOCK_MAX_COST, FIGLET)
-import CONFtiller
+from src.CONFtiller import (
+    debug_logger, logging, ScopeMode, SQL_TIMEOUT, BLOCK_MAX_COST, FIGLET)
 
-from UItiller import (
-    Scope, activate_scope, screen_coin_wallet, ScreenState, KeyboardState,
-    activate_grandparent_scope, activate_scope_next_sibling, open_coin_wallet, exit_scope)
-from UTILITYtiller import time_ago, human_mojo, human_int, Timer, truncate
-import DEBUGtiller as DEBUGtiller
-import PLATFORMtiller as PLAT
-import WDBtiller as WDB
+from src.TYPEStiller import Scope, ScopeActions, ScreenState, KeyboardState
+from src.UTILStiller import time_ago, human_mojo, human_int, Timer, truncate
+import src.PLATFORMtiller as PLAT
+import src.WDBtiller as WDB
+import src.DEXtiller as DEX
+import src.DEBUGtiller as DEBUGtiller
+#### global for debugging
+DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
+
 
 # unicode box u'\u25xx'
 ## light shade  u2591
@@ -36,9 +38,6 @@ import WDBtiller as WDB
 ## upper half block u2580
 ## lower half block u2584
 
-#### global for debugging
-DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
-
 
 def cast_table_items_to_string(table: List[List]):
     """Convert each item of a 2dim list to string"""
@@ -49,7 +48,7 @@ def cast_table_items_to_string(table: List[List]):
         for u in col:
             if isinstance(u, float):
                 #if u > 1:
-                u = dex.format_and_round_number(u, 5, 10)
+                u = DEX.format_and_round_number(u, 5, 10)
                 col_str.append(str(u))
             else:
                 col_str.append(str(u))
@@ -332,12 +331,12 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         scope = Scope(name, parent_scope.screen, screen_state)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        scope.exec = activate_scope
+        scope.exec = ScopeActions.activate_scope
         parent_scope.sub_scopes[name] = scope
         scope.visible = True
 
         if custom_scope_function is None:
-            scope.exec_own = exit_scope
+            scope.exec_own = ScopeActions.exit_scope
         else:
             scope.exec_own = custom_scope_function
         scope.data["prompt"] = ""
@@ -368,7 +367,7 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
     # text area
     field = u'\u2591' * total_length
     if scope.selected:
-        screen_state.footer_text = "| paste=ctrl-v "
+        screen_state.footer_text += "| paste=ctrl-v "
         stdscr.attron(curses.A_REVERSE)
         stdscr.addstr(pos.y, pos.x, field, P_text_color)
         stdscr.attroff(curses.A_REVERSE)
@@ -580,7 +579,7 @@ def create_tab(scr,
         scope = Scope(tab_name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        scope.exec = activate_scope
+        scope.exec = ScopeActions.activate_scope
         parent_scope.sub_scopes[tab_name] = scope
         scope.visible = True
 
@@ -636,7 +635,7 @@ def create_tab(scr,
         scope.update_no_sub(total_item_count, circular=circular_selection)
         screenState.scope_exec_args = scope_exec_args
         tab_scope_is_active = True
-        screenState.footer_text = "| copy=y "
+        screenState.footer_text += "| copy=y "
     ### end scope stuff ####
 
     # it needs to be after the scope update
@@ -933,7 +932,7 @@ def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, o
         scope = Scope(tab_name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope.main_scope
-        scope.exec = activate_scope
+        scope.exec = ScopeActions.activate_scope
         #parent_scope.sub_scopes[tab_name] = scope
 
         # retrive text from the clipboard
@@ -955,7 +954,7 @@ def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, o
         scope.exec_own = paste
 
         def deactivate_scope(scope: Scope, screenState: ScreenState):
-            scope = exit_scope(scope, screenState)
+            scope = ScopeActions.exit_scope(scope, screenState)
             screenState.scopes[tab_name] = None
 
         scope.exec_esc = deactivate_scope
@@ -1040,7 +1039,7 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         scope = Scope(tab_name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope.main_scope
-        scope.exec = activate_scope
+        scope.exec = ScopeActions.activate_scope
         ## not added as sub-scope, or when i delete it, i should delete also from there?
         # parent_scope.sub_scopes[tab_name] = scope 
 
@@ -1062,7 +1061,7 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         scope.exec_own = copy_to_clipboard
 
         def deactivate_scope(scope: Scope, screenState: ScreenState):
-            scope = exit_scope(scope, screenState)
+            scope = ScopeActions.exit_scope(scope, screenState)
             screenState.scopes[tab_name] = None
 
         scope.exec_esc = deactivate_scope
@@ -1203,7 +1202,7 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
         if len(data_table_keys) > 1:
-            scope.exec = activate_scope
+            scope.exec = ScopeActions.activate_scope
 
             # create a child to create another window
             # probably it should be something that we define outside
@@ -1248,7 +1247,7 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
         for u in col:
             if isinstance(u, float):
                 #if u > 1:
-                u = dex.format_and_round_number(u, 5, 10)
+                u = DEX.format_and_round_number(u, 5, 10)
                 col_str.append(str(u))
             else:
                 col_str.append(str(u))
@@ -1577,11 +1576,6 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
                 timestamp = list(coin_prices.keys())
                 if len(prices) < 1:
                     pass
-                    # prices = [chia_current_price_currency]
-                    # timestamp = [chia_coins_data.current_price_date]
-                #wallet_win.addstr(pos.y, 10, f"the cat is: {prices}")
-                #debug_win.addstr(y0 + 1,70, f"len: {len(prices)}; time {timestamp[0]} and prices; {prices[0]}")
-                #prices, timestamp = dex.getHistoricPriceFromTail(cat, 7)
                 count += 1
                 UIgraph.drawPriceGraph(graph_win, screenState, prices, timestamp, 7, P_graph)
                 # create chia graph
@@ -1910,11 +1904,11 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        scope.exec = activate_scope
+        scope.exec = ScopeActions.activate_scope
         scope.cursor = 0
         parent_scope.sub_scopes[name] = scope
 
-        scope.exec_own = exit_scope
+        scope.exec_own = ScopeActions.exit_scope
 
     scope = screenState.scopes[name]
     scope_is_active = False
@@ -2181,15 +2175,15 @@ def create_block_band(stdscr,
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        #scope.exec = activate_scope
-        scope.exec = activate_scope_next_sibling
+        #scope.exec = ScopeActions.activate_scope
+        scope.exec = ScopeActions.activate_scope_next_sibling
         scope.cursor = current_peak + separator  # separator default selection
         parent_scope.cursor_x = current_peak + separator  # separator default selection
         parent_scope.sub_scopes[name] = scope
         scope.visible = True
 
         ## TODO; activate next scope
-        scope.exec_own = activate_scope_next_sibling
+        scope.exec_own = ScopeActions.activate_scope_next_sibling
 
         scope.data["idx_last_item"] = current_peak + separator + min(mempool_blocks_count, 2)  # show max 2 mempool block by default
         scope.data["last_peak"] = current_peak
@@ -2217,7 +2211,7 @@ def create_block_band(stdscr,
         scope_is_active = True
 
     ### keyboard
-    screenState.footer_text = "| go to peak=home or 0"
+    screenState.footer_text += "| go to peak=home or 0"
     if keyboardState.home:
         scope.cursor = current_peak + separator
         parent_scope.cursor_x = current_peak + separator
@@ -2265,7 +2259,7 @@ def create_block_band(stdscr,
             idx_last_item += delta
 
             blocks_loader.update_offset(selected_idx - separator)
-            logging(server_logger, "DEBUG", "THREAD - start peak one")
+            logging(debug_logger, "DEBUG", "THREAD - start peak one")
             blocks_loader.start_updater_thread()
 
         elif selected_idx > (last_peak + separator):
@@ -2275,7 +2269,7 @@ def create_block_band(stdscr,
             scope.data['on_peak'] = True
 
             blocks_loader.update_offset(selected_idx - separator)
-            logging(server_logger, "DEBUG", "THREAD - on the meme")
+            logging(debug_logger, "DEBUG", "THREAD - on the meme")
             blocks_loader.start_updater_thread()
 
     # if not at peak
@@ -2293,10 +2287,10 @@ def create_block_band(stdscr,
         # the movement is more then half the chunk size
         # selected is close to the peak
         if (current_peak - last_peak) > blocks_loader.chunk_size:
-            logging(server_logger, "DEBUG", f"JUMPPPP is: {current_peak - last_peak}")
+            logging(debug_logger, "DEBUG", f"JUMPPPP is: {current_peak - last_peak}")
         #if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2 or (current_peak - selected_idx) < blocks_loader.chunk_size:
         if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2 or (current_peak - selected_idx) < blocks_loader.chunk_size:
-            logging(server_logger, "DEBUG", "THREAD - passed the cound or the chunk size")
+            logging(debug_logger, "DEBUG", "THREAD - passed the cound or the chunk size")
             blocks_loader.start_updater_thread()
             scope.data["loader_update_counter"] = 0
     else:
@@ -2494,7 +2488,7 @@ def create_block_band(stdscr,
                 create_text(win_band, p, f'used: {fullness}', P_azzure, True, inv_color=True)
 
             else:
-                logging(ui_logger, "DEBUG", f"RAISE Mempool empty: ___")
+                logging(debug_logger, "DEBUG", f"RAISE Mempool empty: ___")
                 p = base_point
                 create_text(win_band, p, f'mempool_empty', P_azzure, True)
                 p = p + UIgraph.Point(0, 1)
@@ -2710,7 +2704,7 @@ def create_block_band(stdscr,
             if base_point.x + rec_mini_dim.x > size.x:
                 break
             p = base_point + UIgraph.Point(0, 3)
-            b_height = f'..{str(block.height)[-2:]}'
+            b_height = f'...{str(block.height)[-2:]}'
             create_text(win_band, p, b_height, P_block_mini, True)
             p = p + UIgraph.Point(0, 1)
             draw_rect(win_band, p, rec_mini_dim, P_block_mini)

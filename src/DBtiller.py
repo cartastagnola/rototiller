@@ -1,6 +1,6 @@
 from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
-from chia.types.blockchain_format.sized_bytes import bytes32
-from chia.util.ints import uint32, uint64
+from chia_rs.sized_bytes import bytes32
+from chia_rs.sized_ints import uint32, uint64
 
 import sqlite3
 from datetime import datetime

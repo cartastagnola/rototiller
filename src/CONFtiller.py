@@ -1,8 +1,8 @@
-import LOGtiller as LOG
+import src.LOGtiller as LOG
 from enum import Enum
 from pathlib import Path
 import json
-import TEXTtiller as TEXT
+import src.TEXTtiller as TEXT
 
 
 from chia.util.config import load_config
@@ -13,12 +13,11 @@ DEBUGGING = False
 
 # LOGGING
 # logging is initialized here
-LOGGING_LEVEL = "DEBUG"
-server_logger = LOG.AsyncLogger("./server_log.log", LOGGING_LEVEL)
-server_logger_thread = LOG.launchLoggerThread(server_logger, "hole")
-
-ui_logger = LOG.AsyncLogger("./ui_log.log", LOGGING_LEVEL)
-ui_logger_thread = LOG.launchLoggerThread(ui_logger, "pole")
+# 10 MB in bytes (10 * 1024 * 1024)
+log_file_max_size = 10 * 1024 * 1024
+logging_level = "DEBUG"
+debug_logger = LOG.AsyncLogger("debug.log", "./logs", logging_level, log_file_max_size)
+debug_logger_thread = LOG.launchLoggerThread(debug_logger, "hole")
 logging = LOG.logging
 
 

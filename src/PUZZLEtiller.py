@@ -14,8 +14,8 @@ from chia.types.spend_bundle import SpendBundle
 
 
 
-from CONFtiller import KNOWN_PUZZLES
-from RPCtiller import call_rpc_node, call_rpc_daemon
+from src.CONFtiller import KNOWN_PUZZLES
+from src.RPCtiller import call_rpc_node, call_rpc_daemon
 
 # puzzle repo: https://github.com/Chia-Network/chia-blockchain/tree/fad414132e6950e79e805629427af76bf9ddcbc5/chia/wallet/puzzles
 

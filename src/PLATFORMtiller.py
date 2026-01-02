@@ -7,10 +7,10 @@ import sys
 #     pass
 
 if sys.platform.startswith('linux'):
-    from LINUXtiller import *
+    from src.LINUXtiller import *
 elif sys.platform == 'win32':
-    from WINtiller import *
+    from src.WINtiller import *
 elif sys.platform == 'darwin':
-    from MACtiller import *
+    from src.MACtiller import *
 else:
     raise (f"Unknown operating system: {sys.platform}")

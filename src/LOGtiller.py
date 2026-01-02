@@ -1,6 +1,7 @@
 import threading
 import queue
 import time
+from pathlib import Path
 from enum import Enum
 
 
@@ -12,10 +13,15 @@ class LoggingLevels(Enum):
 
 
 class AsyncLogger:
-    def __init__(self, log_file: str, log_level: str):
-        self.log_file: str = log_file
+    def __init__(self, file_name: str, folder_path: str, log_level: str, log_file_max_size: int, file_count: int = 2):
+        self.file_name: str = file_name
+        self.folder_path: Path = Path(folder_path)
+        self.folder_path.mkdir(parents=True, exist_ok=True)
+        self.file_path = self.folder_path / self.file_name
+        self.max_file_size = log_file_max_size
         self.queue: queue.Queue = queue.Queue()
         self.log_level: str = log_level
+        self.file_count = file_count
 
 
 def logging(logger: AsyncLogger, level: str, message: str):
@@ -30,7 +36,7 @@ def writeLoggerToFile(logger: AsyncLogger, string: str):
     """Write the queue of the logger to a file."""
 
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    with open(logger.log_file, "a") as f:
+    with open(logger.file_path, "a") as f:
         f.write("\n\n///////////////////////////////\n")
         f.write(f"NEW SESSION {timestamp}\n")
         f.write("///////////////////////////////\n\n\n")
@@ -41,40 +47,39 @@ def writeLoggerToFile(logger: AsyncLogger, string: str):
             try:
                 while not logger.queue.empty():
                     log_entry = logger.queue.get(timeout=0.1)  # Process log entries if available
-                    with open(logger.log_file, "a") as f:
+                    with open(logger.file_path, "a") as f:
                         f.write(log_entry + "\n")
                     logger.queue.task_done()
             except queue.Empty:
                 continue  # No log entry, check again until stop event is set
         else:
             pass
+        rotate_log(logger)
         time.sleep(1)
 
-def rotate_log(file_path):
-    # 10 MB in bytes (10 * 1024 * 1024)
-    MAX_SIZE = 10 * 1024 * 1024 
 
-    if not os.path.exists(file_path):
-        # Create it if it doesn't exist
-        open(file_path, 'a').close()
+def rotate_log(logger: AsyncLogger):
+
+    if not logger.file_path.exists() or logger.file_path.stat().st_size <= logger.max_file_size:
         return
 
-    # Check the size
-    if os.path.getsize(file_path) > MAX_SIZE:
-        new_path = file_path + ".1"
+    # shift logs from the last to the first
+    for i in range(logger.file_count - 1, 0, -1):
+        source = logger.file_path.with_name(f"{logger.file_path.name}.{i}")
+        dest = logger.file_path.with_name(f"{logger.file_path.name}.{i + 1}")
 
-        # Remove old .log.1 if it already exists to avoid errors
-        if os.path.exists(new_path):
-            os.remove(new_path)
+        if source.exists():
+            if dest.exists():
+                dest.unlink()  # delete
+            source.rename(dest)
 
-        # Rename original to .log.1
-        os.rename(file_path, new_path)
+    # Rename the current log to .1
+    first_rotated = logger.file_path.with_name(f"{logger.file_path.name}.1")
+    if first_rotated.exists():
+        first_rotated.unlink()
 
-        # Create a new empty log file
-        open(file_path, 'w').close()
-        print(f"Log rotated: {file_path} -> {new_path}")
-    else:
-        print("Log size is within limits.")
+    logger.file_path.rename(first_rotated)
+    logger.file_path.touch()
 
 
 def launchLoggerThread(logger: AsyncLogger, string: str):

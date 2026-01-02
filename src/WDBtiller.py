@@ -1,4 +1,3 @@
-import os
 import sqlite3
 import json
 import zstd
@@ -10,10 +9,8 @@ from chia.types.full_block import FullBlock
 from chia.consensus.block_record import BlockRecord
 from chia.types.spend_bundle import SpendBundle
 from chia_rs import CoinSpend, Coin, Program
-from chia.util.hash import std_hash
-from chia_rs.sized_bytes import bytes32, bytes48
+from chia_rs.sized_bytes import bytes32
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
-from clvm.casts import int_to_bytes
 
 from chia_rs import (ELIGIBLE_FOR_DEDUP, ELIGIBLE_FOR_FF, BLSCache, ConsensusConstants,
     G2Element, supports_fast_forward, validate_clvm_and_signature)
@@ -21,11 +18,9 @@ from chia_rs import (ELIGIBLE_FOR_DEDUP, ELIGIBLE_FOR_FF, BLSCache, ConsensusCon
 from chia.consensus.default_constants import DEFAULT_CONSTANTS
 from chia.types.spend_bundle_conditions import SpendBundleConditions, SpendConditions
 
-
-from UTILITYtiller import timestamp_to_date
-from CONFtiller import (
-    server_logger, ui_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB
-)
+from src.UTILStiller import timestamp_to_date
+from src.CONFtiller import (
+    debug_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB)
 
 
 def print_json(dict):
@@ -142,10 +137,10 @@ def create_wallet_db(conn):
         print("The WDB database was populated successfully.")
     except sqlite3.Error as e:
         print(f"Error creating the wallet database: {e}")
-        logging(server_logger, "DEBUG", f"WDB error while creating the database: {e}")
-        logging(server_logger, "DEBUG", "WDB error _________________________________________")
-        logging(server_logger, "DEBUG", "WDB error _________________________________________")
-        logging(server_logger, "DEBUG", "WDB error _________________________________________")
+        logging(debug_logger, "DEBUG", f"WDB error while creating the database: {e}")
+        logging(debug_logger, "DEBUG", "WDB error _________________________________________")
+        logging(debug_logger, "DEBUG", "WDB error _________________________________________")
+        logging(debug_logger, "DEBUG", "WDB error _________________________________________")
 
 
 
@@ -203,7 +198,7 @@ def retrive_all_pks(conn):
         cursor.execute("SELECT * FROM pk_state")
         pk_states = [dict(row) for row in cursor.fetchall()]
     except Exception as e:
-        logging(server_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
         print(e)
 
     conn.row_factory = None  # restore the default value 
@@ -220,7 +215,7 @@ def retrive_pk(conn, finger):
             "WHERE fingerprint = ?;", (finger,))
         pk_state = cursor.fetchone()
     except Exception as e:
-        logging(server_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
         print(e)
 
     if not pk_state:
@@ -253,7 +248,7 @@ def insert_pk(conn, fingerprint, label, public_key):
 
         conn.commit()
     except Exception as e:
-        logging(server_logger, "DEBUG", f"WDB error while inserting the PK in the database: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while inserting the PK in the database: {e}")
     return store_id
 
 
@@ -300,7 +295,7 @@ def retrive_wallets_by_pk_state_id(conn, pk_state_id):
         cursor.execute("SELECT * FROM wallet_state WHERE pk_state_id = ?", (pk_state_id,))
         wallet = [dict(row) for row in cursor.fetchall()]
     except Exception as e:
-        logging(server_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
         print(e)
 
     conn.row_factory = None  # restore the default value
@@ -332,7 +327,7 @@ def retrive_asset(conn, tail):
         cursor.execute("SELECT * FROM asset_name WHERE tail = ?", (tail,))
         asset = dict(cursor.fetchone())
     except Exception as e:
-        logging(server_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while retriving the PK in the database: {e}")
         print(e)
 
     conn.row_factory = None  # restore the default value
@@ -348,17 +343,17 @@ def get_asset_id(conn, tail):
     #     "SELECT id FROM asset_name WHERE tail = ?",
     #     (str(tail),)
     # )
-    # logging(server_logger, "DEBUG", f"WDB tail: {tail}")
+    # logging(debug_logger, "DEBUG", f"WDB tail: {tail}")
     # try:
     #     store_id = cursor.fetchone()[0]
     # except Exception as e:
-    #     logging(server_logger, "ERROR", f"WDB exception ception {e}")
+    #     logging(debug_logger, "ERROR", f"WDB exception ception {e}")
     #     cursor.execute("SELECT * FROM asset_name")
     #     store = cursor.fetchall()
-    #     logging(server_logger, "ERROR", f"WDB following store {store}")
+    #     logging(debug_logger, "ERROR", f"WDB following store {store}")
     #     for i in store:
-    #         logging(server_logger, "ERROR", f"WDB {i[1]} and tail: {tail}")
-    # logging(server_logger, "DEBUG", f"WDB store_id: {store_id}")
+    #         logging(debug_logger, "ERROR", f"WDB {i[1]} and tail: {tail}")
+    # logging(debug_logger, "DEBUG", f"WDB store_id: {store_id}")
     # conn.commit()
     return tail
 
@@ -375,7 +370,7 @@ def insert_price(conn, tail, timestamp, price, currency):
             (timestamp, tail, price, currency))
         store_id = cursor.lastrowid
     except Exception as e:
-        logging(server_logger, "ERROR", f"WDB error inserting pricrs: {e}")
+        logging(debug_logger, "ERROR", f"WDB error inserting pricrs: {e}")
         print(e)
     conn.commit()
     return store_id
@@ -457,7 +452,7 @@ def insert_address(conn, pk_state_id, hd_path, address, hardened):
              active_coins_native, times_used, times_used_native, block_height))
         store_id = cursor.lastrowid
     except Exception as e:
-        logging(server_logger, "ERROR", f"WDB error inserting new address: {e}")
+        logging(debug_logger, "ERROR", f"WDB error inserting new address: {e}")
         print(e)
     conn.commit()
     return store_id
@@ -543,10 +538,10 @@ def create_spend_bundle_db(conn):
 
     except sqlite3.Error as e:
         print(f"Error creating the spend bundle database: {e}")
-        logging(server_logger, "DEBUG", f"WDB error while creating the spend bundle database: {e}")
-        logging(server_logger, "DEBUG", "WDB error _________________________________________")
-        logging(server_logger, "DEBUG", "WDB error _________________________________________")
-        logging(server_logger, "DEBUG", "WDB error _________________________________________")
+        logging(debug_logger, "DEBUG", f"WDB error while creating the spend bundle database: {e}")
+        logging(debug_logger, "DEBUG", "WDB error _________________________________________")
+        logging(debug_logger, "DEBUG", "WDB error _________________________________________")
+        logging(debug_logger, "DEBUG", "WDB error _________________________________________")
 
 
 def insert_puzzle(contable_namen, puzzle_hash, puzzle, size):
@@ -641,7 +636,7 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
 
     except Exception as e:
         print(f"we have and exception guys... do something please!!! {e}")
-        logging(server_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
 
 
     for spend in coin_spends:
@@ -665,7 +660,7 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
                 )
             except Exception as e:
                 print(f"we have and exception guys... puzzle insertion do something please!!! {e}")
-                logging(server_logger, "DEBUG", f"WDB error while inserting the "
+                logging(debug_logger, "DEBUG", f"WDB error while inserting the "
                         f" a new puzzle in the database: {e}")
 
         coin = spend.coin
@@ -690,7 +685,7 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
 
         except Exception as e:
             print(f"we have and exception guys... coin spend insertion do something please!!! {e}")
-            logging(server_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
+            logging(debug_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
 
         # check if the puzzle hash of the coin is the same of the tree hash,
         # if yes the puzzle is the one with curried in pk

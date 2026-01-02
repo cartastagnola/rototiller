@@ -621,8 +621,8 @@ async def main(config):
 
 
 def createFakePlots():
-    plotting_dir = [Path('/home/boon/plotting_folder01'), Path('/home/boon/plotting_folder02/')]
-    src_path = Path('/home/boon/plotting_folder01/THEPLOT')
+    plotting_dir = [Path('~/plotting_folder01'), Path('~/plotting_folder02/')]
+    src_path = Path('~/plotting_folder01/THEPLOT')
     prefix = 'plot_k32_'
     postfix = '.plot'
 

@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 import math
 
 from chia.wallet.trading.offer import Offer
-from CONFtiller import XCH_MOJO, CAT_MOJO
-from UTILITYtiller import print_json, parseFloatJsonValue
+from src.CONFtiller import XCH_MOJO, CAT_MOJO
+from src.UTILStiller import print_json, parseFloatJsonValue
 
 
 def dexieRequest(dexieCall):

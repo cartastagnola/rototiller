@@ -13,9 +13,9 @@ import datetime
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Union
 
-from PIL import Image
+#from PIL import Image
 
-import DEXtiller as dex
+import src.DEXtiller as dex
 
 
 def dumpJson(dic):

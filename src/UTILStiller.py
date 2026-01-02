@@ -119,7 +119,7 @@ def human_int(num: int) -> str:
     suffixes = ['', 'K', 'M', 'B', 'T']
     return humanizer(num, suffixes)
 
-
+# TODO: keep only one
 def timestamp_to_date(timestamp):
     try:
         datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
@@ -128,6 +128,12 @@ def timestamp_to_date(timestamp):
         print(timestamp)
         print(type(timestamp))
     return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
+
+
+# TODO: keep only one
+def convert_ts_to_date(ts):
+    """Convert a timestamp to a date, with ts in milliseconds"""
+    return datetime.fromtimestamp(ts/1000).strftime('%Y-%m-%d %H:%M:%S')
 
 
 def time_ago(ts):

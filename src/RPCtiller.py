@@ -1,18 +1,14 @@
-import sys
-import types
 import asyncio
 import traceback
 
-from CONFtiller import (
-        server_logger, ui_logger, logging, DEBUGGING, DB_WDB,
-        config, self_hostname, full_node_rpc_port, wallet_rpc_port,
-        DEFAULT_ROOT_PATH)
+from src.CONFtiller import (
+    debug_logger, logging, DEBUGGING, config, self_hostname,
+    full_node_rpc_port, wallet_rpc_port, DEFAULT_ROOT_PATH)
 
 from chia.rpc.full_node_rpc_client import FullNodeRpcClient
-from chia.rpc.rpc_server import RpcServer
 from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.daemon.client import connect_to_daemon_and_validate
-from chia_rs.sized_bytes import bytes32, bytes48
+from chia_rs.sized_bytes import bytes32
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 
 
@@ -76,9 +72,9 @@ async def call_rpc_wallet(method_name, *args, **kwargs):
         return response
 
     except Exception:
-        logging(server_logger, "DEBUG", f"sometime wrong with a wallet rpc call.")
-        logging(server_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
-        logging(server_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
+        logging(debug_logger, "DEBUG", f"sometime wrong with a wallet rpc call.")
+        logging(debug_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
+        logging(debug_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
         wallet_client.close()
         await wallet_client.await_closed()
         return False
@@ -134,7 +130,7 @@ async def fetch_rpc_daemon(method_name, *args, **kwargs):
         response = await daemon._get(request)
         response = response['data']
     except Exception as e:
-        logging(server_logger, "DEBUG", "sometime wrong with a daemon rpc call")
+        logging(debug_logger, "DEBUG", "sometime wrong with a daemon rpc call")
         raise Exception(f"Request failed: {e}")
     finally:
         await daemon.close()
@@ -160,9 +156,9 @@ async def fetch_rpc_node(method_name, *args, **kwargs):
         return response
     except Exception as e:
         print(e)
-        logging(server_logger, "DEBUG", "sometime wrong with a node rpc call using the fetch method")
-        logging(server_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
-        logging(server_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
+        logging(debug_logger, "DEBUG", "sometime wrong with a node rpc call using the fetch method")
+        logging(debug_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
+        logging(debug_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
         return False
 
     finally:
@@ -182,9 +178,9 @@ async def fetch_rpc_wallet(method_name, *args, **kwargs):
         return response
 
     except Exception:
-        logging(server_logger, "DEBUG", f"sometime wrong with a wallet rpc call.")
-        logging(server_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
-        logging(server_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
+        logging(debug_logger, "DEBUG", f"sometime wrong with a wallet rpc call.")
+        logging(debug_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
+        logging(debug_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
         return False
 
     finally:

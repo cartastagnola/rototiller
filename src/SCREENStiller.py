@@ -1,66 +1,36 @@
-#!/usr/bin/env python3
-
-import sys, os, traceback
-import ast
-import copy
-import asyncio
-import curses
-import time
-import threading
-import requests
-import json
-from pathlib import Path
-import sqlite3
-import csv
-from collections import deque
-
-from dataclasses import dataclass
+import sys
 from typing import List, Tuple, Dict, Union, Callable
-from datetime import datetime, timedelta
+import curses
+from datetime import datetime
 
-#from chia.wallet.util.tx_config import DEFAULT_TX_CONFIG
+#from chia.rpc.full_node_rpc_client import FullNodeRpcClient
+#from chia.rpc.rpc_server import RpcServer
+#from chia.rpc.wallet_rpc_client import WalletRpcClient
+#from chia.daemon.client import connect_to_daemon_and_validate
+#from chia_rs.sized_bytes import bytes32, bytes48
+#from chia.types.blockchain_format.program import Program
+#from chia.types.spend_bundle import SpendBundle
+#from clvm_tools.binutils import disassemble
 
-from chia.rpc.full_node_rpc_client import FullNodeRpcClient
-from chia.rpc.rpc_server import RpcServer
-from chia.rpc.wallet_rpc_client import WalletRpcClient
-from chia.daemon.client import connect_to_daemon_and_validate
-#from chia.types.blockchain_format.sized_bytes import bytes32, bytes48
-from chia_rs.sized_bytes import bytes32, bytes48
-from chia.types.blockchain_format.program import Program
-from chia.types.spend_bundle import SpendBundle
-from clvm_tools.binutils import disassemble
+import src.UIgraph as UIgraph
+import src.ELEMENTStiller as ELEMENTS
+import src.TEXTtiller as TEXT
+import src.WDBtiller as WDB
+import src.UTILStiller as UTILS
+from src.PUZZLEtiller import compare_to_known_puzzle, unroll_coin_puzzle, get_opcode_name
+from src.TYPEStiller import (
+    FingerState, CoinPriceData, ScreenState, FullNodeState, Scope, KeyboardState,
+    FullNodeState, ScreenState, ScopeActions)
 
-#from chia.util.ints import uint16, uint32, uint64
-# NEEDED?
-from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+from src.CONFtiller import (
+    debug_logger, logging, DEBUGGING, DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL,
+    BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO, full_node_port, full_node_rpc_port,
+    FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST)
 
+import src.DEBUGtiller as DEBUGtiller
+DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
 
-# load configuration
-from chia.util.config import load_config
-from chia.util.default_root import DEFAULT_ROOT_PATH
-
-import TEXTtiller as TEXT
-import UIgraph as UIgraph
-import LOGtiller as LOGtiller
-from CONFtiller import (
-    server_logger, ui_logger, logging, ScopeMode, DEBUGGING, DB_BLOCKCHAIN_RO,
-    DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL, BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO,
-    CAT_MOJO, config, self_hostname, full_node_port, full_node_rpc_port, wallet_rpc_port,
-    DEFAULT_ROOT_PATH, TXS_MEMPOOL_DELAY, FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST)
-import CONFtiller
-import ELEMENTStiller as ELEMENTS
-import WDBtiller as WDB
-import DEXtiller as DEX
-from RPCtiller import call_rpc_node, call_rpc_daemon
-from UTILITYtiller import binary_search_l, Timer, calc_coin_id, classify_number
-from PUZZLEtiller import compare_to_known_puzzle, unroll_coin_puzzle, get_opcode_name
-from COLORStiller import init_colors
-
-from pympler import asizeof
-
-
-import DEBUGtiller as DEBUGtiller
-
+# UI
 def deep_getsizeof(object, seen=None):
     if seen is None:
         seen = set()
@@ -78,1400 +48,6 @@ def deep_getsizeof(object, seen=None):
 
     return size
 
-
-#### global for debugging
-DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
-DEBUG_TEXT = 'mempty'
-
-#### NCURSES CONFIG #####
-# set the esc delay to 25 milliseconds
-# by default curses use one seconds
-os.environ.setdefault('ESCDELAY', '25')
-
-
-### only for block states testing
-BLOCK_STATES = None
-
-# dexi api
-def loadAllTickers():
-    r = requests.get('https://api.dexie.space/v2/prices/tickers')
-    tickers = json.loads(r.text)["tickers"]
-    return tickers
-
-
-@dataclass
-class TransactionRecordRoto:
-    confirmed_at_height: uint32
-    created_at_time: uint64
-    to_puzzle_hash: bytes32
-    amount: uint64
-    fee_amount: uint64
-    confirmed: bool
-    ###sent: uint32
-    ###spend_bundle: Optional[SpendBundle]
-    ###additions: List[Coin]
-    ###removals: List[Coin]
-    ###wallet_id: uint32
-
-    # Represents the list of peers that we sent the transaction to, whether each one
-    # included it in the mempool, and what the error message (if any) was
-    ###sent_to: List[Tuple[str, uint8, Optional[str]]]
-    trade_id: bytes32 #Optional[bytes32]
-    type: uint32  # TransactionType
-
-    # name is also called bundle_id and tx_id
-    name: bytes32
-    ###memos: List[Tuple[bytes32, List[bytes]]]
-
-# Transaction type
-TRANSACTION_TYPE_DESCRIPTIONS = [
-    "received",
-    "sent",
-    "rewarded (coinbase)",
-    "rewarded (fee)",
-    "received in trade",
-    "sent in trade",
-    "received in clawback as recipient",
-    "received in clawback as sender",
-    "claim/clawback",
-]
-
-TRANSACTION_TYPE_SIGN = [
-    1,
-    -1,
-    1,
-    1,
-    1,
-    -1,
-    1,
-    1,
-    1,
-]
-
-
-@dataclass
-class WalletState:
-    data: str  # it should be byte32 (the data of what?)
-    name: str  #
-    ticker: str  #
-    block_height: uint32
-    addresses: List[str]  # check type and move to pkState
-    coins: List  # coinrecords, but it could be also coins
-    transactions: List[TransactionRecordRoto]
-    confirmed_wallet_balance: uint64  # check type
-    spendable_balance: uint64  # check type
-    unspent_coin_count: int  # check type
-
-    def __init__(self):
-        self.data = ""
-        self.name = ""
-        self.ticker = ""
-        self.block_height = 0
-        self.addresses = []
-        self.coins = []
-        self.transactions = []
-        self.confirmed_wallet_balance = 0
-        self.spendable_balance = 0
-        self.unspent_coin_count = 0
-
-
-@dataclass
-class CoinPriceData:
-    coin_tail: str  # for chia is "chia"
-    local_timestamp: int  # timestamp milliseconds
-    current_price: float
-    current_price_currency: float
-    current_price_date: int  # timestamp milliseconds
-    historic_price: Dict[int, float]  # [timestamp, price]
-    historic_price_currency: Dict[int, float]  # [timestamp, price]
-    historic_range_price_data: Tuple[int, int]  # [timestamp (begin period), timestamp (end period)]
-
-    def __init__(self):
-        self.coin_tail = None
-        self.local_timestamp = None
-        self.current_price = None
-        self.current_price_currency = None
-        self.current_price_date = None
-        self.historic_price = None
-        self.historic_price_currency = {}
-        self.historic_range_price_data = {}
-
-
-@dataclass
-class FingerState:
-    fingerprint: int
-    label: str
-    public_key: uint64
-    wallets: List[WalletState]
-
-    def __init__(self):
-        self.fingerprint = 0
-        self.label = ""
-        self.public_key = 0
-        self.wallet = []
-
-
-@dataclass
-class PkState:
-    fingerprint: int
-    label: str
-    pk: uint64
-    wallets: Dict[int, WalletState]
-
-    def __init__(self):
-        self.fingerprint = 0
-        self.label = ""
-        self.pk = 0
-        self.wallets = {}
-
-
-# UI elements
-@dataclass
-class KeyboardState:
-    key: int = None
-    moveUp: bool = False
-    moveDown: bool = False
-    moveLeft: bool = False
-    moveRight: bool = False
-    yank: bool = False
-    paste: bool = False
-    mouse: bool = False
-    enter: bool = False
-    esc: bool = False
-    home: bool = False
-
-
-class FullNodeMeta:
-
-    def __init__(self):
-        self.peak_height: int = None
-        self.peak_header_hash = None
-        self.peak_timestamp = None
-        self.genesis_challenge = None
-        self.network_name = None
-        self.difficulty = None
-        self.synced = None
-        self.sync_mode = None
-        self.sub_slot_iters = None
-        self.net_space = None
-        self.node_id = None
-        self.sync_tip_height = None
-        self.sync_progress_height = None
-        self.finished_challenge_slot_hashes = None
-        self.finished_infused_challenge_slot_hashes = None
-        self.finished_reward_slot_hashes = None
-        self.prev_hash = None
-        self.prev_transaction_block_hash = None
-
-
-class FullNodeState:
-
-    def __init__(self, db_path: str):
-        self.lock = threading.Lock()
-        self.db_path = db_path
-        self.mempool_items = None
-        self.mempool_archive = {}
-        self.blocks_loader: WDB.DataChunkLoader = None
-        self.is_blocks_loader_on_peak = True
-        self.full_node_meta = FullNodeMeta()
-
-        self.update_chain_info()
-        self.update_chain_state()
-        self.init_mempool()
-
-        table_name = 'full_blocks'
-        chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
-        offset = self.full_node_meta.peak_height
-        sorting_column = 'height'
-        filters = {'in_main_chain': 1}
-        self.blocks_loader = WDB.DataChunkLoader(db_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
-        # create and keep track of the thread that update the block loader, so it is possible to know if it is running and calling in different places. Once it ends
-        # it has to be recrated
-        # self.blocks_loader_thread = threading.Thread(target=self._update_blocks_loader, daemon=True)
-        # self.blocks_loader_thread.start()
-
-        table_name = 'spend_bundles'
-        chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
-        offset = 0
-        sorting_column = None
-        filters = None  # {'in_main_chain': 1}
-        self.spend_bundle_archive_loader: WDB.DataChunkLoader = WDB.DataChunkLoader(DB_SB, table_name, chunk_size,
-                                                                                    offset, sorting_column=sorting_column,
-                                                                                    data_struct=WDB.BundleState)
-        self.spend_bundle_archive_loader.start_updater_thread()
-
-
-    def init_mempool(self):
-        mempool_items = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
-
-        #for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items():
-        #    print(f"tx id: {spend_bundle_hash} and json: {json_item}")
-
-        with self.lock:
-            self.mempool_items = mempool_items
-            logging(server_logger, "DEBUG", f"NODE STATE - init mempool, inserting items")
-            conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-            for key, item in mempool_items.items():
-                sb = item.spend_bundle
-
-            conn.close()
-
-
-    def update_mempool(self):
-        with self.lock:
-            self.mempool_items = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
-
-        # removed expired transactions older then
-        # TODO:
-        # - add property in_mempool
-        # - remove apptoved txs after 15s
-
-        #logging(server_logger, "DEBUG", f"NODE STATE - updating mempool")
-        #new_mempool = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
-        #added_tx = new_mempool.keys() - self.mempool_items.keys()
-        #removed_txs = self.mempool_items.keys() - new_mempool.keys()
-        #with self.lock:
-        #    logging(server_logger, "DEBUG", f"NODE STATE - lock")
-        #    conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-        #    for tx in added_tx:
-        #        logging(server_logger, "DEBUG", f"NODE STATE - tx: {tx}")
-        #        self.mempool_items[tx] = new_mempool[tx]
-        #        # add to the db
-        #        raw_sb = new_mempool[tx].spend_bundle
-        #        logging(server_logger, "DEBUG", f"NODE STATE - raw_sb: {raw_sb}")
-        #        sb = SpendBundle.from_json_dict(new_mempool[tx].spend_bundle)
-        #        logging(server_logger, "DEBUG", f"NODE STATE - {type(sb)}")
-        #        WDB.insert_spend_bundle(conn, sb)
-        #        logging(server_logger, "DEBUG", f"NODE STATE - inserting SB")
-
-        #    conn.close()
-        #for tx in removed_txs:
-        #    # here we should modify the status of the sb also in the db, as invalid or blocked
-        #    if self.mempool_items[tx].removed_at is None:
-        #        with self.lock:
-        #            self.mempool_items[tx].removed_at = time.time()
-        #    else:
-        #        if self.mempool_items[tx].removed_at - time.time() > TXS_MEMPOOL_DELAY:
-        #            with self.lock:
-        #                self.mempool_archive = self.mempool_items.pop(tx)
-
-
-
-    def parse_mempool_txs(self):
-        for spend_bundle_hash, tx in self.mempool_items:
-            pass
-            # take SB
-            # take input coin
-            # fill coin types
-            # take solution coin
-
-        pass
-
-
-    def update_chain_info(self):
-        network_info = call_rpc_node('get_network_info')
-        with self.lock:
-            full_node_meta = self.full_node_meta
-            full_node_meta.genesis_challenge = network_info["genesis_challenge"]
-            full_node_meta.network_name = network_info["network_name"]
-
-    def update_chain_state(self):
-        blockchain_state = call_rpc_node('get_blockchain_state')
-        print(blockchain_state)
-        with self.lock:
-            full_node_meta = self.full_node_meta
-            if blockchain_state['peak'] is not None:
-                full_node_meta.peak_height = blockchain_state['peak']['height']
-                full_node_meta.peak_header_hash = blockchain_state['peak']['header_hash']
-                if blockchain_state['peak']['timestamp'] is not None:
-                    full_node_meta.peak_timestamp = blockchain_state['peak']['timestamp']
-                full_node_meta.finished_challenge_slot_hashes = blockchain_state['peak']['finished_challenge_slot_hashes']
-                full_node_meta.finished_infused_challenge_slot_hashes = blockchain_state['peak']['finished_infused_challenge_slot_hashes']
-                full_node_meta.finished_reward_slot_hashes = blockchain_state['peak']['finished_reward_slot_hashes']
-                full_node_meta.prev_hash = blockchain_state['peak']['prev_hash']
-                full_node_meta.prev_transaction_block_hash = blockchain_state['peak']['prev_transaction_block_hash']
-            else:
-                full_node_meta.peak_height = None
-
-            full_node_meta.difficulty = blockchain_state["difficulty"]
-            full_node_meta.synced = blockchain_state["sync"]["synced"]
-            full_node_meta.sync_mode = blockchain_state["sync"]["sync_mode"]
-            full_node_meta.sub_slot_iters = blockchain_state["sub_slot_iters"]
-            # full_node_meta.net_space = blockchain_state["space"]
-            full_node_meta.net_space = blockchain_state["space"] / (1024**6), ' Eib'
-            full_node_meta.node_id = blockchain_state["node_id"]
-            full_node_meta.sync_tip_height = blockchain_state["sync"]["sync_tip_height"]
-            full_node_meta.sync_progress_height = blockchain_state["sync"]["sync_progress_height"]
-
-
-    def update_blocks(self):
-        if self.is_blocks_loader_on_peak:
-            self.blocks_loader.update_loader()
-
-    def update_state(self, screenState):
-        while True:
-            logging(server_logger, "DEBUG", f"NODE STATE - updating node state")
-            self.update_chain_state()
-            self.update_mempool()
-            logging(server_logger, "DEBUG", f"NODE STATE - state updated")
-            try:
-                if "block_band" not in screenState.scopes or screenState.scopes["block_band"].data['on_peak']:
-                    # if the band is not created it keep up with the peak.
-                    # here it should update also the offset with the peak to do a real update
-                    self.update_blocks()
-                    logging(server_logger, "DEBUG", f"NODE STATE - blocks updated")
-            except:
-                traceback.print_exc()
-
-
-            time.sleep(10)
-
-    def deepcopy_meta(self):
-        return copy.deepcopy(self.full_node_meta)
-
-    def deepcopy_mempool(self):
-        return copy.deepcopy(self.mempool_items)
-
-    def deepcopy_mempool_archive(self):
-        return copy.deepcopy(self.mempool_archive)
-
-
-@dataclass
-class ScreenState:
-    init: bool
-    screen_size: UIgraph.Point
-    selection: int  # delete?
-    select_y: int  # delete?
-    screen: str  # delete?
-    cursesColors: UIgraph.CustomColors
-    colors: Dict[str, int]
-    colorPairs: Dict[str, int]
-    menu: List[str]
-    nLinesUsed: int
-    headerLines: int
-    footerLines: int
-    active_pk: List[Union[int, bool]]  # [is fing selected, fingerprint] TODO: make it only fingerprint without bool
-    public_keys: Dict[int, PkState]  # check what kind of int is a pk, and change wallets to something that belond to a public key
-    activeScope: 'Scope'  # active scope
-    scopes: Dict[str, 'Scope']
-    scope_exec_args: List  # args that are used when executing scope.exec_child
-    screen_data: Dict[str, str]  # it should be a dic of lists of anything
-    coins_data: Dict[str, CoinPriceData]
-    footer_text: str
-    roto_clipboard: deque
-    pending_action: List[Union[int, Callable]]
-
-    def __init__(self):
-        self.init = False
-        self.screen_size = None
-        self.selection = 0
-        self.select_y = 0
-        self.screen = 'intro'  # da eliminare TODO
-        self.cursesColors = None
-        self.colors = {}
-        self.colorPairs = {}
-        self.menu = []
-        self.headerLines = 0
-        self.footerLines = 0
-        self.active_pk = (0, False)
-        self.public_keys = {}
-        self.activeScope = None
-        self.scopes = {}
-        self.scope_exec_args = []
-        self.screen_data = {}
-        self.coins_data = {}
-        self.footer_text = ""
-        self.pending_action = []
-
-        # init copy/paste
-        self.roto_clipboard = deque(maxlen=5)
-        self.scopes['copy'] = None
-        self.scopes['paste'] = None
-
-
-class Scope():
-    gen_id = 0
-
-    def __init__(self, name: str, screen_handler: Callable[..., None],
-                 screenState: ScreenState):
-        self.name = name
-        # remove selected flag
-        self.selected = False  # make a method to check if it is selected by the parent
-        self.visible = False
-        self.mode = ScopeMode.VISUAL
-        self.parent_scope = None
-        self.main_scope = self
-        self.sub_scopes = {}
-        self.cursor = 0
-        self.cursor_x = 0
-        self.bool = False  # eel bool de che?
-        self.data = {}  # is it a good place here. Or should i use screenState
-        self.id = Scope.gen_id
-        self.exec = None  # funcion executed when activated
-        self.exec_own = None  # to rename to exec
-        self.exec_init = None  # to swapp with .exec
-        self.exec_esc = None  # used when exiting
-        self.screen = screen_handler
-        # add the variable that keep the info of what screen to print
-        Scope.gen_id += 1
-        screenState.scopes[name] = self
-        # default esc behaviuor
-        self.exec_esc = exit_scope
-
-    def set_visible(self):
-        parent_scope: Scope = self.parent_scope
-        if self.name not in parent_scope.sub_scopes:
-            parent_scope.sub_scopes[self.name] = self 
-        self.visible = True
-
-    def reset_sub_scope_visibility(self):
-        """Reset the valie of 'visible' for all the subscope"""
-        for key, item in self.sub_scopes.items():
-            item.visible = False
-
-    def filter_sub_scope_by_visibility(self):
-        """Remove sub scope that are not visible"""
-        print("FILTERINGGGG")
-        keys = list(self.sub_scopes.keys())
-        print(keys)
-        for key in keys:
-            print(f"key {key}")
-            print(f"visible value {self.sub_scopes[key].visible}")
-            if not self.sub_scopes[key].visible:
-                print(f"deleting the {key} key")
-                self.sub_scopes.pop(key)
-
-    ### consider to move this logic in each elements, should be more flexible
-    def update(self):
-        """Update the counter using the number of sub scopes"""
-
-        self.filter_sub_scope_by_visibility()
-
-        for key, item in self.sub_scopes.items():
-            item.selected = False
-        if len(self.sub_scopes) != 0:
-            self.cursor = self.cursor % len(self.sub_scopes)
-            sel_scope = list(self.sub_scopes.keys())[self.cursor]
-            self.sub_scopes[sel_scope].selected = True
-
-        self.reset_sub_scope_visibility()
-
-    ### menu should be not create sub scope, but create the scope only once
-    ### selected
-    def update_legacy(self):
-        """Update the counter using the number of sub scopes"""
-        for key, item in self.sub_scopes.items():
-            item.selected = False
-        if len(self.sub_scopes) != 0:
-            self.cursor = self.cursor % len(self.sub_scopes)
-            sel_scope = list(self.sub_scopes.keys())[self.cursor]
-            self.sub_scopes[sel_scope].selected = True
-
-    def update_no_sub(self, row_count, circular=True):
-        """Update the counter using an arbitrary number: row_count"""
-        if row_count == 0:
-            pass
-        else:
-            if circular:
-                self.cursor = self.cursor % row_count
-            else:
-                if self.cursor < 0:
-                    self.cursor = 0
-                elif self.cursor >= row_count:
-                    self.cursor = row_count - 1
-
-    # ONGOING change.........
-    # exec_child is not right as name, better exec_when pressed, if there are
-    # child the child is executed, if there are no child the own is executed
-    # AND
-    # need 2 exec function:
-    # INIT -> create the scope (exec)
-    # EXEC -> execute if needed (exec_own)
-    # AND
-    # create a new method to execute both INIT and EXEC
-    def exec_child(self, *args):
-        if len(self.sub_scopes) > 0:
-            idx = self.cursor % len(self.sub_scopes)  # i could delete the modulus
-            # on the scope part? we need this when the child scope are less then
-            # the element you can navigate in the same scope
-            child_scope_key = list(self.sub_scopes.keys())[idx]
-            child_scope = self.sub_scopes[child_scope_key]
-            child_scope.exec_self(*args)
-        else:
-            self.exec_own(self, *args)
-
-    # we can delete this method i think... when we refactor the exec_own exec_init
-    def exec_self(self, *args):
-        """Execute the function stored in the self.exec"""
-        self.exec(self, *args)
-
-
-#### Scope executions for exec
-def activate_scope(scope: Scope, screenState: ScreenState):
-    screenState.activeScope = scope
-    return scope
-
-
-def activate_scope_from_sibling(scope: Scope, screenState: ScreenState):
-    screenState.activeScope = scope
-    parent = scope.parent_scope
-    count = 0
-    for key, item in parent.sub_scopes.items():
-        if item == scope:
-            parent.cursor = count
-            scope.selected = True
-        else:
-            item.selected = False
-        count += 1
-    return scope
-
-
-def activate_scope_next_sibling(scope: Scope, screenState: ScreenState, *args):
-    ### used in the block band
-    parent = scope.parent_scope
-
-    count = 0
-    next_item = False
-    next_scope = None
-    for key, item in parent.sub_scopes.items():
-        if item == scope:
-            parent.cursor = count + 1
-            scope.selected = False
-            next_item = True
-        elif next_item:
-            screenState.activeScope = item
-            item.selected = True
-            next_item = False
-            next_scope = item
-        else:
-            item.selected = False
-        count += 1
-    return next_scope
-
-
-def activate_scope_prev_sibling(scope: Scope, screenState: ScreenState, *args):
-    ### used in the block band
-    parent = scope.parent_scope
-
-    count = 0
-    prev_item_id = False
-    prev_scope = None
-    for key, item in parent.sub_scopes.items():
-        if item == scope:
-            prev_item_id = count - 1
-            parent.cursor = prev_item_id
-            scope.selected = False
-        else:
-            item.selected = False
-        count += 1
-
-    prev_scope = list(parent.sub_scopes.values())[prev_item_id]
-    screenState.activeScope = prev_scope
-    prev_scope.selected = True
-    return prev_scope
-
-
-def select_next_scope(scope: Scope, screenState: ScreenState, *args):
-    ### used in the block band
-    parent = scope.parent_scope
-    screenState.activeScope = parent
-    parent.cursor += 1
-
-    return parent
-
-
-def select_prev_scope(scope: Scope, screenState: ScreenState, *args):
-    ### used in the block band
-    parent = scope.parent_scope
-    screenState.activeScope = parent
-    parent.cursor -= 1
-
-    return parent
-
-
-def activate_pk(scope: Scope, screenState: ScreenState):
-    """Acvtivate the scope and set the active pk in the ScreenState"""
-    screenState.activeScope = scope
-    return scope
-
-
-def activate_grandparent_scope(scope: Scope, screenState: ScreenState):
-    screenState.activeScope = scope.parent_scope.parent_scope
-    return scope.parent_scope.parent_scope
-
-
-def get_N_scope(scope: Scope, screenState):
-    scope.active = False
-    active_scope_key = list(scope.sub_scopes.keys())[scope.cursor]
-
-    new_scope = scope.sub_scopes[active_scope_key]
-    new_scope.active = True
-    return new_scope
-
-
-def activate_scope_and_set_pk(scope: Scope, screenState):
-    """Activate both active and main scope and set the active finger"""
-    screenState.activeScope = scope
-    screenState.active_pk[0] = int(scope.name)  # Maibe use the possibility to
-    # change the args input of the scope exec
-    return scope
-
-
-# used to open a coin view from a tab
-# we can create a open_stuff function to not create a particular fn for each type
-# and add the screen_fn as parameter
-def open_coin_wallet(scope: Scope, screenState: ScreenState, tail):
-    new_name = f"{scope.parent_scope.name}_{tail}"
-    new_scope = Scope(new_name, screen_coin_wallet, screenState)
-    new_scope.parent_scope = scope  # parent_scope
-    new_scope.data['tail'] = tail
-    new_scope.exec = None
-    screenState.activeScope = new_scope
-    return new_scope
-
-
-def open_transaction(scope: Scope, screenState: ScreenState, spend_bundle_hash):
-    new_name = f"{scope.parent_scope.name}_{spend_bundle_hash}"
-    new_scope = Scope(new_name, screen_transaction, screenState)
-    new_scope.parent_scope = scope  # parent_scope
-    new_scope.data['spend_bundle_hash'] = spend_bundle_hash
-    new_scope.exec = None
-    screenState.activeScope = new_scope
-    return new_scope
-
-
-def exit_scope(scope: Scope, screen_state: ScreenState, *args):
-    if scope.parent_scope:
-        screen_state.activeScope = scope.parent_scope
-        return scope.parent_scope
-
-
-def convert_ts_to_date(ts):
-    """Convert a timestamp to a date, with ts in milliseconds"""
-    return datetime.fromtimestamp(ts/1000).strftime('%Y-%m-%d %H:%M:%S')
-
-
-def write_prices(name, prices):
-    name += '.csv'
-    with open(name, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(['timestamps', 'value'])
-        writer.writerows([[convert_ts_to_date(key), value] for key, value in prices.items()])
-
-
-def convert_historic_price_to_currency(historic_timestamp_ref_coin, historic_price_ref_coin,
-                                       historic_timestamp_target_coin, historic_price_target_coin,
-                                       invert_target_coin=False):
-    """Convert historic price of a pair using another pair with a coin in common.
-    EG:
-    ref_coin= BTC_USD
-    target_coin = XCH_USD
-    convert the the XCH_USD pair to XCH_BTC
-    """
-
-    # TODO: set a threshold for the time diff, for which, if exceeded discard the data
-    # TODO: use bisect instead of the while to find the best insertion point
-
-    len_ref_coin_ts = len(historic_timestamp_ref_coin)
-    u = 0
-    new_historic_price_target_coin = []
-    new_timestamps = []
-    for n, i in enumerate(historic_timestamp_target_coin):
-        #diff = abs(i - historic_timestamp_ref_coin[u])
-        #while u < (len_ref_coin_ts - 1):
-        #    next_diff = abs(i - historic_timestamp_ref_coin[u + 1])
-        #    if next_diff >= diff:
-        #        break
-        #    u += 1
-
-        u = binary_search_l(historic_timestamp_ref_coin, i)
-        if u >= len_ref_coin_ts - 1:
-            u = len_ref_coin_ts - 1
-        elif abs(i - historic_timestamp_ref_coin[u]) < abs(i - historic_timestamp_ref_coin[u + 1]):
-            pass
-        else:
-            u += 1
-
-        price_ref_coin = historic_price_ref_coin[u]
-        if invert_target_coin:
-            price_ref_coin = 1 / historic_price_ref_coin[u]
-
-        new_historic_price_target_coin.append(historic_price_target_coin[n] * price_ref_coin)
-        new_timestamps.append(historic_timestamp_target_coin[n])
-
-    return dict(zip(new_timestamps, new_historic_price_target_coin))
-
-
-def convert_historic_price_to_currency_DEB(historic_timestamp_ref_coin, historic_price_ref_coin,
-                                           historic_timestamp_target_coin, historic_price_target_coin,
-                                           invert_target_coin=False, name="memento"):
-    """Convert historic price of a pair using another pair with a coin in common.
-    EG:
-    ref_coin= BTC_USD
-    target_coin = XCH_USD
-    convert the the XCH_USD pair to XCH_BTC
-    """
-
-    # TODO: set a threshold for the time diff, for which, if exceeded discard the data
-    # TODO: use bisect instead of the while to find the best insertion point
-
-    len_ref_coin_ts = len(historic_timestamp_ref_coin)
-    u = 0
-    new_historic_price_target_coin = []
-    new_timestamps = []
-    name += '.csv'
-    with open(name, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(['target', 'target', 'ref', 'ref', 'ref', 'calculated'])
-        writer.writerow(['date', 'price', 'date', 'price', 'original price', 'calculated price'])
-        for n, i in enumerate(historic_timestamp_target_coin):
-            u = binary_search_l(historic_timestamp_ref_coin, i)
-            if u >= len_ref_coin_ts - 1:
-                u = len_ref_coin_ts - 1
-            elif abs(i - historic_timestamp_ref_coin[u]) < abs(i - historic_timestamp_ref_coin[u + 1]):
-                pass
-            else:
-                u += 1
-
-            price_ref_coin = historic_price_ref_coin[u]
-            if invert_target_coin:
-                price_ref_coin = 1 / historic_price_ref_coin[u]
-
-            new_historic_price_target_coin.append(historic_price_target_coin[n] * price_ref_coin)
-            new_timestamps.append(historic_timestamp_target_coin[n])
-            the_row = [convert_ts_to_date(historic_timestamp_target_coin[n]), historic_price_target_coin[n], convert_ts_to_date(historic_timestamp_ref_coin[u]), price_ref_coin, historic_price_ref_coin[u], historic_price_target_coin[n] * price_ref_coin]
-            writer.writerow(the_row)
-
-        writer.writerow([])
-        ts = [[convert_ts_to_date(i), 'empty'] for i in historic_timestamp_ref_coin]
-
-        writer.writerows(ts)
-
-    return dict(zip(new_timestamps, new_historic_price_target_coin))
-
-
-# fetch coin data
-def fetch_coin_data(data_lock, coins_data, tail):
-    "fetch data for a coin"
-
-    logging(server_logger, "DEBUG", f"fetching CAT's data with tail: {tail}")
-
-    try:
-
-        if tail in coins_data:
-            last_update = coins_data[tail].local_timestamp
-            if not last_update:
-                last_update = 0
-            diff = datetime.now().timestamp() * 1000 - last_update
-            if diff < (60 * 1000):
-                logging(server_logger, "DEBUG", f"fetching CAT's data with tail: {tail}, already recorded")
-                return
-
-        current_price = DEX.get_current_price_from_tail(tail)
-        historic_price, historic_timestamp = DEX.getHistoricPriceFromTail(tail, 7)
-        end = datetime.now()
-        begin = int((end - timedelta(days=7)).timestamp())
-        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-
-        for price, ts in zip(historic_price, historic_timestamp):
-            WDB.insert_price(conn, tail, ts, price, XCH_CUR)
-        conn.close()
-
-        if len(historic_price) == 0:
-            historic_price.append(current_price)
-            historic_timestamp.append(int(datetime.now().timestamp() * 1000))
-
-        with data_lock:
-            if tail not in coins_data:
-                coins_data[tail] = CoinPriceData()
-                coins_data[tail].tail = tail
-            current_price_chia = coins_data[XCH_FAKETAIL].current_price_currency
-            historic_timestamp_chia = list(coins_data[XCH_FAKETAIL].historic_price_currency.keys())
-            historic_price_chia = list(coins_data[XCH_FAKETAIL].historic_price_currency.values())
-
-            coins_data[tail].local_timestamp = datetime.now().timestamp() * 1000
-            coins_data[tail].current_price = current_price
-            coins_data[tail].current_price_currency = current_price * current_price_chia
-            coins_data[tail].current_price_date = int(datetime.now().timestamp() * 1000)
-            coins_data[tail].historic_price = dict(zip(historic_timestamp, historic_price))
-
-
-            historic_price_currency = convert_historic_price_to_currency(
-                historic_timestamp_chia, historic_price_chia,
-                historic_timestamp, historic_price)
-
-            coins_data[tail].historic_price_currency = historic_price_currency
-            coins_data[tail].historic_range_price_data = (begin, end)
-
-    except Exception as e:
-        logging(server_logger, "DEBUG", f"fetching coindata error {tail}")
-        logging(server_logger, "DEBUG", f"Balance error. Exception: {e}")
-        logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-        traceback.print_exc()
-
-
-def fetch_btc_data(data_lock, coins_data):
-    "fetch btc price"
-    logging(server_logger, "DEBUG", "fetching btc's price")
-
-    with data_lock:
-        if BTC_FAKETAIL in coins_data:
-            last_update = coins_data[BTC_FAKETAIL].local_timestamp
-            if not last_update:
-                last_update = 0
-            diff = datetime.now().timestamp() * 1000 - last_update
-            if diff < (60 * 1000):
-                logging(server_logger, "DEBUG", "fetching btc's data: already in")
-                return
-
-        # retrive last 7 days
-        currency = 'usd'
-        days = '7'
-        btc_cg_id = 'bitcoin'
-
-        # Construct the API URL
-        url = f"https://api.coingecko.com/api/v3/coins/{btc_cg_id}/market_chart?vs_currency={currency}&days={days}"
-
-        # Send the request to CoinGecko API
-        response = requests.get(url)
-
-        # Parse the JSON response
-        data = response.json()
-
-        # Extract relevant information (e.g., prices over the last 7 days)
-        prices = data['prices']
-        current_price = prices[-1]
-        historic_timestamp = []
-        historic_price = []
-        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-        for i in prices:
-            ts = i[0]
-            p = i[1]
-            historic_timestamp.append(ts)
-            historic_price.append(p)
-            # save on the DB
-            WDB.insert_price(conn, BTC_FAKETAIL, ts, p, USD_CUR)
-        conn.close()
-
-        if BTC_FAKETAIL not in coins_data:
-            coins_data[BTC_FAKETAIL] = CoinPriceData()
-            coins_data[BTC_FAKETAIL].tail = BTC_FAKETAIL
-
-        coins_data[BTC_FAKETAIL].local_timestamp = datetime.now().timestamp() * 1000
-        coins_data[BTC_FAKETAIL].current_price = 1
-        coins_data[BTC_FAKETAIL].current_price_currency = current_price[1]
-        coins_data[BTC_FAKETAIL].current_price_date = current_price[0]
-        coins_data[BTC_FAKETAIL].historic_price = dict(zip(historic_timestamp,
-                                                       [1] * len(historic_price)))
-        coins_data[BTC_FAKETAIL].historic_price_currency = dict(zip(historic_timestamp,
-                                                                historic_price))
-        end = datetime.now()
-        begin = int((end - timedelta(days=7)).timestamp())
-        coins_data[BTC_FAKETAIL].historic_range_price_data = (begin, end)
-
-
-def fetch_chia_data(data_lock, coins_data):
-    "fetch data for a coin"
-
-    logging(server_logger, "DEBUG", "fetching chia's data")
-
-    try:
-        # lock now to be sure chia is the first entry and it is available for later entries
-        with data_lock:
-
-            chia_id = XCH_FAKETAIL
-
-            if chia_id in coins_data:
-                last_update = coins_data[chia_id].local_timestamp
-                diff = datetime.now().timestamp() * 1000 - last_update
-                if diff < (60 * 1000):
-                    logging(server_logger, "DEBUG", "fetching chia's data: already in")
-                    return
-
-            # retrive last 7 days
-            currency = 'usd'
-            days = '7'
-            chia_cg_id = 'chia'
-
-            # Construct the API URL
-            url = f"https://api.coingecko.com/api/v3/coins/{chia_cg_id}/market_chart?vs_currency={currency}&days={days}"
-
-            # Send the request to CoinGecko API
-            response = requests.get(url)
-
-            # Parse the JSON response
-            data = response.json()
-
-            # Extract relevant information (e.g., prices over the last 7 days)
-            prices = data['prices']
-            current_price = prices[-1]
-            historic_timestamp = []
-            historic_price = []
-            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-            for i in prices:
-                ts = i[0]
-                p = i[1]
-                historic_timestamp.append(ts)
-                historic_price.append(p)
-                # save on the DB
-                WDB.insert_price(conn, XCH_FAKETAIL, ts, p, USD_CUR)
-            conn.close()
-
-            if chia_id not in coins_data:
-                coins_data[chia_id] = CoinPriceData()
-                coins_data[chia_id].tail = chia_id
-
-            coins_data[chia_id].local_timestamp = datetime.now().timestamp() * 1000
-            coins_data[chia_id].current_price = 1
-            coins_data[chia_id].current_price_currency = current_price[1]
-            coins_data[chia_id].current_price_date = current_price[0]
-            coins_data[chia_id].historic_price = dict(zip(historic_timestamp,
-                                                          [1] * len(historic_price)))
-            coins_data[chia_id].historic_price_currency = dict(zip(historic_timestamp,
-                                                                   historic_price))
-            end = datetime.now()
-            begin = int((end - timedelta(days=7)).timestamp())
-            coins_data[chia_id].historic_range_price_data = (begin, end)
-
-    except Exception as e:
-        logging(server_logger, "DEBUG", f"fetching chia coindata error from coin geko")
-        logging(server_logger, "DEBUG", f"Balance error. Exception: {e}")
-        logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-        traceback.print_exc()
-
-
-def fetch_addresses(data_lock, fingerprint: int, pk_state_id: int):
-    """Fetch addresses for each fingerprints until the last FREE_ADD addresses are unused"""
-    ### to implement the logic to load until last 100 are unused
-    conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-    non_observer = False
-    logging(server_logger, "DEBUG", "fetching addresses from daemon")
-    response = call_rpc_daemon("get_wallet_addresses", fingerprints=[fingerprint], index=0, count=1000, non_observer_derivation=non_observer)
-    adds = response[str(fingerprint)]
-    # pk_state_id = WDB.retrive_pk(conn, fingerprint)[0]
-
-    for a in adds:
-        WDB.insert_address(conn, pk_state_id, a['hd_path'], a['address'], non_observer)
-        logging(server_logger, "DEBUG", f"added adx with path {a['hd_path']} of finger: {fingerprint} to the db")
-
-
-def load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active):
-    """Load all wallet and asset data from the db"""
-    #### laod key ####
-    pk_states = WDB.retrive_all_pks(conn)
-
-    for state in pk_states:
-        new_pk = PkState()
-        new_pk.fingerprint = state['fingerprint']
-        new_pk.pk = state['public_key']
-        new_pk.label = state["label"]
-        fingers_list.append(new_pk.fingerprint)
-        fingers_state.append(new_pk)
-
-    #### load wallets ####
-
-    for finger in fingers_list:
-
-        pk_state_id = WDB.retrive_pk(conn, finger)[0]
-        logging(server_logger, "DEBUG", f"finger {finger}")
-        idx = fingers_list.index(finger)
-        wallets = fingers_state[idx].wallets
-
-        db_wallets = WDB.retrive_wallets_by_pk_state_id(conn, pk_state_id)
-
-        for db_w in db_wallets:
-            tail = db_w['tail']
-            mojo = CAT_MOJO
-            if tail == XCH_FAKETAIL:
-                mojo = XCH_MOJO
-            wallet: WalletState = WalletState()
-            wallet.confirmed_wallet_balance = db_w['confirmed_wallet_balance'] / mojo
-            wallet.spendable_balance = db_w['spendable_balance'] / mojo
-            wallet.unspent_coin_count = db_w['unspent_coin_count']
-            # load asset data
-            asset = WDB.retrive_asset(conn, tail)
-            if asset:
-                wallet.name = asset['name']
-                wallet.ticker = asset['ticker']
-                wallets[tail] = wallet
-
-            #### load used tails ####
-            if tail not in coins_data:
-                coins_data[tail] = CoinPriceData()
-                coins_data[tail].tail = tail
-
-
-        # load btc prices
-        tail = BTC_FAKETAIL
-        coins_data[tail] = CoinPriceData()
-        coins_data[tail].tail = tail
-        prices = WDB.retrive_price_tail_currency(conn, tail, USD_CUR)
-        if prices:
-            prices = sorted(prices, key=lambda x: x[0])
-            last_prices = prices[0]
-            coins_data[tail].local_timestamp = last_prices[0]
-            coins_data[tail].current_price_currency = last_prices[2]
-            coins_data[tail].historic_price_currency = {
-                timestamp: price for timestamp, _, price, _ in prices}
-
-        # load chia prices
-        tail = XCH_FAKETAIL
-        prices = WDB.retrive_price_tail_currency(conn, tail, USD_CUR)
-        if prices:
-            prices = sorted(prices, key=lambda x: x[0])
-            last_prices = prices[0]
-            coins_data[tail].local_timestamp = last_prices[0]
-            coins_data[tail].current_price_currency = last_prices[2]
-            coins_data[tail].historic_price_currency = {
-                timestamp: price for timestamp, _, price, _ in prices}
-
-            timestamp_price_chia = last_prices[0]
-            current_price_chia = last_prices[2]
-            historic_timestamp_chia = list(coins_data[tail].historic_price_currency.keys())
-            historic_price_chia = list(coins_data[tail].historic_price_currency.values())
-
-
-        # laod CAT price data
-        fifteen_minutes = 15 * 60  # CONST for limit price convertion from XCH to currency
-        for tail in coins_data:
-            if tail == XCH_FAKETAIL or BTC_FAKETAIL:
-                continue
-
-            # retrive CAT price in XCH
-            prices = WDB.retrive_price_tail_currency(conn, tail, XCH_CUR)
-            if not prices:
-                continue
-            prices = sorted(prices, key=lambda x: x[0])
-            last_prices = prices[0]
-            coins_data[tail].local_timestamp = last_prices[0]
-            coins_data[tail].current_price = last_prices[2]
-            #coins_data[tail].historic_price = {}
-            #for p in prices:
-            #    coins_data[tail].historic_price[p[0]] = p[2]
-            coins_data[tail].historic_price = {
-                timestamp: price for timestamp, _, price, _ in prices}
-
-            # here i should use the convert_historic_price_to_currency function
-            if abs(timestamp_price_chia - coins_data[tail].local_timestamp) > fifteen_minutes:
-                coins_data[tail].current_price_currency = coins_data[tail].current_price * current_price_chia
-                coins_data[tail].current_price_date = timestamp_price_chia
-
-            historic_timestamp = list(coins_data[tail].historic_price.keys())
-            historic_price = list(coins_data[tail].historic_price.values())
-            historic_price_currency = convert_historic_price_to_currency(
-                historic_timestamp_chia, historic_price_chia,
-                historic_timestamp, historic_price)
-            coins_data[tail].historic_price_currency = historic_price_currency
-            #coins_data[tail].historic_price_currency = dict(zip(historic_timestamp,
-            #                                                    historic_price_currency))
-            begin = historic_timestamp[0]
-            end = historic_timestamp[-1]
-            coins_data[tail].historic_range_price_data = (begin, end)
-
-
-def get_spendable_coin(wallet_id):
-    """Get spendable coins by waiting for the wallet to be ready"""
-    coins = False
-    count = 0
-    #while not coins or count == 10:
-    while not coins:
-        coins = asyncio.run(
-            call_rpc_wallet('get_spendable_coins', wallet_id=wallet_id))
-        logging(server_logger, "DEBUG", f"Coin retrive form: {coins}")
-        if not coins:
-            # temp workaround about not synced wallet
-            time.sleep(5)
-            count += 1
-            continue
-        else:
-            return coins["confirmed_records"]
-    return False
-
-
-def fetch_cat_assets():
-
-    conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-    last_update = WDB.retrive_table_timestamp(conn, 'asset_name')
-    cats_data = None
-    min_time_elapsed = 1 * 60 * 60
-    now = datetime.now().timestamp()
-    if (now - last_update) > min_time_elapsed:
-        # insert the chia asset on
-        cats_data = DEX.fetch_all_CAT_names_from_spacescan()
-
-    if cats_data:
-        for cat in cats_data:
-            WDB.insert_asset(conn, cat['asset_id'], cat['name'], cat['symbol'])
-        WDB.insert_table_timestamp(conn, 'asset_name')
-
-
-# wallet fetcher
-# TODO: finger_list: List[int] is rendundant of fingers_state, List[FingerState]
-def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
-                 coins_data, count_server):
-    """Fetch wallet data."""
-
-    logging(server_logger, "DEBUG", "wallet fetcher started.")
-
-    while True:
-
-        count_server[0] += 1
-        logging(server_logger, "DEBUG", f'wallet fetcher loop counting: {count_server[0]}')
-
-        original_logged_finger = asyncio.run(call_rpc_wallet('get_logged_in_fingerprint'))['fingerprint']
-        finger_active[0] = original_logged_finger
-
-        fingerprints = []
-        ######################### LOAD CAT DATA #####################
-        cat_data = threading.Thread(target=fetch_cat_assets, daemon=True)
-        cat_data.start()
-
-        ######################### FINGERPRINTS LOADING ################
-        try:
-            logging(server_logger, "DEBUG", f'loading fingerprints.\n\n')
-            fingerprints = asyncio.run(call_rpc_wallet('get_public_keys'))
-            logging(server_logger, "DEBUG", f'fingerprints: {fingerprints}')
-
-            if fingerprints["success"]:
-                fingerprints = fingerprints["public_key_fingerprints"]
-            else:
-                raise ConnectionError("The rpc call failed.")
-
-            # get logged finger -> to place on a screen variable
-            #screenState.active_pk = (False, asyncio.run(call_rpc_wallet('get_logged_in_fingerprint')))
-            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-            for finger in fingerprints:
-                if finger in fingers_list:
-                    continue
-                else:
-                    new_pk = PkState()
-                    new_pk.fingerprint = finger
-                    key = call_rpc_daemon("get_key", fingerprint=finger)
-                    new_pk.pk = key["public_key"]
-                    new_pk.label = key["label"]
-                    fingers_list.append(finger)
-                    fingers_state.append(new_pk)
-
-                    # store the fingerprints
-                    logging(server_logger, "DEBUG", 'WDB insert PK starting')
-
-                    try:
-                        pk_state_id = WDB.insert_pk(conn, finger, key["label"], key["public_key"])
-                    except Exception as e:
-                        logging(server_logger, "DEBUG", f'WDB insert_pk error: {e}')
-
-                    if pk_state_id:
-                        add_addresses_thread = threading.Thread(target=fetch_addresses,
-                                                                args=(data_lock,
-                                                                      finger,
-                                                                      pk_state_id),
-                                                                daemon=True)
-                        add_addresses_thread.start()
-
-                    logging(server_logger, "DEBUG", 'WDB insert PK ended')
-
-            logging(server_logger, "DEBUG", 'fingerprint loading ended')
-            conn.close()
-
-        except Exception as e:
-            logging(server_logger, "DEBUG", "probably there is no chia node and wallet running")
-            logging(server_logger, "DEBUG", f"Exception: {e}")
-
-
-        #################### LOAD WALLET ########################
-        try:
-            logging(server_logger, "DEBUG", 'loading wallet.\n\n')
-
-            conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-            for finger in fingerprints:
-
-                pk_state_id = WDB.retrive_pk(conn, finger)[0]
-                logging(server_logger, "DEBUG", f"SQL {pk_state_id}")
-                logged_finger = asyncio.run(call_rpc_wallet('get_logged_in_fingerprint'))
-                if logged_finger != finger:
-                    result = asyncio.run(call_rpc_wallet('log_in', fingerprint=finger))
-
-                #time.sleep(15)
-
-                logging(server_logger, "DEBUG", f"finger {finger}")
-                logging(server_logger, "DEBUG", f"finger list {fingers_list}")
-                idx = fingers_list.index(finger)
-                wallets = fingers_state[idx].wallets
-
-                # chia wallet
-                chia_wallet: WalletState = WalletState()
-                chia_wallet_id = 1
-                response = asyncio.run(call_rpc_wallet('get_wallet_balance', wallet_id=chia_wallet_id))
-                logging(server_logger, "DEBUG", f"rpc balance {response}")
-
-                if response:
-                    response = response["wallet_balance"]
-                else:
-                    raise ConnectionError("The rpc call failed.")
-                    logging(server_logger, "DEBUG", f'get balance did not get anything for the chia wallet. Finger; {finger}')
-                chia_wallet.confirmed_wallet_balance = response['confirmed_wallet_balance'] / XCH_MOJO
-                chia_wallet.spendable_balance = response['spendable_balance'] / XCH_MOJO
-                chia_wallet.unspent_coin_count = response['unspent_coin_count']
-                chia_wallet.name = "Chia"
-                chia_wallet.ticker = "XCH"
-                WDB.insert_wallet(conn, pk_state_id, XCH_FAKETAIL, chia_wallet)
-                btc_data_thread = threading.Thread(target=fetch_btc_data,
-                                                   args=(data_lock,
-                                                         coins_data),
-                                                   daemon=True)
-                btc_data_thread.start()
-                chia_data_thread = threading.Thread(target=fetch_chia_data,
-                                                    args=(data_lock,
-                                                          coins_data),
-                                                    daemon=True)
-                chia_data_thread.start()
-
-                coins = get_spendable_coin(chia_wallet_id)
-                #if coins:
-                #    if len(coins) > 4:
-                #        chia_wallet.coins.extend(coins[:4])
-                #    else:
-                #        chia_wallet.coins.extend(coins)
-                chia_wallet.coins.extend(coins)
-                wallets[XCH_FAKETAIL] = chia_wallet
-
-                # add CATs
-                cat_chia_wallets = asyncio.run(
-                    call_rpc_wallet('get_wallets', type=6))["wallets"]
-
-                logging(server_logger, "DEBUG", f"chia cat wallet {cat_chia_wallets}")
-                for e, i in enumerate(cat_chia_wallets):
-                    cat_wallet = WalletState()
-                    balance = None
-                    coins = []
-                    try:
-                        balance = asyncio.run(
-                            call_rpc_wallet('get_wallet_balance', wallet_id=i['id']))["wallet_balance"]
-                        logging(server_logger, "DEBUG", f"rpc balance for a cat {balance}")
-                    except Exception as e:
-                        logging(server_logger, "DEBUG", f"Balance error. Exception: {e}")
-                        logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-                        traceback.print_exc()
-
-                    coins = get_spendable_coin(i['id'])
-                    if coins:
-                        cat_wallet.coins.extend(coins)
-                    else:
-                        logging(server_logger, "DEBUG", f"Error while retriving spendable coins for {i['id']} asset and for the finger")
-
-                    try:
-                        transactions = asyncio.run(call_rpc_wallet('get_transactions',
-                                                                   wallet_id=i['id']))["transactions"]
-                    except Exception as e:
-                        logging(server_logger, "DEBUG", f"Coin retrive error for get_transaction. Probably wallet not synced? Exception: {e}")
-                        logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-                        logging(server_logger, "DEBUG", f"Error for the {i['id']} asset and for the finger {finger}")
-                        traceback.print_exc()
-                    transactions_roto = []
-                    for t in transactions:
-                        transactions_roto.append(TransactionRecordRoto(
-                                                 t["confirmed_at_height"],
-                                                 t["created_at_time"],
-                                                 t["to_puzzle_hash"],
-                                                 t["amount"],
-                                                 t["fee_amount"],
-                                                 t["confirmed"],
-                                                 t["trade_id"],
-                                                 t["type"],
-                                                 t["name"])
-                                                 )
-
-                    try:
-                        cat_wallet.transactions = transactions_roto
-                    except Exception as e:
-                        logging(server_logger, "DEBUG", f"Exception: {e}")
-                        logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-                        traceback.print_exc()
-
-                    tail = balance['asset_id']  # it is the tail...
-                    cat_wallet.data = tail
-                    #print(f'cata wallet data: ', cat_wallet.data)
-                    cat_name_sym = DEX.fetchDexiNameFromTail(cat_wallet.data)
-                    #print(f"dexi data: ", cat_name_sym)
-                    # fetch prices from dexi
-                    WDB.insert_asset(conn, cat_wallet.data,
-                                     cat_name_sym['name'],
-                                     cat_name_sym['symbol'])
-                    coin_data_thread = threading.Thread(target=fetch_coin_data,
-                                                        args=(data_lock,
-                                                              coins_data,
-                                                              cat_wallet.data),
-                                                        daemon=True)
-                    coin_data_thread.start()
-
-                    cat_wallet.name = cat_name_sym['name']
-                    cat_wallet.ticker = cat_name_sym['symbol']
-                    cat_wallet.confirmed_wallet_balance = balance['confirmed_wallet_balance'] // CAT_MOJO
-                    cat_wallet.spendable_balance = balance['spendable_balance'] // CAT_MOJO
-                    cat_wallet.unspent_coin_count = balance['unspent_coin_count']
-                    # bedore i was using the wallet id of the cat wallet.
-                    # now i am using the cat tail
-                    #wallets[i['id']] = cat_wallet
-                    wallets[cat_wallet.data] = cat_wallet
-                    # evaluate if it is better to use the byte32 name
-
-                    # store
-                    WDB.insert_wallet(conn, pk_state_id, tail, cat_wallet)
-
-                # add fake coins for testing
-                for e, cat_tail in enumerate(cat_test):
-                    if cat_tail in wallets:
-                        continue
-                    cat_wallet = WalletState()
-                    balance = 999
-                    cat_wallet.data = cat_tail
-                    dexi_name = DEX.fetchDexiNameFromTail(cat_wallet.data)
-                    cat_wallet.name = dexi_name['name']
-                    cat_wallet.ticker = dexi_name['symbol']
-                    cat_wallet.confirmed_wallet_balance = 111
-                    cat_wallet.spendable_balance = 222
-                    cat_wallet.unspent_coin_count = 333
-                    wallets[cat_tail] = cat_wallet
-                    # fetch prices from dexi
-                    coin_data_thread = threading.Thread(target=fetch_coin_data,
-                                                        args=(data_lock,
-                                                              coins_data,
-                                                              cat_wallet.data),
-                                                        daemon=True)
-                    coin_data_thread.start()
-                    # evaluate if it is better to use the byte32 name
-
-            conn.close()
-
-            logging(server_logger, "DEBUG", "loading wallet ended")
-
-        except Exception as e:
-            logging(server_logger, "DEBUG", "probably there is no chia node and wallet running")
-            logging(server_logger, "DEBUG", f"Exception: {e}")
-            traceback.print_exc()
-            logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-
-        try:
-            result = asyncio.run(
-                call_rpc_wallet('log_in', fingerprint=original_logged_finger))#["fingerprint"]
-            logging(server_logger, "DEBUG", f"original fingerprint: {original_logged_finger}")
-            logging(server_logger, "DEBUG", f"call output log in: {result}")
-            if not result:
-                result = result['fingerprint']
-            else:
-                print("no come back")
-        except Exception as e:
-            logging(server_logger, "DEBUG", "logging back to the main fingerprint")
-            logging(server_logger, "DEBUG", f"Exception: {e}")
-            traceback.print_exc()
-            logging(server_logger, "DEBUG", f"Traceback: {traceback.format_exc()}")
-
-        logging(server_logger, "DEBUG", "begin sleep")
-        time.sleep(10)
-        logging(server_logger, "DEBUG", "end sleep")
-
-
-# UI
 
 def createFullSubWin(stdscr, screenState, height, width):
     """Create a subwindow for curses considering header and footer"""
@@ -1569,7 +145,7 @@ def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
     bbox = UIgraph.Point(0,0)
 
     # using figlet or not
-    if width > xDimMenu_fig * 2 and CONFtiller.FIGLET and n_rows > 3 and width > 100:
+    if width > xDimMenu_fig * 2 and FIGLET and n_rows > 3 and width > 100:
         bbox.x = xDimMenu_fig
         figlet = True
     else:
@@ -1592,7 +168,7 @@ def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
                        figlet=figlet)
 
 
-def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState,
+def screen_main_menu(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState,
                      figlet=False):
 
     width = screenState.screen_size.x
@@ -1604,17 +180,18 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
     activeScope: Scope = screenState.activeScope
     screenState.scope_exec_args = [screenState]
 
+    menu_items = []
     if len(activeScope.sub_scopes) == 0:
         menu_items = [
-            ('full node', screen_full_node, activate_scope),
+            ('full node', screen_full_node, ScopeActions.activate_scope),
         ]
         if DEBUGGING:
             menu_items += [
-                ('wallet', screen_fingers, activate_scope),
-                ('harvester analytics', screen_harvester, activate_scope),
-                ('dex', screen_dex, activate_scope),
-                ("tabs", screen_tabs, activate_scope),
-                #('debugging screen', DEBUGtiller.screen_debugging, activate_scope),
+                ('wallet', screen_fingers, ScopeActions.activate_scope),
+                ('harvester analytics', screen_harvester, ScopeActions.activate_scope),
+                ('dex', screen_dex, ScopeActions.activate_scope),
+                ("tabs", screen_tabs, ScopeActions.activate_scope),
+                #('debugging screen', DEBUGtiller.screen_debugging, ScopeActions.activate_scope),
             ]
 
         for name, handler, exec_fun in menu_items:
@@ -1623,52 +200,16 @@ def screen_main_menu(stdscr, keyboardState, screenState: ScreenState, fullNodeSt
             newScope.parent_scope = activeScope
             activeScope.sub_scopes[name] = newScope
 
-    # TODO it always active?
-    if activeScope is screenState.activeScope:
-        activeScope.update_legacy()
-    screenState.selection = activeScope.cursor
-
-    # menu dimension
-    yDimMenu = len(activeScope.sub_scopes) * FUTURE_FONT.height
-    longestLine = ''
-    xDimMenu = 0
-    for i in activeScope.sub_scopes.keys():
-        if len(i) > xDimMenu:
-            xDimMenu = len(i)
-            longestLine = i
-
-    xDimMenu, a = TEXT.sizeText(longestLine, FUTURE_FONT)
-
-    if height > yDimMenu * 2 and width > xDimMenu * 2 and width > 100:
-
-        xMenu = int(width / 2 - xDimMenu / 2)
-        yMenu = int(height / 2 - yDimMenu / 2)
-
-        menu_select(menu_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
-                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    True)
-    else:
-        # menu dimension
-        yDimMenu = len(activeScope.sub_scopes)
-        xDimMenu = 0
-        for i in activeScope.sub_scopes.keys():
-            if len(i) > xDimMenu:
-                xDimMenu = len(i)
-
-        xMenu = int(width/2 - xDimMenu / 2)
-        yMenu = int(height/2 - yDimMenu / 2)
-
-        menu_select(menu_win, list(activeScope.sub_scopes.keys()), screenState.selection, [yMenu, xMenu],
-                    screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    False)
+    factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
 
-def screen_dex(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+def screen_dex(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
 
     # select pair
+    make_pair_tickers_all()
     if 'dex' not in screenState.screen_data:
         screenState.screen_data["dex"] = {}
         screenState.screen_data["dex"]["tickers"] = loadAllTickers()
@@ -1699,9 +240,6 @@ def screen_dex(stdscr, keyboardState, screenState: ScreenState, fullNodeState: F
     dd = idTickers[idxFirst:idxLast]
 
     screenState.screen_data["dex"]["idxFirst"] = idxFirst
-    # define as globla
-    ## selTicker = {}
-
 
     for ticker, idCount in zip(tickers[idxFirst:idxLast], idTickers[idxFirst:idxLast]):
         # print(
@@ -1827,6 +365,7 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
 
 def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState):
     """ waooolllet """
+    # rename Token wallet
 
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -1976,7 +515,7 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNode
                                         pos,
                                         tab_size,
                                         keyboardState,
-                                        exit_scope,
+                                        ScopeActions.exit_scope,
                                         False,
                                         False,
                                         coins_table_legend)
@@ -2038,7 +577,7 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNode
                                         pos,
                                         UIgraph.Point(60,10),
                                         keyboardState,
-                                        exit_scope,
+                                        ScopeActions.exit_scope,
                                         False,
                                         False,
                                         addresses_table_legend)
@@ -2113,7 +652,7 @@ def screen_coin_wallet(stdscr, keyboardState, screenState: ScreenState, fullNode
                                 pos,
                                 UIgraph.Point(60,10),
                                 keyboardState,
-                                exit_scope,
+                                ScopeActions.exit_scope,
                                 False,
                                 False,
                                 None,  # addresses_table_legend,
@@ -2220,7 +759,7 @@ def screen_fingers(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     for finger in screenState.public_keys:
         if finger not in screenState.scopes:
             newScope = Scope(finger, handler, screenState)
-            newScope.exec = activate_scope_and_set_pk
+            newScope.exec = ScopeActions.activate_scope_and_set_pk
             newScope.parent_scope = activeScope
             activeScope.sub_scopes[finger] = newScope
 
@@ -2228,8 +767,6 @@ def screen_fingers(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     for finger in activeScope.sub_scopes:
         pk_state: PkState = screenState.public_keys[finger]
         fing_name = str(finger) + " - " + pk_state.label
-        # logging(ui_logger, "DEBUG", f"check finger, active {screenState.active_pk}")
-        # logging(ui_logger, "DEBUG", f"check finger, finger {finger}")
         if finger == screenState.active_pk[0]:
             fingers_str.append(f"{fing_name} >")
         else:
@@ -2353,7 +890,7 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState
         try:
             chia_coins_data = screenState.coins_data[XCH_FAKETAIL]
         except:
-            logging(ui_logger, "DEBUG", f'still no coin data for {chia_ticker}')
+            logging(debug_logger, "DEBUG", f'still no coin data for {chia_ticker}')
         chia_current_price_currency = chia_coins_data.current_price_currency
         chia_historic_price_currency = chia_coins_data.historic_price_currency
 
@@ -2481,7 +1018,7 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState
             try:
                 cat_coins_data = screenState.coins_data[wallet_dicKey]
             except:
-                logging(ui_logger, "DEBUG", f'still no coin data for {wallet.ticker}')
+                logging(debug_logger, "DEBUG", f'still no coin data for {wallet.ticker}')
             current_prices_xch.append(cat_coins_data.current_price)
             historic_prices_xch.append(cat_coins_data.historic_price)
             current_prices_currency.append(cat_coins_data.current_price_currency)
@@ -2491,7 +1028,7 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState
                 total_values_xch.append(xch_value)
                 total_values_currency.append(xch_value * chia_current_price_currency)
             except:
-                logging(ui_logger, "DEBUG", f'still no coin data for {wallet.ticker} or {chia_ticker}')
+                logging(debug_logger, "DEBUG", f'still no coin data for {wallet.ticker} or {chia_ticker}')
                 total_values_xch.append(None)
                 total_values_currency.append(None)
 
@@ -2528,25 +1065,6 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState
             else:
                 historic_prices_currency_tab.append([])
                 historic_ts_currency_tab.append([])
-
-        # DEBUGGING historic prices
-        #debug_cursor = active_scope.cursor
-        #try:
-        #    global DEBUG_TEXT
-        #    if len(historic_prices_xch_tab) > 1:
-        #        DEBUG_TEXT = (f"ticker: {tickers[debug_cursor]} "
-        #                      f"prices [1] xch: {historic_prices_xch_tab[debug_cursor][0]} "
-        #                      f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][0] / 1000).strftime('%Y-%m-%d')} // "
-        #                      f"prices [2] xch: {historic_prices_xch_tab[debug_cursor][1]} "
-        #                      f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][1] / 1000).strftime('%Y-%m-%d')} ////"
-        #                      f"prices [1] cur: {historic_prices_currency_tab[debug_cursor][0]} "
-        #                      f"data: {datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][0] / 1000).strftime('%Y-%m-%d')} // "
-        #                      f"prices [2] cur: {historic_prices_currency_tab[debug_cursor][1]} "
-        #                      f"{datetime.fromtimestamp(historic_ts_xch_tab[debug_cursor][1] / 1000).strftime('%Y-%m-%d')}"
-        #                      )
-        #except Exception as e:
-        #    print(e)
-        #    print("debugging is not for everyone...")
 
         ### CAT TABLE FORMATTING
         dataTable = [tickers, balances, current_prices_xch, historic_prices_xch_tab,
@@ -2646,36 +1164,6 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState
         #    {'success': True, 'chia_wallet_balance': {'confirmed_wallet_balance': 130, 'fingerprint': 291595168, 'max_send_amount': 130, 'pending_change': 0, 'pending_coin_removal_count': 0,
         #                                         'spendable_balance': 130, 'unconfirmed_chia_wallet_balance': 130, 'unspent_coin_count': 3, 'wallet_id': 1, 'wallet_type': 0}
 
-# idea about firsts screen
-# intro
-# main menu
-# wallet
-# dex
-# tibet
-# mempool
-# node
-
-dumbList = ["cedro", "boom", "toomabcdefghilmnopq", "broom", "LAgremmo",
-            "magro", "tewo", "faiehr", "fegpq", "Pqntwr", "Kista", "eiuallo",
-            "gest", "qqq"]
-dumbList2 = [1, -2, 3, 32223333333333, -5, 6, -7, 8, 9, 10, -11, -12, -13, 14]
-dumbList3 = [987, 782, 433, 904, 3459092348, 3890, 2903, 8812, 3, 34, 11343, 139, 22, 438]
-dumbList4 = ["cedro", "boom", "toomabcdefghilmnopq", "broom", "LAgremmo",
-            "magro", "tewo", "faiehr", "fegpq", "Pqntwr", "Kista", "eiuallo",
-            "gest", "qqq"]
-
-theList = []
-for n, i in enumerate(dumbList):
-    theList.append([dumbList[n], dumbList2[n], dumbList3[n]])
-
-dumbList = dumbList[0:5]
-dumbList2 = dumbList2[0:5]
-dumbList3 = dumbList3[0:5]
-
-theList2 = []
-for n, i in enumerate(dumbList):
-    theList2.append([dumbList[n], dumbList2[n], dumbList3[n], dumbList4[n]])
-
 
 def ft_standar_number_format(num, sig_digits, max_size):
     """Function to format a number. It gives None for the color info"""
@@ -2746,7 +1234,7 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        scope.exec = activate_scope
+        scope.exec = ScopeActions.activate_scope
         parent_scope.sub_scopes[name] = scope
 
 #        # create a child to create another window
@@ -3051,7 +1539,6 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
     table.attroff(curses.A_BOLD)
 
 
-white_darkBlue = None
 def screen_tabs(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     width = screenState.screen_size.x
@@ -3318,9 +1805,9 @@ def screen_sb_archive(stdscr, keyboardState, screenState, fullNodeState: FullNod
 
 def screen_spend_bundles(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
     menu_items = [
-        ('watch later', screen_sb_watch_later, activate_scope),
-        ('archive', screen_sb_archive, activate_scope),
-        ('memepool', screen_memepool, activate_scope)
+        ('watch later', screen_sb_watch_later, ScopeActions.activate_scope),
+        ('archive', screen_sb_archive, ScopeActions.activate_scope),
+        ('memepool', screen_memepool, ScopeActions.activate_scope)
     ]
 
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
@@ -3330,13 +1817,13 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
 
     if DEBUGGING:
         menu_items = [
-            ('blocks', screen_blocks, activate_scope),
-            ('memepool', screen_memepool, activate_scope),
-            ('spend bundles', screen_spend_bundles, activate_scope)
+            ('blocks', screen_blocks, ScopeActions.activate_scope),
+            ('memepool', screen_memepool, ScopeActions.activate_scope),
+            ('spend bundles', screen_spend_bundles, ScopeActions.activate_scope)
         ]
     else:
         menu_items = [
-            ('blocks', screen_blocks, activate_scope),
+            ('blocks', screen_blocks, ScopeActions.activate_scope),
         ]
 
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
@@ -3351,7 +1838,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     main_scope.update()
 
     if 'lapper' not in main_scope.data:
-        main_scope.data["lapper"] = Timer('block_band')
+        main_scope.data["lapper"] = UTILS.Timer('block_band')
     lapper = main_scope.data["lapper"]
     lapper.start()
     # load blockchain database
@@ -3505,7 +1992,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
 
             prompt = scope_go_to.data['prompt']
-            input_type = classify_number(prompt)
+            input_type = UTILS.classify_number(prompt)
             height = None
 
             match input_type:
@@ -3552,8 +2039,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                 if height_last_block - height < right_block_offset:
                     right_block_offset = 0
                 block_band_scope.data["idx_last_item"] = height + right_block_offset
-                #activate_scope_from_sibling(block_band_scope, screenState)
-                select_next_scope(scope_go_to, screenState)
+                ScopeActions.select_next_scope(scope_go_to, screenState)
 
 
     pos += UIgraph.Point(0, block_band_size.y + 0)
@@ -3664,7 +2150,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                             pos,
                             tab_size,
                             keyboardState,
-                            exit_scope,
+                            ScopeActions.exit_scope,
                             False,
                             False,)
 
@@ -3693,7 +2179,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
             print(e)
             print("height: ", h)
             global DEBUG_OBJ
-            DEBUG_OBJ.text += ( f"HASHHHH: {count} and {h} exc: {e}")
+            DEBUG_OBJ.text += (f"HASHHHH: {count} and {h} exc: {e}")
 
             none_list = [None] * 10
             #last_10_blocks = [none_list, none_list, none_list]
@@ -3719,7 +2205,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                                 pos,
                                 tab_size,
                                 keyboardState,
-                                exit_scope,
+                                ScopeActions.exit_scope,
                                 False,
                                 False,
                                 block_legend)
@@ -3766,27 +2252,25 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                                           pos,
                                           tab_size,
                                           keyboardState,
-                                          exit_scope,
+                                          ScopeActions.exit_scope,
                                           False,
                                           False,
                                           block_legend)
         # this should be an option of the create tab
-        block_scope.exec_esc = select_prev_scope
+        block_scope.exec_esc = ScopeActions.select_prev_scope
+
 
     # run copy/paste action or other pending stuffs
-
     if len(screenState.pending_action) > 0:
         for i, fn in screenState.pending_action:
             fn()
         screenState.pending_action = []
 
+
     lapper.clocking('block data')
     lapper.end()
     print(lapper)
 
-
-    #if keyboardState.esc is True:
-    #    screenState.screen = 'main'
 
 def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
 
@@ -3927,7 +2411,7 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
                                          pos,
                                          tab_size,
                                          keyboardState,
-                                         exit_scope,
+                                         ScopeActions.exit_scope,
                                          True,
                                          False,
                                          legend)
@@ -4086,559 +2570,3 @@ def screen_memepool(stdscr, keyboardState, screenState, fullNodeState: FullNodeS
                         False,
                         legend)
 
-
-if True:
-    #screenGenerators["debugging window"] = debugging_window
-    pass
-
-
-# move this part in a funciton to process input, and then run this inside the
-# scope execution. Easier to change a scope behaviuor if needed.
-# EG: func_input_proces_visual, func_input_process_insert
-# and call it when the scope is active
-def keyboard_processing(stdscr, screen_state: ScreenState, keyboard_state: KeyboardState,
-                        active_scope: Scope):
-
-    exit_roto = False
-
-    while True:
-        key = stdscr.getch()
-        if key == -1:
-            break
-
-        if key >= 0:
-            keyboard_state.key = chr(key)
-
-        if key == curses.KEY_ENTER or key == 10 or key == 13:
-            keyboard_state.enter = True
-            return
-        if key == 27:
-            keyboard_state.esc = True
-            return
-        if key == 6:  # ctrl-f
-            CONFtiller.FIGLET = not CONFtiller.FIGLET
-
-        if key == ord('q'):
-            exit_roto = True
-
-        match active_scope.mode:
-            case ScopeMode.INSERT:
-                match key:
-                    case curses.KEY_BACKSPACE:
-                        idx = active_scope.data['cursor'] - 1
-                        if idx < 0:
-                            pass
-                        else:
-                            s = active_scope.data['prompt']
-                            active_scope.data['prompt'] = s[:idx] + s[idx + 1:]
-                            active_scope.data['cursor'] -= 1
-                    case curses.KEY_DC:
-                        idx = active_scope.data['cursor']
-                        s = active_scope.data['prompt']
-                        if idx > len(s):
-                            pass
-                        else:
-                            active_scope.data['prompt'] = s[:idx] + s[idx + 1:]
-                    case curses.KEY_LEFT:
-                        active_scope.data['cursor'] -= 1
-                    case curses.KEY_RIGHT:
-                        active_scope.data['cursor'] += 1
-                    case curses.KEY_UP:
-                        pass
-                    case curses.KEY_DOWN:
-                        pass
-                    case 22:  # ctrl-v
-                        keyboard_state.paste = True
-                    case _:
-                        idx = active_scope.data['cursor']
-                        s = active_scope.data['prompt']
-                        active_scope.data['prompt'] = s[:idx] + chr(key) + s[idx:]
-                        active_scope.data['cursor'] += 1
-
-            case ScopeMode.VISUAL:
-
-                if key == ord('j') or key == curses.KEY_DOWN:
-                    keyboard_state.moveDown = True
-                if key == ord('k') or key == curses.KEY_UP:
-                    keyboard_state.moveUp = True
-                if key == ord('h') or key == curses.KEY_LEFT:
-                    keyboard_state.moveLeft = True
-                if key == ord('l') or key == curses.KEY_RIGHT:
-                    keyboard_state.moveRight = True
-                if key == curses.KEY_MOUSE:
-                    keyboard_state.mouse = True
-                if key == ord('y'):
-                    keyboard_state.yank = True
-                if key == ord('0') or key == curses.KEY_HOME:
-                    keyboard_state.home = True
-                if key == 22 or key == ord('p'):  # ctrl-v
-                    keyboard_state.paste = True
-
-    return exit_roto
-
-
-def keyboard_execution(screen_state: ScreenState, keyboard_state: KeyboardState,
-                       active_scope: Scope):
-
-    # TODO: move keyboard execution to the active screen
-    ## and re-think the scope activation/execution
-    ## now: exec_child when there are child
-    ## or exec_own when there are no child
-    if keyboard_state.enter is True:
-        active_scope.exec_child(*screen_state.scope_exec_args)
-        return
-    if keyboard_state.esc is True:
-        # exec_esc is not a method but a property
-        # should i create a method to call it?
-        active_scope.exec_esc(active_scope, *screen_state.scope_exec_args)
-        return
-
-    if keyboard_state.moveUp:
-        active_scope.cursor -= 1
-        screen_state.selection = -1
-    if keyboard_state.moveDown:
-        active_scope.cursor += 1
-        screen_state.selection = 1
-    # flipped for block_band
-    if keyboard_state.moveLeft:
-        active_scope.cursor_x += 1
-    if keyboard_state.moveRight:
-        active_scope.cursor_x -= 1
-
-
-def interFace(stdscr):
-
-    try:
-        #### cursor init ####
-        key = 0
-        curses.curs_set(0)  # set cursor visibility
-        stdscr.nodelay(True)
-        stdscr.erase()
-        stdscr.refresh()
-        # Enable mouse events
-        curses.mousemask(curses.ALL_MOUSE_EVENTS)
-
-        # trying to stop print
-        # curses.noecho()
-        # curses.cbreak()
-
-
-        ### wallets states ###
-        data_lock = threading.Lock()
-        fingers_state: List[FingerState] = []
-        fingers_list: List[int] = []
-        finger_active: List[int] = [0]
-        count_server = [0]
-        coins_data: Dict[str, CoinPriceData] = {}
-
-        ### timing ###
-        frame_start = None
-        frame_end = None
-        frame_time = 0
-        frame_time_max = 0
-        frame_time_display = 0
-        frame_time_total = 0
-        frame_time_real_display = 0
-        frame_time_real_max = 0
-        frame_time_curses_max = 0
-        frame_time_curses_display = 0
-
-
-        ### check full node ###
-        node_status = call_rpc_node('healthz')
-
-
-        ### wallet data ###
-        # load data from WDB
-        # create the WDB or load the data
-        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-        WDB.create_wallet_db(conn)
-        logging(server_logger, "DEBUG", f"WDB '{DB_WDB}' initialized successfully.")
-        load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active)
-        conn.close()
-
-        wallet_thread = threading.Thread(target=fetch_wallet,
-                                         args=(data_lock,
-                                               fingers_state,
-                                               fingers_list,
-                                               finger_active,
-                                               coins_data,
-                                               count_server),
-                                         daemon=True)
-        ##### WALLET STOPPED
-        #wallet_thread.start()
-
-        ### spend_bundles data ###
-        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-        WDB.create_spend_bundle_db(conn)
-
-        logging(server_logger, "DEBUG", f"NODE STATE {DB_SB}' initialized successfully.")
-        conn.close()
-
-
-        screenState = ScreenState()
-        screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
-
-        ### TODO to fun
-        try:
-            fullNodeState: FullNodeState = FullNodeState(DB_BLOCKCHAIN_RO)
-
-            node_state_thread = threading.Thread(target=fullNodeState.update_state,
-                                                 args=(screenState,), daemon=True)
-            node_state_thread.start()
-        except:
-            print("full node not running")
-
-
-        # Start colors in curses
-        curses.start_color()
-        init_colors(screenState)
-
-    except Exception as e:
-        print("problems with services starting and colors creation")
-        print(e)
-        traceback.print_exc()
-
-    # create the intro and the main menu scopes
-    scopeIntro = Scope('intro', screen_intro, screenState)
-    scopeMainMenu = Scope('main_menu', screen_main_menu, screenState)
-
-    scopeMainMenu.exec = activate_scope
-    scopeIntro.sub_scopes[scopeMainMenu.name] = scopeMainMenu
-    screenState.activeScope = scopeIntro
-
-    try:
-
-        frame_start = time.perf_counter()
-        #while key != ord('q'):
-        while not key:
-
-            # keyboard input processing
-            activeScope = screenState.activeScope
-            keyboardState = KeyboardState()
-            key = keyboard_processing(stdscr, screenState, keyboardState, activeScope)
-
-            stdscr.erase()
-
-            ### check service threads
-            if node_status and not node_state_thread.is_alive():
-                node_status = False
-
-            ### update wallet data. (ADD A LOCK HERE)
-            for fs in fingers_state:
-                screenState.public_keys[fs.fingerprint] = fs
-            if screenState.active_pk[0] == 0:
-                screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
-
-            ### update coin data
-            with data_lock:
-                screenState.coins_data = coins_data
-
-            height, width = stdscr.getmaxyx()
-            screenState.screen_size = UIgraph.Point(width, height)
-            windowDim = f"width={width}; height={height}"
-            # the 32 and 16 can
-            if width < 80 or height < 24:
-                if width < 32 or height < 4:
-                    print("The window terminal is too small")
-                    break
-                else:
-                    dinky = stdscr.subwin(height, width, 0, 0)
-                    dinky.bkgd(' ', curses.color_pair(screenState.colorPairs["nonode"]))
-
-                    #text = "am i a dinky puppy terminal?"
-                    #dinky.addstr(height // 2, width // 2 - len(text) // 2, text)
-                    p_h = UIgraph.Point(0, height // 2 - 1)
-                    text = "What am I, some dinky puppy terminal?"
-                    ELEMENTS.create_text_aligned(dinky, p_h, text, screenState.colorPairs["nonode"], bold=True, align_h=1, align_v=0)
-                    p_h += UIgraph.Point(0,1)
-                    text = "I can't even get these punch cards to fit in!"
-                    ELEMENTS.create_text_aligned(dinky, p_h, text, screenState.colorPairs["nonode"], bold=True, align_h=1, align_v=0)
-            elif not node_status:
-                nonode = stdscr.subwin(height, width, 0, 0)
-                nonode.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
-                text = "no active full node founded"
-                P_color = screenState.colorPairs["nonode"]
-                p = UIgraph.Point(width // 2 - len(text) // 2, height // 2)
-                ELEMENTS.create_blinking_text(nonode, p, text, P_color, bold=True)
-
-                ### check for the node at least once every 2 seconds
-                node_status = call_rpc_node('healthz')
-                if node_status:
-                    ### TODO to fun
-                    try:
-                        fullNodeState: FullNodeState = FullNodeState(DB_BLOCKCHAIN_RO)
-
-                        node_state_thread = threading.Thread(target=fullNodeState.update_state,
-                                                             args=(screenState,), daemon=True)
-                        node_state_thread.start()
-                    except:
-                        print("full node not running")
-            else:
-                header = stdscr.subwin(1, width, 0, 0)
-                P_header = screenState.colorPairs["header_W"]
-                header.bkgd(' ', curses.color_pair(P_header))
-                title = 'rototiller'
-                fing_name = ""
-                if screenState.active_pk[0] != 0:
-                    try:
-                        active_finger = screenState.active_pk[0]
-                        pk_state: PkState = screenState.public_keys[active_finger]
-                        fing_name = str(active_finger) + " - " + pk_state.label
-                    except:
-                        print("waiting for server data")
-                        fing_name = str(active_finger)
-                        traceback.print_exc()
-
-                header.addstr(0, 0, f"{title} | {fing_name}")
-                # text right aligned on the main screen
-                # fps = f"fps: {fps} | second per frame: {frame_time_display}; "
-                fps = 0
-                fps_real = 0
-                curses_percent = 0
-                if frame_time_display > 0:
-                    fps = 1 / frame_time_display
-                    curses_percent = frame_time_curses_display / frame_time_display
-                if frame_time_real_display > 0:
-                    fps_real = 1 / frame_time_real_display
-                fps = f"fps eff./real: {fps:.1f} / {fps_real:.1f} "
-                if width > 100:
-                    fps = fps + f"| blit time ratio: {curses_percent*100:.1f}% | "
-                window_info = fps + windowDim
-                y, x = 0, width - len(window_info) - 1
-                header.addstr(y, x, window_info)
-
-
-                nLinesHeader = (len(title) + len(windowDim)) // width + 1
-                screenState.headerLines = nLinesHeader
-
-                # helper footer
-                footerText = f"Movement: ←↑↓→ or vim | confirm=enter back=esc q=quit {screenState.footer_text}"
-                screenState.footer_text = ""
-                nLines = int(len(footerText) / width + 1)
-                footer = stdscr.subwin(nLines, width, height-nLines, 0)
-                P_footer = screenState.colorPairs["footer"]
-                P_footer = P_header
-                footer.bkgd(' ', curses.color_pair(P_header))
-                footer.addstr(0, 0, footerText)
-
-                # debug footer
-                extraLines = 1
-                nLinesDebug = 0
-                if DEBUGGING:
-                    footerTextDebug = f"server count: {count_server[0]}"
-                    if len(fingers_list) >= 1:
-                        footerTextDebug += f", finger 0: {fingers_list[0]}"
-                    if len(fingers_list) >= 2:
-                        footerTextDebug += f" finger 1: {fingers_list[1]}"
-                    if len(fingers_list) >= 2:
-                        footerTextDebug += f" numbers of wallets [0]: {len(fingers_state[0].wallets)}"
-                        footerTextDebug += f" numbers of wallets [1]: {len(fingers_state[1].wallets)}"
-                    with data_lock:
-                        footerTextDebug += f" number of coins_data: {len(coins_data)}"
-                    nLinesDebug = int(len(footerTextDebug) / width + 1)
-
-                    # colors count
-                    n_curses_colors = len(screenState.cursesColors.colors)
-                    n_curses_colors_idx = screenState.cursesColors.colorsIndex
-                    n_curses_pairs = len(screenState.cursesColors.pairs)
-                    n_curses_pairs_idx = screenState.cursesColors.pairsIndex
-
-                    footer_colors = f'n. of colors: {n_curses_colors}; n. of pairs: {n_curses_pairs}'
-                    footer_colors += f' colors n_idx: {n_curses_colors_idx}'
-                    footer_colors += f' pairs n_idx: {n_curses_pairs_idx}'
-
-                    global DEBUG_TEXT
-                    #DEBUG_TEXT = f"{DEBUG_TEXT} --- {DEBUG_OBJ.text}"
-                    DEBUG_TEXT = f"obj: {DEBUG_OBJ.text} and class {DEBUGtiller.DebugGlobals.cc_text}"
-
-                    if len(DEBUG_TEXT) > 0:
-                        extraLinesDebug = int(len(DEBUG_TEXT) / width + 1)
-                        extraLines += extraLinesDebug
-
-                    footerDebug = stdscr.subwin(nLinesDebug + extraLines, width,
-                                                height-nLines-nLinesDebug - extraLines,
-                                                0)
-                    footerDebug.bkgd(' ', curses.color_pair(screenState.colorPairs["footer"]))
-                    footerDebug.addstr(0, 0, footer_colors)
-                    footerDebug.addstr(1, 0, footerTextDebug)
-                    if len(DEBUG_TEXT) > 0:
-                        footerDebug.addstr(2, 0, DEBUG_TEXT)
-
-                    screenState.footerLines = nLines + nLinesDebug
-
-
-                # screen selection
-                activeScope.screen(stdscr, keyboardState,
-                                   screenState, fullNodeState)
-                keyboard_execution(screenState, keyboardState, activeScope)
-
-
-            # html tables: https://www.w3.org/TR/xml-entity-names/026.html
-
-            frame_curses_start = time.perf_counter()
-            #curses.doupdate()
-            stdscr.refresh()
-            frame_curses_end = time.perf_counter()
-
-            # curses fps
-            frame_time = frame_curses_end - frame_curses_start
-            if frame_time > frame_time_max:
-                frame_time_curses_max = frame_time
-
-
-            # effective fps
-            frame_end = time.perf_counter()
-            frame_time = frame_end - frame_start
-            if frame_time > frame_time_max:
-                frame_time_max = frame_time
-
-            # cap frame rate
-            fps = 30
-            sleep_time = 1/fps - frame_time
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
-            # real fps
-            # frame_time_real_display = 0
-            # frame_time_real_max = 0
-            frame_end = time.perf_counter()
-            frame_time = frame_end - frame_start
-            if frame_time > frame_time_real_max:
-                frame_time_real_max = frame_time
-
-            # update counter
-            if frame_time_total > 0.1:  # update rate
-                frame_time_total = 0
-
-                # curses
-                frame_time_curses_display = frame_time_curses_max
-                frame_time_curses_max = 0
-
-                # effective
-                frame_time_display = frame_time_max
-                frame_time_max = 0
-
-                # real
-                frame_time_real_display = frame_time_real_max
-                frame_time_real_max = 0
-
-
-            frame_time_total += frame_time
-
-            frame_start = time.perf_counter()
-
-    except Exception as e:
-        print("Shit happens... in the main loop")
-        print(e)
-        traceback.print_exc()
-
-
-#async def get_wallet(coin_id: str):
-#    try:
-#        full_node_client = await FullNodeRpcClient.create(
-#            self_hostname, uint16(full_node_rpc_port), DEFAULT_ROOT_PATH, config)
-#        coin_record = await full_node_client.get_coin_record_by_name(bytes32.fromhex(coin_id))
-#        print(coin_record)
-#        return coin_record.coin
-#    finally:
-#        full_node_client.close()
-#        await full_node_client.await_closed()
-#
-
-#async def get_public_keys():
-#    try:
-#        wallet_client = await WalletRpcClient.create(
-#            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-#        )
-#        response = await wallet_client.get_public_keys()
-#        return response
-#
-#    finally:
-#        wallet_client.close()
-#        await wallet_client.await_closed()
-
-
-#async def get_logged_in_fingerprint():
-#    try:
-#        wallet_client = await WalletRpcClient.create(
-#            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-#        )
-#        response = await wallet_client.get_logged_in_fingerprint()
-#        return response
-#
-#    finally:
-#        wallet_client.close()
-#        await wallet_client.await_closed()
-
-
-#async def log_in(fingerprint):
-#    try:
-#        wallet_client = await WalletRpcClient.create(
-#            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-#        )
-#        response = await wallet_client.log_in(fingerprint)
-#        return response
-#
-#    finally:
-#        wallet_client.close()
-#        await wallet_client.await_closed()
-
-
-async def call_rpc_wallet(method_name, *args, **kwargs):
-    try:
-        wallet_client = await WalletRpcClient.create(
-            self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config
-        )
-        response = await wallet_client.fetch(method_name, kwargs)
-        return response
-
-    except Exception:
-        logging(server_logger, "DEBUG", f"sometime wrong with a wallet rpc call.")
-        logging(server_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
-        logging(server_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
-        wallet_client.close()
-        await wallet_client.await_closed()
-        return False
-
-    finally:
-        wallet_client.close()
-        await wallet_client.await_closed()
-
-
-class StdOutWrapper:
-    text = ""
-
-    def write(self, txt):
-        self.text += txt
-        self.text = '\n'.join(self.text.split('\n')[-2000:])
-
-    def get_text(self,beg=0,end=-1):
-        """I think it is reversed the order, i should change it"""
-        return '\n'.join(self.text.split('\n')[beg:end]) + '\n'
-
-
-def main():
-
-    # start curses
-    curses.wrapper(interFace)
-
-
-if __name__ == "__main__":
-
-    mystdout = StdOutWrapper()
-    sys.stdout = mystdout
-    sys.stderr = mystdout
-
-    try:
-        main()
-    except Exception as e:
-        curses.nocbreak()
-        curses.echo()
-        curses.endwin()
-        print("The exception of main is: ", e)
-        print(traceback.format_exc())
-
-    sys.stdout = sys.__stdout__
-    sys.stderr = sys.__stderr__
-    sys.stdout.write(mystdout.get_text())

@@ -1,5 +1,5 @@
 import curses
-import UIgraph as UIgraph
+import src.UIgraph as UIgraph
 
 def init_colors(screen_state):  # UItiller.ScreenState
     screen_state.cursesColors = UIgraph.CustomColors(10)
