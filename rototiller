@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+import sys
+import traceback
+import curses
+from src.UItiller import curses_main_loop
+
+
+class StdOutWrapper:
+    text = ""
+
+    def write(self, txt):
+        self.text += txt
+        self.text = '\n'.join(self.text.split('\n')[-1000:])
+
+    def get_text(self,beg=0,end=-1):
+        """I think it is reversed the order, i should change it"""
+        return '\n'.join(self.text.split('\n')[beg:end]) + '\n'
+
+
+try:
+    mystdout = StdOutWrapper()
+    sys.stdout = mystdout
+    sys.stderr = mystdout
+except Exception as e:
+    print("The exception of main is: ", e)
+    print(traceback.format_exc())
+
+try:
+    curses_main_loop()
+except Exception as e:
+    curses.nocbreak()
+    curses.echo()
+    curses.endwin()
+    print("The exception of main is: ", e)
+    print(traceback.format_exc())
+
+sys.stdout = sys.__stdout__
+sys.stderr = sys.__stderr__
+sys.stdout.write(mystdout.get_text())
+
