@@ -74,7 +74,7 @@ FIGLET = True  # EVAL: trying using a global instead of a value in screenState
 # to make it working ui should import it without using FROM CONFtiller import ...
 
 # init fingletfont
-path_figlet_font = Path("figlet_fonts/")
+path_figlet_font = Path("resources/figlet_fonts/")
 DOOM_FONT = TEXT.Font()
 TEXT.loadFontFTL(path_figlet_font / "doom.flf", DOOM_FONT)
 
