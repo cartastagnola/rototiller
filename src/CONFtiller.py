@@ -46,7 +46,7 @@ SQL_TIMEOUT = 10
 
 ## CLMV
 # load the known puzzles
-KNOWN_PUZZLES_PATH = './puzzles/puzzles.json'
+KNOWN_PUZZLES_PATH = './resources/puzzles/puzzles.json'
 KNOWN_PUZZLES = None
 with open(KNOWN_PUZZLES_PATH, 'r') as f:
     KNOWN_PUZZLES = json.load(f)

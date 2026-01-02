@@ -5,9 +5,17 @@ import copy
 from datetime import datetime
 import time
 
-from chia.types.full_block import FullBlock
-from chia.consensus.block_record import BlockRecord
-from chia.types.spend_bundle import SpendBundle
+try:
+    from chia.types.full_block import FullBlock
+    from chia.consensus.block_record import BlockRecord
+    from chia.types.spend_bundle import SpendBundle
+    from chia.types.spend_bundle_conditions import SpendBundleConditions, SpendConditions
+except ImportError:
+    try:
+        from chia_rs import FullBlock, BlockRecord, SpendBundle, SpendBundleConditions, SpendConditions
+    except ImportError:
+        print('probably a full_node verison not supporter')
+
 from chia_rs import CoinSpend, Coin, Program
 from chia_rs.sized_bytes import bytes32
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
@@ -16,7 +24,6 @@ from chia_rs import (ELIGIBLE_FOR_DEDUP, ELIGIBLE_FOR_FF, BLSCache, ConsensusCon
     G2Element, supports_fast_forward, validate_clvm_and_signature)
 
 from chia.consensus.default_constants import DEFAULT_CONSTANTS
-from chia.types.spend_bundle_conditions import SpendBundleConditions, SpendConditions
 
 from src.UTILStiller import timestamp_to_date
 from src.CONFtiller import (
@@ -989,8 +996,16 @@ class BlockState:
         else:
             self.additions_merkle_root = None
             self.timestamp_b = None
+
+        ## --- reward chain block ---
+        rcb = block["reward_chain_block"]
+
+        self.rcb_pos_ss_cc_challenge_hash = rcb["pos_ss_cc_challenge_hash"]
+        self.rcb_challenge_chain_sp_signature = rcb["challenge_chain_sp_signature"]
+        self.rcb_reward_chain_sp_signature = rcb["reward_chain_sp_signature"]
+        self.rcb_height = rcb['height']
+
         self.n_iteration_challenge_chain = block['reward_chain_block']['challenge_chain_ip_vdf']['number_of_iterations']
-        self.height_b = block['reward_chain_block']['height']
         self.is_transaction_block = block['reward_chain_block']['is_transaction_block']
         self.plot_public_key = block['reward_chain_block']['proof_of_space']['plot_public_key']
         self.pool_public_key = block['reward_chain_block']['proof_of_space']['pool_public_key']
@@ -1009,6 +1024,73 @@ class BlockState:
             self.aggregate_signature = None
             self.cost = None
             self.fees_b = None
+
+
+
+        ## --- foliage ---
+        #foliage = block["foliage"]
+
+        #self.prev_block_hash = foliage["prev_block_hash"]
+        #self.reward_block_hash = foliage["reward_block_hash"]
+        #self.foliage_block_data_signature = foliage["foliage_block_data_signature"]
+        #self.foliage_tx_block_hash = foliage["foliage_transaction_block_hash"]
+        #self.foliage_tx_block_signature = foliage["foliage_transaction_block_signature"]
+
+        ## --- foliage block data ---
+        #fbd = foliage["foliage_block_data"]
+
+        #self.extension_data = fbd["extension_data"]
+        #self.unfinished_reward_block_hash = fbd["unfinished_reward_block_hash"]
+
+        ## --- transaction block (ONLY if present) ---
+        #ftb = block["foliage_transaction_block"]
+        #if ftb is not None:
+        #    self.additions_merkle_root = ftb["additions_root"]
+        #    self.removals_merkle_root = ftb["removals_root"]
+        #    self.transactions_merkle_root = ftb["transactions_root"]
+        #    self.timestamp_b = ftb["timestamp"]
+        #else:
+        #    self.additions_merkle_root = None
+        #    self.removals_merkle_root = None
+        #    self.transactions_merkle_root = None
+        #    self.timestamp_b = None
+
+        ## --- reward chain block ---
+        #rcb = block["reward_chain_block"]
+
+        #self.pos_ss_cc_challenge_hash = rcb["pos_ss_cc_challenge_hash"]
+        #self.challenge_chain_sp_signature = rcb["challenge_chain_sp_signature"]
+        #self.reward_chain_sp_signature = rcb["reward_chain_sp_signature"]
+
+        ## challenge chain IP VDF
+        #cc_ip_vdf = rcb["challenge_chain_ip_vdf"]
+        #self.cc_ip_iters = cc_ip_vdf["number_of_iterations"]
+        #self.cc_ip_vdf_output = cc_ip_vdf["output"]["data"]
+
+        ## reward chain IP VDF
+        #rc_ip_vdf = rcb["reward_chain_ip_vdf"]
+        #self.rc_ip_iters = rc_ip_vdf["number_of_iterations"]
+        #self.rc_ip_vdf_output = rc_ip_vdf["output"]["data"]
+
+        ## --- proof of space ---
+        #pos = rcb["proof_of_space"]
+
+        #self.pos_challenge = pos["challenge"]
+        #self.pool_contract_puzzle_hash = pos["pool_contract_puzzle_hash"]
+
+        ## --- proofs ---
+        #self.challenge_chain_ip_proof = block["challenge_chain_ip_proof"]
+        #self.challenge_chain_sp_proof = block["challenge_chain_sp_proof"]
+        #self.infused_challenge_chain_ip_proof = block["infused_challenge_chain_ip_proof"]
+        #self.reward_chain_ip_proof = block["reward_chain_ip_proof"]
+        #self.reward_chain_sp_proof = block["reward_chain_sp_proof"]
+        #
+        ## --- misc ---
+        #self.finished_sub_slots = block["finished_sub_slots"]
+
+
+
+
 
     def __str__(self):
         return f"Block height: {self.height:,}; sp: {self.signage_point_index}; ts: {self.timestamp} and {self.timestamp_b} ; header: {self.header_hash}"
@@ -1098,8 +1180,16 @@ class BlockState:
         values.append(self.timestamp_b)
         keys.append('n_iteration_challenge_chain')
         values.append(self.n_iteration_challenge_chain)
-        keys.append('height_b')
-        values.append(self.height_b)
+        keys.append('reward chain block (rcb)')
+        values.append('')
+        keys.append('rcb / height')
+        values.append(self.rcb_height)
+        keys.append('rcb / pos_ss_cc_challenge_hash')
+        values.append(self.rcb_pos_ss_cc_challenge_hash)
+        keys.append('rcb / challenge_chain_sp_signature')
+        values.append(self.rcb_challenge_chain_sp_signature)
+        keys.append('rcb / reward_chain_sp_signature')
+        values.append(self.rcb_reward_chain_sp_signature)
         keys.append('is_transaction_block')
         values.append(self.is_transaction_block)
         keys.append('plot_public_key')

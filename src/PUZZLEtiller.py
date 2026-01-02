@@ -10,7 +10,14 @@ from chia.types.blockchain_format.serialized_program import SerializedProgram
 from chia.types.blockchain_format.program import Program
 from chia.types.condition_opcodes import ConditionOpcode
 from chia.wallet.util.debug_spend_bundle import debug_spend_bundle
-from chia.types.spend_bundle import SpendBundle
+
+try:
+    from chia.types.spend_bundle import SpendBundle
+except ImportError:
+    try:
+        from chia_rs import SpendBundle
+    except ImportError:
+        print('probably a full_node verison not supporter')
 
 
 

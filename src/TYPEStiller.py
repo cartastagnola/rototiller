@@ -199,7 +199,7 @@ class FullNodeState:
         self.init_mempool()
 
         table_name = 'full_blocks'
-        chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+        chunk_size = 50  # 120  # height * 2  # to be sure to have at least 2 full screen of data
         offset = self.full_node_meta.peak_height
         sorting_column = 'height'
         filters = {'in_main_chain': 1}

@@ -5,8 +5,16 @@ from src.CONFtiller import (
     debug_logger, logging, DEBUGGING, config, self_hostname,
     full_node_rpc_port, wallet_rpc_port, DEFAULT_ROOT_PATH)
 
-from chia.rpc.full_node_rpc_client import FullNodeRpcClient
-from chia.rpc.wallet_rpc_client import WalletRpcClient
+try:
+    from chia.rpc.full_node_rpc_client import FullNodeRpcClient
+    from chia.rpc.wallet_rpc_client import WalletRpcClient
+except ImportError:
+    try:
+        from chia.full_node.full_node_rpc_client import FullNodeRpcClient
+        from chia.wallet.wallet_rpc_client import WalletRpcClient
+    except ImportError:
+        print('probably a full_node verison not supporter')
+
 from chia.daemon.client import connect_to_daemon_and_validate
 from chia_rs.sized_bytes import bytes32
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
