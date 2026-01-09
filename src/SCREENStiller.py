@@ -1,4 +1,5 @@
 import sys
+import sqlite3  # remove it
 from typing import List, Tuple, Dict, Union, Callable
 import curses
 from datetime import datetime
@@ -1824,10 +1825,164 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
     else:
         menu_items = [
             ('blocks', screen_blocks, ScopeActions.activate_scope),
+            ('search puzzles and addresses', screen_full_node_search, ScopeActions.activate_scope),
         ]
 
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
+
+
+def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+
+
+    # search for anything.
+    # At the moment only puzzle are supported
+
+    # warm US: xch12pc7qk46t8aktdsd7ss96pctdp0236sexakfsdvsqefuqyyll3hqzhnldc
+    # ACH: xch1lv34uumcyg892zrv35rhrx87hu5nx87em7zcag5nc2vjecupkdzspc9xn6
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+
+    if 'lapper' not in main_scope.data:
+        main_scope.data["lapper"] = UTILS.Timer('block_band')
+    lapper = main_scope.data["lapper"]
+    lapper.start()
+    lapper.clocking("begin")
+
+    # sub win
+    node_data = createFullSubWin(stdscr, screenState, height, width)
+    node_data.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    # colors
+    P_text = screenState.colorPairs["body"]
+
+
+    def fetch_coin_records_by_puzzle_hash(conn, puzzle_hash: bytes, sorting_column: str, 
+                                          start_height, end_height, include_spent_coins: bool):
+        sorting_column = 'confirmed_index'
+        select = ("SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+                  "coin_parent, amount, timestamp FROM coin_record ")
+        indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+        default_filter = "AND confirmed_index>=? AND confirmed_index<? "
+        spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
+        order = f"ORDER BY {sorting_column}"
+        query = select + indexed + default_filter + spent_coin_filter + order
+
+        with conn:
+            cursor = conn.execute(query, (puzzle_hash, start_height, end_height))
+            out = cursor.fetchall()
+
+        return out
+
+
+    # prompt
+    pos = UIgraph.Point(5,5)
+    pre_text = "Search for puzzle or address: "
+    prompt_lenght = min(80, width - 4)
+    scope_search = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'search', pos,
+                                          pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.go_to_block)
+
+    # the prompt shuuld avtivate the sql query, that create the list.
+    # i will not go with chunks, i will try to handle them in a list. or not?
+    # prompot > hash, spent coin, min and max height on the advanced
+
+    # we need chunks, the chunks loader have to update.
+
+    ########################
+
+    lapper.clocking("pre_init")
+    if 'pressed_enter' in scope_search.data and scope_search.data['pressed_enter']:
+
+        scope_search.data['pressed_enter'] = False
+        prompt = scope_search.data['prompt']
+
+        from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
+        from chia_rs.sized_bytes import bytes32, bytes48
+        from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+        puzz_hash: bytes32 = decode_puzzle_hash(prompt)
+
+        table = 'coin_record'
+        sorting_column = 'confirmed_index'
+
+        # read only read
+        db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+        filters = {'puzzle_hash': bytes(puzz_hash)}
+        start = 0
+        count = 100
+        start: uint32 = uint32(0)
+        count: uint32 = uint32((2**32) - 1)
+        res = fetch_coin_records_by_puzzle_hash(conn, puzz_hash, sorting_column,
+                                                start, count, True)
+        main_scope.data['coin_records'] = ELEMENTS.cast_table_items_to_string(res)
+
+    ########################
+
+    ###########################
+    # implemnt chunk support
+
+        table_name = 'coin_record'
+        chunk_size = 1000  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+        offset = self.full_node_meta.peak_height
+        sorting_column = 'confirmed_index'
+        filters = None  # {'in_main_chain': 1}
+        self.blocks_loader = WDB.DataChunkLoader(db_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
+
+        #######################3
+
+
+    lapper.clocking("pressed enter")
+    pos += UIgraph.Point(0, 2)
+
+    #block_legend = ['height', 'header hash', 'block type']
+    main_win_size = node_data.getmaxyx()
+    main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+    max_y = main_win_size.y - pos.y - 3
+    tab_size = UIgraph.Point(100, max_y)
+    if 'coin_records' in main_scope.data and main_scope.data['coin_records'] is not None:
+        lapper.clocking("init tab")
+        records = main_scope.data['coin_records']
+        lapper.clocking("init tab")
+        tab_size = UIgraph.Point(80, max_y)
+
+        print(len(records))
+
+
+        ELEMENTS.create_tab(node_data,
+                            screenState,
+                            main_scope,
+                            "puzzle_hash_viewer",
+                            records,
+                            None,
+                            None,
+                            False,
+                            pos,
+                            tab_size,
+                            keyboardState,
+                            ScopeActions.exit_scope,
+                            False,
+                            False)  #,
+                            #block_legend)
+
+    lapper.clocking('end tab')
+    #records = RPC.call_rpc_node('get_coin_records_by_puzzle_hash')
+
+    # run copy/paste action or other pending stuffs
+    if len(screenState.pending_action) > 0:
+        for i, fn in screenState.pending_action:
+            fn()
+        screenState.pending_action = []
+    lapper.clocking('end end')
+
+    lapper.end()
+    print(lapper)
 
 
 def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
@@ -1960,17 +2115,10 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     ELEMENTS.create_text_aligned(node_data, pos_local, f"local time: {local}", P_text, align_h=2, bold=True, inv_color=False)
     pos += UIgraph.Point(0, 2)
 
-    ### go to block
-    def go_to_block(scope: Scope, screen_state: ScreenState, *args):
-        if scope.parent_scope:
-            scope.data['pressed_enter'] = True
-            screen_state.activeScope = scope.parent_scope
-            return scope.parent_scope
-
     pre_text = "Go to block: "
     prompt_lenght = min(80, width - 4)
     scope_go_to = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'go to block', pos,
-                                         pre_text, prompt_lenght, P_text, True, False, custom_scope_function=go_to_block)
+                                         pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.go_to_block)
     pos += UIgraph.Point(0,3)
 
     def to_int(text: str):

@@ -160,6 +160,8 @@ async def fetch_rpc_node(method_name, *args, **kwargs):
         )
         #rpc_method = getattr(full_node_client, method_name)
         #response = await rpc_method(*args, **kwargs)
+        print("kwatsf")
+        print(kwargs)
         response = await full_node_client.fetch(method_name, kwargs)
         return response
     except Exception as e:
@@ -212,6 +214,9 @@ rpc_calls_full_node = {
     "get_block_record": ["block_record"],
     "get_block_record_by_height": ["block_record"],
     "get_block_records": ["block_records"],
+    "get_coin_records_by_puzzle_hash": ["coin_records"],
+    "get_coin_records_by_hint": ["coin_records"],
+    "get_coin_records_by_name": ["coin_record"],
     "get_all_mempool_items": ["mempool_items"],
     "get_all_mempool_tx_ids": ["tx_ids"],
     "get_routes": ["routes"],
@@ -256,6 +261,7 @@ def call_rpc_node(method_name, *args, **kwargs):
 
     rpc_result = asyncio.run(fetch_rpc_node(method_name, **kwargs))
     output_filter = rpc_calls_full_node[method_name]
+    print(rpc_result)
 
     if len(output_filter) == 1:
         return rpc_result[output_filter[0]]

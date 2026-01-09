@@ -12,9 +12,10 @@ from chia_rs.sized_bytes import bytes32, bytes48
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 
 import src.UIgraph as UIgraph
-from src.CONFtiller import ScopeMode, debug_logger, logging, DB_SB, SQL_TIMEOUT
+from src.CONFtiller import ScopeMode, debug_logger, logging, DB_SB, SQL_TIMEOUT, XCH_MOJO
 import src.RPCtiller as RPC
 import src.WDBtiller as WDB
+from src.UTILStiller import convert_ts_to_date, timestamp_to_date
 
 
 
@@ -66,6 +67,53 @@ TRANSACTION_TYPE_SIGN = [
     1,
     1,
 ]
+
+
+@dataclass
+class CoinRoto:
+    parent_coin_info: bytes32
+    puzzle_hash: bytes32
+    amount: uint64
+
+
+@dataclass
+class CoinRecordRoto:
+    coin: CoinRoto
+    coinbase: bool
+    confirmed_block_index: uint32
+    spent: bool
+    spent_block_index: uint32
+    timestamp: uint64
+
+    def to_list(self):
+        out_list = []
+        out_list.append(str(self.confirmed_block_index))
+        out_list.append(f"{self.coin.amount / XCH_MOJO:.3f}")
+        out_list.append(str((timestamp_to_date(self.timestamp))))
+        out_list.append(self.spent)
+        out_list.append(self.spent_block_index)
+        out_list.append(self.coinbase)
+        #out_list.append(str(convert_ts_to_date(self.timestamp)))
+        return out_list
+
+
+    @staticmethod
+    def from_raw_record_list(raw_record_list):
+        coin_records: List[CoinRecordRoto] = []
+        for raw_record in raw_record_list:
+            raw_coin = raw_record['coin']
+            coin = CoinRoto(bytes32.fromhex(raw_coin['parent_coin_info'][2:]),
+                            bytes32.fromhex(raw_coin['puzzle_hash'][2:]),
+                            raw_coin['amount'])
+            coin_record = CoinRecordRoto(coin,
+                                         raw_record['coinbase'],
+                                         raw_record['confirmed_block_index'],
+                                         raw_record['spent'],
+                                         raw_record['spent_block_index'],
+                                         raw_record['timestamp'])
+            coin_records.append(coin_record)
+
+        return coin_records
 
 
 @dataclass
@@ -684,3 +732,173 @@ class ScopeActions():
         if scope.parent_scope:
             screen_state.activeScope = scope.parent_scope
             return scope.parent_scope
+
+
+    @staticmethod
+    def go_to_block(scope: Scope, screen_state: ScreenState, *args):
+        if scope.parent_scope:
+            scope.data['pressed_enter'] = True
+            screen_state.activeScope = scope.parent_scope
+            return scope.parent_scope
+
+
+if __name__ == "__main__":
+    from src.UTILStiller import Timer
+    lapper = Timer()
+    lapper.start()
+
+    print("boom")
+    # warm US: xch12pc7qk46t8aktdsd7ss96pctdp0236sexakfsdvsqefuqyyll3hqzhnldc
+    # ACH: xch1lv34uumcyg892zrv35rhrx87hu5nx87em7zcag5nc2vjecupkdzspc9xn6
+    ACH = 'xch1lv34uumcyg892zrv35rhrx87hu5nx87em7zcag5nc2vjecupkdzspc9xn6'
+
+    us_w_add = 'xch12pc7qk46t8aktdsd7ss96pctdp0236sexakfsdvsqefuqyyll3hqzhnldc'
+    from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
+    us_dec = decode_puzzle_hash(us_w_add)
+    print(us_dec)
+    us_pec = f"0x{us_dec}"
+    print(us_pec, " us pec")
+    ACH_dec = f"0x{decode_puzzle_hash(ACH)}"
+
+    records = RPC.call_rpc_node('get_coin_records_by_puzzle_hash', puzzle_hash=us_pec, include_spent_coins=False)
+    lapper.clocking('rpc')
+    records = RPC.call_rpc_node('get_coin_records_by_puzzle_hash', puzzle_hash=ACH_dec, include_spent_coins=False)
+    lapper.clocking('rpc end')
+    print(records)
+
+    records = CoinRecordRoto.from_raw_record_list(records)
+    print(records)
+
+    print(type(records[0].coin.puzzle_hash))
+    print(records[0].coin.puzzle_hash)
+    print(type(records[0].coin.parent_coin_info))
+    print(records[0].coin.parent_coin_info)
+    print(type(records[0].spent_block_index))
+    print(records[0].spent_block_index)
+
+    rr = []
+    for i in records:
+        rr.append(i.to_list())
+        print(i.to_list())
+
+    table = 'coin_record'
+    sorting_column = 'confirmed_index'
+    puz_hash_fetcher = WDB.make_sql_fetcher(table, sorting_column)
+
+    db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
+    # read only read
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    ACH_bytes: bytes32 = decode_puzzle_hash(ACH)
+    print(ACH)
+    print("ytpe ", ACH_bytes)
+    print("ytpe ", type(ACH_bytes))
+    print("ytpe ", (bytes(ACH_bytes)))
+    print("ytpe ", type(bytes(ACH_bytes)))
+
+
+    filters = {'puzzle_hash': bytes(ACH_bytes)}
+    start = 0
+    count = 100
+    start: uint32 = uint32(0)
+    count: uint32 = uint32((2**32) - 1)
+    lapper.clocking("fetcher start ")
+    res = puz_hash_fetcher(conn, start, count, filters)
+    lapper.clocking("fetcher end")
+
+    print('fetcher')
+    print(res)
+    print('bonos')
+    include_spent_coins = True
+    puzzle_hash = ACH_bytes
+    start_height: uint32 = uint32(0)
+    end_height: uint32 = uint32((2**32) - 1)
+
+    query = (
+        f"SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+        f"coin_parent, amount, timestamp FROM coin_record INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+        f"AND confirmed_index>=? AND confirmed_index<? "
+        f"{'' if include_spent_coins else 'AND spent_index <= 0'}")
+    values = [puzzle_hash, start_height, end_height]
+    cur = conn.cursor()
+    print(query)
+    print(values)
+
+    #cur.execute(query, values)
+
+    with conn:
+
+        lapper.clocking("indexer start")
+        cursor = conn.execute(
+            f"SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+            f"coin_parent, amount, timestamp FROM coin_record INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+            f"AND confirmed_index>=? AND confirmed_index<? "
+            f"{'' if include_spent_coins else 'AND spent_index <= 0'}",
+            (puzzle_hash, start_height, end_height),)
+        lapper.clocking("indexer end")
+
+        for row in cursor.fetchall():
+            pass
+            #print(row)
+            #coin = self.row_to_coin(row)
+            #spent_index = uint32(0) if row[1] <= 0 else uint32(row[1])
+            #coins.add(CoinRecord(coin, row[0], spent_index, row[2], row[6]))
+
+    with conn:
+
+        lapper.clocking("indexer sorter start")
+        cursor = conn.execute(
+            f"SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+            f"coin_parent, amount, timestamp FROM coin_record INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+            f"AND confirmed_index>=? AND confirmed_index<? ORDER BY confirmed_index"
+            f"{'' if include_spent_coins else 'AND spent_index <= 0'}",
+            (puzzle_hash, start_height, end_height),)
+        lapper.clocking("indexer sorted end")
+
+    lapper.end()
+    print(lapper)
+    print("end")
+
+    # create a fecther that:
+    # - chose ordering column
+    sorting_column = 'confirmed_index'
+
+    select = ("SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+              "coin_parent, amount, timestamp FROM coin_record ")
+    indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+    default_filter = "AND confirmed_index>=? AND confirmed_index<? "
+    spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
+    order = f"ORDER BY {sorting_column}"
+    query = select + indexed + default_filter + spent_coin_filter + order
+
+    out = []
+    with conn:
+        cursor = conn.execute(query, (puzzle_hash, start_height, end_height))
+        out = cursor.fetchall()
+
+    from pympler import asizeof
+
+    total_bytes = asizeof.asizeof(out)
+    print(f"{total_bytes / (1024 * 1024):.2f} MB")
+    print(len(out))
+
+
+    def fetch_coin_records_by_puzzle_hash(conn, puzzle_hash: bytes, sorting_column: str, 
+                                          start_height, end_height, include_spent_coins: bool):
+        sorting_column = 'confirmed_index'
+        select = ("SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+                  "coin_parent, amount, timestamp FROM coin_record ")
+        indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+        default_filter = "AND confirmed_index>=? AND confirmed_index<? "
+        spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
+        order = f"ORDER BY {sorting_column}"
+        query = select + indexed + default_filter + spent_coin_filter + order
+
+        with conn:
+            cursor = conn.execute(query, (puzzle_hash, start_height, end_height))
+            out = cursor.fetchall()
+
+        return out
+
+    a = fetch_coin_records_by_puzzle_hash(conn, bytes(ACH_bytes), sorting_column, start, count, False)
+    print(a)
+    print(len(a))

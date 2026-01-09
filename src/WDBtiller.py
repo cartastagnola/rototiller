@@ -1228,6 +1228,9 @@ from dataclasses import dataclass
 
 
 def make_sql_fetcher(table, sorting_column=None):
+    # NB:
+    # it is not clear, if you use sorting_column the start, count are min and max height
+    # sorting in sql is not use, sorting means only on which column apply start and count
     def fetch(conn, start, count, filters=None, order='ASC'):
         """ order is not implemented... """
         if not filters:
@@ -1252,8 +1255,8 @@ def make_sql_fetcher(table, sorting_column=None):
 
         cur = conn.cursor()
         query = f"SELECT * FROM {table} {where_sql}"
-        print(query)
-        print(values)
+        #print(query)
+        #print(values)
         #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
 
         cur.execute(query, values)
@@ -1647,12 +1650,6 @@ if __name__ == "__main__":
     obj = fetcher(conn, 0, 12_000_000, filters={'header_hash': hash})
     #obj = fetcher(conn, 0, 2, filters={'height': 100})
     print(obj)
-    print('jkjkjjjkj')
-    print('jkjkjjjkj')
-    print('jkjkjjjkj')
-    print('jkjkjjjkj')
-    print('jkjkjjjkj')
-    print('jkjkjjjkj')
     fetcher = make_sql_fetcher(table)
     obj = fetcher(conn, 0, 1, filters={'header_hash': hash})
     print(len(obj))

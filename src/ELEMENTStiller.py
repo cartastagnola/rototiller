@@ -22,6 +22,7 @@ from src.UTILStiller import time_ago, human_mojo, human_int, Timer, truncate
 import src.PLATFORMtiller as PLAT
 import src.WDBtiller as WDB
 import src.DEXtiller as DEX
+import src.UTILStiller as UTILS
 import src.DEBUGtiller as DEBUGtiller
 #### global for debugging
 DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
@@ -587,22 +588,51 @@ def create_tab(scr,
 
     ### end init scope stuff ####
 
+    scope: Scope = screenState.scopes[tab_name]
+    scope.set_visible()
+
+    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None:
+        scope.data['cached_data_table'] = dataTable
+        scope.data['cached_data_table_color'] = data_table_color
+    else:
+        old_data_table = scope.data['cached_data_table']
+        if dataTable == old_data_table:
+            dataTable = old_data_table
+            data_table_color = scope.data['cached_data_table_color']
+        else:
+            scope.data['cached_data_table'] = None
+            scope.data['cached_data_table_color'] = None
+            scope.data['transposed'] = None
+            scope.data['data_table_color'] = None
+            scope.data['casted_data_table'] = None
+            scope.data['column_sizes'] = None
+
+    ## TODO: check if the list is change, if yes reset the 'column_sizes'
+
+    if 'lapper' not in scope.data:
+        scope.data["lapper"] = UTILS.Timer('block_band')
+    lapper = scope.data["lapper"]
+    lapper.start()
+    lapper.clocking("begin")
+
     ### transpose if needed
     # the shape of the data should be like this:
     # [['DBX', '61.0000', '0.0041477', '-0.601%', '0.10754', '-0.601%', '0.25301', '6.55972'],
     # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
     # [...]]
+    ### TODO: traspose is to costly for large dataset, the data should be right from the beginning
     if transpose and dataTable:
-        if dataTable:
-            dataTable = transpose_table(dataTable)
-        if data_table_color:
-            data_table_color = transpose_table(data_table_color)
+        if 'transposed' not in scope.data or scope.data['transposed'] is None:
+            if dataTable:
+                dataTable = transpose_table(dataTable)
+                scope.data['cached_data_table'] = dataTable
+                scope.data['transposed'] = True
+            if data_table_color:
+                data_table_color = transpose_table(data_table_color)
+                scope.data['data_table_color'] = data_table_color
 
     ### Manage dataloader
     ### TODO: create a different fun the init a loader as a list and then call create_tab
-    scope: Scope = screenState.scopes[tab_name]
-    scope.set_visible()
-
     tab_scope_is_active = False
     scope_exec_args = [screenState]
     chunk_size = 1
@@ -654,11 +684,18 @@ def create_tab(scr,
             dataTable.append(new_empty_line)
 
 
+    lapper.clocking("first color init")
     ### make empty data_table_color if...
     if data_table_color is None:
-        row = len(dataTable)
-        col = len(dataTable[0])
-        data_table_color = [list([None] * col) for _ in range(row)]
+        if 'data_table_color' not in scope.data or scope.data['data_table_color'] == None:
+            row = len(dataTable)
+            col = len(dataTable[0])
+            data_table_color = [list([None] * col) for _ in range(row)]
+            scope.data['data_table_color'] = data_table_color
+        else:
+            data_table_color = scope.data['data_table_color']
+
+    lapper.clocking("color_ewnd")
 
     ### assert the shape of the data
     if data_table_legend:
@@ -667,6 +704,7 @@ def create_tab(scr,
         else:
             assert len(data_table_legend) == len(dataTable[0]), f"legend data length ({len(data_table_legend)}) differ from the data ({len(dataTable[0])})"
 
+    lapper.clocking("first")
 
     ### tab geometry
     ## get the dimensions and the position of the main window and calculate the pos
@@ -694,9 +732,15 @@ def create_tab(scr,
     if data_table_legend is None:
         height_legend = 0
 
-    ### make data as stirng
-    ### probably not necessary anymore
-    dataTable = cast_table_items_to_string(dataTable)
+    ### TODO: remove
+    ### make the data as string before, it is wastefull to cast everything every frame
+    lapper.clocking("cast init")
+    if 'casted_data_table' not in scope.data or scope.data['casted_data_table'] is None:
+        dataTable = cast_table_items_to_string(dataTable)
+        scope.data['casted_data_table'] = dataTable
+    else:
+        dataTable = scope.data['casted_data_table']
+    lapper.clocking("cast tgo string")
 
     ### curse customs colors
     P_soft = screenState.colorPairs["tab_soft"]
@@ -729,6 +773,7 @@ def create_tab(scr,
     col_len = row_count
     visible_row_count = y_tabSize - height_low_bar - height_legend
 
+    lapper.clocking("first inti alst")
     ### recalculate firt and last element
     idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(selected_idx, idx_first_element, visible_row_count)
     #### update first element when window is resized
@@ -737,6 +782,7 @@ def create_tab(scr,
         idx_first_element = max(idx_first_element - (visible_row_count - tab_length), 0)
         idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(selected_idx, idx_first_element, visible_row_count)
 
+    lapper.clocking("calu first alst")
     ### update first element
     scope.data["idx_first_element"] = idx_first_element
 
@@ -776,11 +822,26 @@ def create_tab(scr,
             scr.addstr(pos_y + i, pos_x + x_tabSize, u'\u258c',
                        curses.color_pair(P_win_selected))
 
+    lapper.clocking("second")
+
     # calculate max dim and max number of columns
-    x_colSize, x_colStart, max_str_length = calc_size_column(
-        dataTable, data_table_color, data_table_legend,
-        scope, max_table_width, multipleSelection,
-        x_tabSize)
+    # TODO: calc max size only for the visible columns
+    # it is to slow on big list
+    # or 
+    # move outside as a precalc for all the list
+    # or
+    # make a persisten data so you do not recalc every time
+
+    if 'column_sizes' not in scope.data or scope.data['column_sizes'] == None:
+        x_colSize, x_colStart, max_str_length = calc_size_column(
+            dataTable, data_table_color, data_table_legend,
+            scope, max_table_width, multipleSelection,
+            x_tabSize)
+        scope.data['column_sizes'] = (x_colSize, x_colStart, max_str_length)
+    else:
+        x_colSize, x_colStart, max_str_length = scope.data['column_sizes']
+
+    lapper.clocking("max size")
 
     ### legend loop ###
     row = 0
@@ -875,6 +936,8 @@ def create_tab(scr,
     # idx_first_element
     # idx_last_element
 
+    lapper.clocking("thirdddd")
+
     # befoere data chunks
     # steps = col_len - visible_row_count
     steps = total_item_count - visible_row_count
@@ -918,6 +981,10 @@ def create_tab(scr,
         def copy_action():
             create_copy_banner(table, screenState, scope, current_selection_data, False)
         screenState.pending_action.append([1, copy_action])
+
+    lapper.clocking("end inside")
+    lapper.end()
+    print(lapper)
 
     return scope
 

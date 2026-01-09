@@ -125,8 +125,6 @@ def timestamp_to_date(timestamp):
         datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
     except Exception as e:
         print(e)
-        print(timestamp)
-        print(type(timestamp))
     return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
 
 
