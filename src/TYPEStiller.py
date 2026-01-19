@@ -251,21 +251,31 @@ class FullNodeState:
         offset = self.full_node_meta.peak_height
         sorting_column = 'height'
         filters = {'in_main_chain': 1}
-        self.blocks_loader = WDB.DataChunkLoader(db_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
+        fetcher = WDB.FetchMaker.block_fetcher(table_name, sorting_column)
+        fetcher_first_last = WDB.FetchMaker.block_first_last_count_fetcher(table_name, sorting_column)
+
+        self.blocks_loader = WDB.DataChunkLoader(
+            db_path, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+            filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
         # create and keep track of the thread that update the block loader, so it is possible to know if it is running and calling in different places. Once it ends
         # it has to be recrated
         # self.blocks_loader_thread = threading.Thread(target=self._update_blocks_loader, daemon=True)
         # self.blocks_loader_thread.start()
 
-        table_name = 'spend_bundles'
-        chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
-        offset = 0
-        sorting_column = None
-        filters = None  # {'in_main_chain': 1}
-        self.spend_bundle_archive_loader: WDB.DataChunkLoader = WDB.DataChunkLoader(DB_SB, table_name, chunk_size,
-                                                                                    offset, sorting_column=sorting_column,
-                                                                                    data_struct=WDB.BundleState)
-        self.spend_bundle_archive_loader.start_updater_thread()
+
+        #### spend bundle archive > TODO: update fetcher function or adapt to existing ones
+        #table_name = 'spend_bundles'
+        #chunk_size = 30  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+        #offset = 0
+        #sorting_column = None
+        #filters = None  # {'in_main_chain': 1}
+        #fetcher = WDB.FetchMaker.block_fetcher(table_name, sorting_column)
+        #fetcher_first_last = WDB.FetchMaker.block_first_last_count_fetcher(table_name, sorting_column)
+        #self.spend_bundle_archive_loader: WDB.DataChunkLoader = WDB.DataChunkLoader(
+        #    DB_SB, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+        #    sorting_column=sorting_column, data_struct=WDB.BundleState)
+
+        #self.spend_bundle_archive_loader.start_updater_thread()
 
 
     def init_mempool(self):
@@ -805,9 +815,9 @@ if __name__ == "__main__":
     res = puz_hash_fetcher(conn, start, count, filters)
     lapper.clocking("fetcher end")
 
-    print('fetcher')
-    print(res)
-    print('bonos')
+    #print('fetcher')
+    #print(res)
+    #print('bonos')
     include_spent_coins = True
     puzzle_hash = ACH_bytes
     start_height: uint32 = uint32(0)
@@ -820,8 +830,8 @@ if __name__ == "__main__":
         f"{'' if include_spent_coins else 'AND spent_index <= 0'}")
     values = [puzzle_hash, start_height, end_height]
     cur = conn.cursor()
-    print(query)
-    print(values)
+    #print(query)
+    #print(values)
 
     #cur.execute(query, values)
 
@@ -854,9 +864,6 @@ if __name__ == "__main__":
             (puzzle_hash, start_height, end_height),)
         lapper.clocking("indexer sorted end")
 
-    lapper.end()
-    print(lapper)
-    print("end")
 
     # create a fecther that:
     # - chose ordering column
@@ -878,8 +885,8 @@ if __name__ == "__main__":
     from pympler import asizeof
 
     total_bytes = asizeof.asizeof(out)
-    print(f"{total_bytes / (1024 * 1024):.2f} MB")
-    print(len(out))
+    #print(f"{total_bytes / (1024 * 1024):.2f} MB")
+    #print(len(out))
 
 
     def fetch_coin_records_by_puzzle_hash(conn, puzzle_hash: bytes, sorting_column: str, 
@@ -890,15 +897,36 @@ if __name__ == "__main__":
         indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
         default_filter = "AND confirmed_index>=? AND confirmed_index<? "
         spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
-        order = f"ORDER BY {sorting_column}"
-        query = select + indexed + default_filter + spent_coin_filter + order
+        order = f"ORDER BY {sorting_column} "
+        limit_offset = "LIMIT ? OFFSET ? "
+        query = select + indexed + default_filter + spent_coin_filter + order + limit_offset
 
         with conn:
-            cursor = conn.execute(query, (puzzle_hash, start_height, end_height))
+            cursor = conn.execute(query, (puzzle_hash, start_height, end_height, 17000, 0))
             out = cursor.fetchall()
 
         return out
 
-    a = fetch_coin_records_by_puzzle_hash(conn, bytes(ACH_bytes), sorting_column, start, count, False)
-    print(a)
+    lapper.clocking("all")
+    foo = WDB.FetchMaker.puzzle_hash_fetcher(bytes(ACH_bytes), sorting_column, start, count, True)
+    lapper.clocking("all END")
+    a = foo(conn, 0, 20000)
+    for i in a:
+        print(i)
+    print('first last from python')
     print(len(a))
+    print(a[0])
+    print(a[-1])
+    lapper.clocking("all PRINT")
+
+    print('last lne')
+    foo = WDB.FetchMaker.puzzle_hash_first_last_count_fetcher(bytes(ACH_bytes), sorting_column, start, count, True)
+    lapper.clocking("first last PRINT")
+    a = foo(conn)
+    for i in a:
+        print(i)
+    print(len(a))
+
+    lapper.end()
+    print(lapper)
+    print("end")

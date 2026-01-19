@@ -75,7 +75,7 @@ def delete_table_column(table, idx_col):
 
 
 def calc_size_column(data_table, data_table_color, data_table_legend, scope, max_table_width,
-                     multiple_selection, x_tab_size):
+                     multiple_selection, x_tab_size, column_widths):
     """Return max_dims, but it changes also all the data table input to trunkate the tab
     if needed"""
 
@@ -93,14 +93,18 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
             if len(str(u)) > max_dims[idx2]:
                 max_dims[idx2] = len(u)
 
-    # trunks string too long (if str > 2/3 of the with of the table)
+    # trunks string too long (if str > 2/3 of the witdh of the table)
+    # max_dims[0] it the first columns, it should have more space in some cases
+    # but here is not clear
     max_str_length = int((x_tab_size - max_dims[0]) * (2/3))
     for n, i in enumerate(max_dims):
-        if i > max_str_length:
+        if column_widths[n]:
+            max_dims[n] = column_widths[n]
+        elif i > max_str_length:
             max_dims[n] = max_str_length
 
     if data_table_legend is not None:
-        # assert length legend == n_columns
+        #assert length legend == n_columns
         for idx, i in enumerate(data_table_legend):
             if len(i) > max_dims[idx]:
                 max_dims[idx] = len(i)
@@ -164,7 +168,8 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
     for i in range(1, len(max_dims) - 1):
         x_col_start.append(x_col_start[-1] + max_dims[i] + x_remainder)
 
-    return x_col_dim, x_col_start, max_str_length
+    return x_col_dim, x_col_start, max_dims
+    #return x_col_dim, x_col_start, max_str_length
 
 
 def recalcultate_first_and_last_element(select, idx_first_element, rows_number):
@@ -547,6 +552,69 @@ def text_double_space(scr, pos: UIgraph.Point, text: str,
     scr.attroff(curses.A_BOLD)
 
 
+### TODO: not sure if it is worth
+### TODO: make: selection, total_item_count, as parameter for the create_tab functions
+#def create_tab_from_chunk_loader(stdscr,
+#                                 screen_state: ScreenState,
+#                                 keyboard_state,
+#                                 parent_scope: Scope,
+#                                 tab_name: str,
+#                                 chunk_loader: WDB.DataChunkLoader,
+#                                 chunk_data_parser: Callable = None,
+#                                 scope_activation_func,
+#                                 active=False,  # to implement
+#                                 multiple_selection=False,
+#                                 data_table_legend=None):
+#    """Wrap create_tab to accept chunk_loader"""
+#
+#    # get the scope.cursor and load the chunks...
+#    chunk_size = chunk_loader.chunk_size
+#    data_table, first_idx = chunk_loader.get_items_hot_chunks()
+#    lapper.clocking("get hot chunk")
+#    # remove None elements
+#    ## TODO: is it necessary?
+#    data_table = [row for row in dataTable if row is not None]
+#
+#    total_item_count = chunk_loader.total_row_count
+#    row_count = len(data_table)
+#    circular_selection = False
+#
+#    if chunk_data_parser is not None:
+#        data_table, data_table_keys = chunk_data_parser(data_table)
+#
+#    # it needs to be after the scope update
+#    selected_idx = scope.cursor
+#    if chunk_loader:
+#        chunk_loader.update_offset(selected_idx)
+#
+#    # needed for lateral bar
+#    original_idx_first_element = idx_first_element
+#    if chunk_loader:
+#        idx_first_element -= first_idx
+#        idx_last_element -= first_idx
+#        select -= first_idx
+#
+#
+#    tab = create_tab(
+#        stdscr,  # stdscr,
+#        screen_state,  # screenState: ScreenState,
+#        parent_scope,  # parent_scope: Scope,
+#        tab_name,  # tab_name: str,
+#        data_table,  # dataTable,
+#        data_table_keys,  # data_table_keys: List[str],
+#        data_table_color,  # data_table_color,
+#        transpose,  # transpose: bool,
+#        position,  # position: UIgraph.Point,
+#        size,  # size: UIgraph.Point,
+#        keyboard_state,  # keyboardState,
+#        scope_activation_func,  # scope_activation_func,
+#        False,  # active=False,  # to implement
+#        False,  # multipleSelection=False,
+#        data_table_legend,  # data_table_legend=None,
+#        None,  # chunk_loader: WDB.DataChunkLoader=None,
+#        None)  # chunk_data_parser=None)
+#
+
 def create_tab(scr,
                screenState: ScreenState,
                parent_scope: Scope,
@@ -562,6 +630,7 @@ def create_tab(scr,
                active=False,  # to implement
                multipleSelection=False,
                data_table_legend=None,
+               column_widths=None,
                chunk_loader: WDB.DataChunkLoader=None,
                chunk_data_parser=None):
 
@@ -591,7 +660,8 @@ def create_tab(scr,
     scope: Scope = screenState.scopes[tab_name]
     scope.set_visible()
 
-    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None:
+    #if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None:
+    if True:
         scope.data['cached_data_table'] = dataTable
         scope.data['cached_data_table_color'] = data_table_color
     else:
@@ -610,7 +680,7 @@ def create_tab(scr,
     ## TODO: check if the list is change, if yes reset the 'column_sizes'
 
     if 'lapper' not in scope.data:
-        scope.data["lapper"] = UTILS.Timer('block_band')
+        scope.data["lapper"] = UTILS.Timer('tabba')
     lapper = scope.data["lapper"]
     lapper.start()
     lapper.clocking("begin")
@@ -621,15 +691,21 @@ def create_tab(scr,
     # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
     # [...]]
     ### TODO: traspose is to costly for large dataset, the data should be right from the beginning
-    if transpose and dataTable:
-        if 'transposed' not in scope.data or scope.data['transposed'] is None:
-            if dataTable:
-                dataTable = transpose_table(dataTable)
-                scope.data['cached_data_table'] = dataTable
-                scope.data['transposed'] = True
-            if data_table_color:
-                data_table_color = transpose_table(data_table_color)
-                scope.data['data_table_color'] = data_table_color
+    ### or chached it
+    #if transpose and dataTable:
+    #    if 'transposed' not in scope.data or scope.data['transposed'] is None:
+    #        if dataTable:
+    #            dataTable = transpose_table(dataTable)
+    #            scope.data['cached_data_table'] = dataTable
+    #            scope.data['transposed'] = True
+    #        if data_table_color:
+    #            data_table_color = transpose_table(data_table_color)
+    #            scope.data['data_table_color'] = data_table_color
+
+    if transpose:
+        dataTable = transpose_table(dataTable)
+        if data_table_color:
+            data_table_color = transpose_table(data_table_color)
 
     ### Manage dataloader
     ### TODO: create a different fun the init a loader as a list and then call create_tab
@@ -640,25 +716,31 @@ def create_tab(scr,
     total_item_count = None
     row_count = None
     circular_selection = True
+    lapper.clocking("if chunk")
     if chunk_loader:
         # get the scope.cursor and load the chunks...
         chunk_size = chunk_loader.chunk_size
         dataTable, first_idx = chunk_loader.get_items_hot_chunks()
+        lapper.clocking("get hot chunk")
         # remove None elements
         dataTable = [row for row in dataTable if row is not None]
+        lapper.clocking("remove None")
 
         total_item_count = chunk_loader.total_row_count
         row_count = len(dataTable)
         circular_selection = False
 
+        lapper.clocking("some stuffs")
         if chunk_data_parser is not None:
             dataTable, data_table_keys = chunk_data_parser(dataTable)
+        lapper.clocking("parser chunks")
         # update the offset in the loader
         # chunk_loader.update_offset(select)
     else:
         total_item_count = len(dataTable)
         row_count = len(dataTable)
     ### end
+    lapper.clocking("we chunk")
 
     ### update scope
     if scope is screenState.activeScope:
@@ -685,15 +767,23 @@ def create_tab(scr,
 
 
     lapper.clocking("first color init")
+
     ### make empty data_table_color if...
     if data_table_color is None:
-        if 'data_table_color' not in scope.data or scope.data['data_table_color'] == None:
+        #if 'data_table_color' not in scope.data or scope.data['data_table_color'] == None:
+        if True:
             row = len(dataTable)
             col = len(dataTable[0])
             data_table_color = [list([None] * col) for _ in range(row)]
             scope.data['data_table_color'] = data_table_color
         else:
             data_table_color = scope.data['data_table_color']
+
+    if column_widths is None:
+        if len(dataTable) > 0:
+            column_widths = [None] * len(dataTable[0])
+        elif data_table_legend:
+            column_widths = [None] * len(data_table_legend)
 
     lapper.clocking("color_ewnd")
 
@@ -703,6 +793,7 @@ def create_tab(scr,
             pass
         else:
             assert len(data_table_legend) == len(dataTable[0]), f"legend data length ({len(data_table_legend)}) differ from the data ({len(dataTable[0])})"
+            assert len(data_table_legend) == len(column_widths), f"column widths list lenght ({len(column_widths)}) differ from the data ({len(dataTable[0])})"
 
     lapper.clocking("first")
 
@@ -735,7 +826,8 @@ def create_tab(scr,
     ### TODO: remove
     ### make the data as string before, it is wastefull to cast everything every frame
     lapper.clocking("cast init")
-    if 'casted_data_table' not in scope.data or scope.data['casted_data_table'] is None:
+    #if 'casted_data_table' not in scope.data or scope.data['casted_data_table'] is None:
+    if True:
         dataTable = cast_table_items_to_string(dataTable)
         scope.data['casted_data_table'] = dataTable
     else:
@@ -826,20 +918,21 @@ def create_tab(scr,
 
     # calculate max dim and max number of columns
     # TODO: calc max size only for the visible columns
-    # it is to slow on big list
+    # it is too slow on big list
     # or 
     # move outside as a precalc for all the list
     # or
     # make a persisten data so you do not recalc every time
 
-    if 'column_sizes' not in scope.data or scope.data['column_sizes'] == None:
-        x_colSize, x_colStart, max_str_length = calc_size_column(
+    #if 'column_sizes' not in scope.data or scope.data['column_sizes'] == None:
+    if True:
+        x_colSize, x_colStart, max_str_len_columns = calc_size_column(
             dataTable, data_table_color, data_table_legend,
             scope, max_table_width, multipleSelection,
-            x_tabSize)
-        scope.data['column_sizes'] = (x_colSize, x_colStart, max_str_length)
+            x_tabSize, column_widths)
+        scope.data['column_sizes'] = (x_colSize, x_colStart, max_str_len_columns)
     else:
-        x_colSize, x_colStart, max_str_length = scope.data['column_sizes']
+        x_colSize, x_colStart, max_str_len_columns = scope.data['column_sizes']
 
     lapper.clocking("max size")
 
@@ -862,6 +955,13 @@ def create_tab(scr,
         else:
             table.addstr(row, 0, ' ')
         for idx, leg_item in enumerate(data_table_legend):
+            print(len(data_table_legend))
+            print(len(dataTable))
+            print(len(dataTable[0]))
+            print(idx)
+            print(leg_item)
+            print(dataTable[0])
+            print(data_table_legend)
             table.addstr(row, x_colStart[idx], str(leg_item))
         table_color_pairs.reverse()  # to begin always with the soft color
         table_bk_colors.reverse()  # to begin always with the soft color
@@ -916,8 +1016,15 @@ def create_tab(scr,
                     screenState.cursesColors)
                 table.attron(curses.color_pair(text_c_pair))
 
+            max_str_length = max_str_len_columns[i_col] - 1  # free space for columns
             if len(col) > max_str_length:
-                col = col[:max_str_length - 4] + "<...>"
+                if max_str_length > 10:
+                    col = col[:max_str_length - 10] + "<...>" + col[len(col) - 5:]
+                elif max_str_length > 4:
+                    col = col[:max_str_length - 4] + "<...>"
+                else:
+                    col = "." * max_str_length
+
 
             table.addstr(row, x_colStart[i_col], str(col))
             table.attron(P_current_attron)
@@ -938,8 +1045,6 @@ def create_tab(scr,
 
     lapper.clocking("thirdddd")
 
-    # befoere data chunks
-    # steps = col_len - visible_row_count
     steps = total_item_count - visible_row_count
     if steps > 0:
         bar_dim = max(visible_row_count - steps, 1)
@@ -1653,6 +1758,81 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
                 traceback.print_exc()
 
 
+import random
+xx = 25
+yy = 15
+ll = []
+selectable = 25
+for i in range(selectable):
+    x = random.randint(0,xx - 1)
+    y = random.randint(0,yy - 1)
+    ll.append([x,y])
+
+# sort
+from collections import defaultdict
+sorted_Y = defaultdict(list)
+for i in ll:
+    sorted_Y[i[1]].append(i)
+
+for key in sorted_Y.keys():
+    sorted_Y[key] = sorted(sorted_Y[key])
+selector = []
+for key in sorted(sorted_Y.keys()):
+    selector.append(sorted_Y[key])
+
+
+def create_selector(stdscr, screenState: ScreenState, parent_scope: Scope, name: str,
+                    point: UIgraph.Point):
+    """A real button... """
+
+    name_str = name
+    name = f"{parent_scope.id}_{name}"
+
+    if name not in screenState.scopes:
+        scope = Scope(name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope
+        parent_scope.sub_scopes[name] = scope
+        scope.exec = ScopeActions.activate_scope
+
+    scope: Scope = screenState.scopes[name]
+    scope.visible = True
+    scope_exec_args = [screenState]
+
+    if scope is screenState.activeScope:
+        scope.update()
+        screenState.scope_exec_args = scope_exec_args
+
+    sy = scope.cursor % len(selector)
+    sx = scope.cursor_x
+
+    row = selector[sy]
+    col = row[sx % len(row)]
+    print("colll ", col)
+    print(selector)
+    print(sorted_Y)
+
+    sy = sy % len(ll)
+    mm = []
+    for key in sorted(sorted_Y.keys()):
+        for it in sorted_Y[key]:
+            mm.append(it)
+
+    pos = point
+    for x in range(xx):
+        for y in range(yy):
+            stdscr.addstr(pos.y + y, pos.x + x, 'A')
+
+    P_sel = screenState.colorPairs['win_selected']
+    for n, i in enumerate(ll):
+        if i == col:  # n == sy:
+            stdscr.addstr(pos.y + i[1], pos.x + i[0], u'\u2588', curses.color_pair(P_sel))
+        else:
+            stdscr.addstr(pos.y + i[1], pos.x + i[0], u'\u2588')
+
+
+
+
 
 def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: str,
                   point: UIgraph.Point):
@@ -1674,6 +1854,7 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         scope.exec = change_button_bool
 
     scope: Scope = screenState.scopes[name]
+    scope.visible = True
     scope_exec_args = [screenState]
 
     if scope is screenState.activeScope:

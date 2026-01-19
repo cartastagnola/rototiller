@@ -62,6 +62,10 @@ BTC_FAKETAIL = '0b7c'
 XCH_CUR = 'XCH'
 USD_CUR = 'USD'
 
+## prefix
+# TODO: check if we are on testnet
+XCH_PREFIX = 'xch'
+
 ## mojo
 CAT_MOJO = 1000
 XCH_MOJO = 1_000_000_000_000

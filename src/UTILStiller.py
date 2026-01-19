@@ -119,12 +119,9 @@ def human_int(num: int) -> str:
     suffixes = ['', 'K', 'M', 'B', 'T']
     return humanizer(num, suffixes)
 
+
 # TODO: keep only one
 def timestamp_to_date(timestamp):
-    try:
-        datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
-    except Exception as e:
-        print(e)
     return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')
 
 

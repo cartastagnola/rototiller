@@ -1,9 +1,13 @@
 import sqlite3
+import time
 import json
 import zstd
 import copy
 from datetime import datetime
-import time
+from dataclasses import dataclass
+
+##### Data chunk loader
+import threading
 
 try:
     from chia.types.full_block import FullBlock
@@ -24,10 +28,11 @@ from chia_rs import (ELIGIBLE_FOR_DEDUP, ELIGIBLE_FOR_FF, BLSCache, ConsensusCon
     G2Element, supports_fast_forward, validate_clvm_and_signature)
 
 from chia.consensus.default_constants import DEFAULT_CONSTANTS
+from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 
 from src.UTILStiller import timestamp_to_date
 from src.CONFtiller import (
-    debug_logger, logging, XCH_FAKETAIL, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB)
+    debug_logger, logging, XCH_FAKETAIL, XCH_PREFIX, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB)
 
 
 def print_json(dict):
@@ -1221,10 +1226,184 @@ class BlockState:
 
 
 
-##### Data chunk loader
-import threading
-import time
-from dataclasses import dataclass
+class FetchMaker:
+    @staticmethod
+    def puzzle_hash_fetcher(puzzle_hash: bytes, sorting_column: str, start_height: uint32 = uint32(0),
+                            end_height: uint32 = uint32((2**32) - 1),
+                            include_spent_coins: bool = True, order='DESC'):
+
+        def fetch(conn, start, count, filters=None):
+            select = ("SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+                      "coin_parent, amount, timestamp FROM coin_record ")
+            indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
+            default_filter = "AND confirmed_index>=? AND confirmed_index<? "
+            spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
+            sorting = f"ORDER BY {sorting_column} {order} "  # add variable
+            limit_offset = 'LIMIT ? OFFSET ? '
+            query = select + indexed + default_filter + spent_coin_filter + sorting + limit_offset
+
+            with conn:
+                cursor = conn.execute(query,
+                                      (puzzle_hash, start_height, end_height, count, start))
+                items = cursor.fetchall()
+
+            #["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp"]
+            formated_list = []
+            for i in items:
+                new_item = []
+                new_item.append(i[0])
+                new_item.append(i[1])
+                if i[2] == 0:
+                    new_item.append("Coinbase")
+                else:
+                    new_item.append("")
+                new_item.append(encode_puzzle_hash(bytes32(i[3]), XCH_PREFIX))
+                new_item.append(f"0x{bytes32(i[4]).hex()}")
+                new_item.append(int.from_bytes(i[5], byteorder='big') / XCH_MOJO)
+                new_item.append(timestamp_to_date(i[6]))
+                formated_list.append(new_item)
+
+            return formated_list
+
+        return fetch
+
+
+    @staticmethod
+    def puzzle_hash_first_last_count_fetcher(
+            puzzle_hash: bytes, sorting_column: str, start_height: uint32 = uint32(0),
+            end_height: uint32 = uint32((2**32) - 1), include_spent_coins: bool = True):
+
+        def fetch(conn, filters=None):
+            # TODO: filters are not used here. Not sure, i remove them or not
+
+            spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
+
+            # total items count
+            count_query = "SELECT COUNT(*) FROM coin_record WHERE puzzle_hash=? AND confirmed_index>=? AND confirmed_index<? " + spent_coin_filter
+            with conn:
+                cursor = conn.execute(count_query,
+                                      (puzzle_hash, start_height, end_height))
+                item_count = cursor.fetchall()[0][0]
+
+            # first_last_query
+            first_last_query = (
+                f" SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+                f"coin_parent, amount, timestamp "
+                f"FROM ( SELECT * FROM coin_record "
+                f"WHERE puzzle_hash=? AND confirmed_index>=? AND confirmed_index<? {spent_coin_filter} "
+                f"ORDER BY {sorting_column} ASC LIMIT 1 ) "
+                f"UNION ALL "
+                f" SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
+                f"coin_parent, amount, timestamp "
+                f"FROM ( SELECT * FROM coin_record "
+                f"WHERE puzzle_hash=? AND confirmed_index>=? AND confirmed_index<? {spent_coin_filter} "
+                f"ORDER BY {sorting_column} DESC LIMIT 1 ) "
+            )
+
+            with conn:
+                cursor = conn.execute(first_last_query,
+                                      (puzzle_hash, start_height, end_height,
+                                       puzzle_hash, start_height, end_height))
+                items = cursor.fetchall()
+
+            #["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp"]
+            formatted_list = []
+            for i in items:
+                new_item = []
+                new_item.append(i[0])
+                new_item.append(i[1])
+                if i[2] == 0:
+                    new_item.append("Coinbase")
+                else:
+                    new_item.append("")
+                new_item.append(encode_puzzle_hash(bytes32(i[3]), XCH_PREFIX))
+                new_item.append(f"0x{bytes32(i[4]).hex()}")
+                new_item.append(int.from_bytes(i[5], byteorder='big') / XCH_MOJO)
+                new_item.append(timestamp_to_date(i[6]))
+                formatted_list.append(new_item)
+
+            return item_count, formatted_list[0], formatted_list[1]
+
+        return fetch
+
+
+    @staticmethod
+    def block_fetcher(table, sorting_column=None):
+        # NB:
+        # it is not clear, if you use sorting_column the start, count are min and max height
+        # sorting in sql is not use, sorting means only on which column apply start and count
+        # NB:
+        # filters work only for "=", not sure if it worth keep it as parameter. Maybe it is better
+        # to create a new fun
+        def fetch(conn, start, count, filters=None):
+            """ order is not implemented... """
+            if not filters:
+                filters = {}
+
+            where_clauses = []
+            values = []
+
+            for filter, val in filters.items():
+                where_clauses.append(f"{filter} = ?")
+                values.append(val)
+
+            if sorting_column is not None:
+                range_sql = f"{sorting_column} >= ? AND {sorting_column} < ?"
+                where_sql = f"WHERE {' AND '.join(where_clauses)} AND {range_sql}" if filters else f"WHERE {range_sql}"
+                values.extend([start, start + count])
+            else:
+                range_sql = 'LIMIT ? OFFSET ?'
+                where_sql = f"WHERE {' AND '.join(where_clauses)} {range_sql}" if filters else f"{range_sql}"
+                values.extend([count, start])
+
+
+            cur = conn.cursor()
+            query = f"SELECT * FROM {table} {where_sql}"
+            #print(query)
+            #print(values)
+            #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
+
+            cur.execute(query, values)
+            items = cur.fetchall()
+            return items
+
+        return fetch
+
+    @staticmethod
+    def block_first_last_count_fetcher(table, sorting_column=None):
+        def fetch(conn, filters={}):
+
+            where_clauses = []
+            values = []
+
+            for filter, val in filters.items():
+                where_clauses.append(f"{filter} = ?")
+                values.append(val)
+
+            where_sql = f" WHERE {' AND '.join(where_clauses)} " if filters else ""
+
+            # total items count
+            count_query = f"SELECT COUNT(*) FROM {table} {where_sql} "
+            with conn:
+                cursor = conn.execute(count_query, values)
+                item_count = cursor.fetchall()[0][0]
+
+            # first and last
+            first_last_query = (
+                f"SELECT * FROM ( "
+                f"    SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} ASC LIMIT 1) "
+                f"UNION ALL "
+                f"SELECT * FROM ( "
+                f"    SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} DESC LIMIT 1) "
+            )
+
+            values = values + values
+            with conn:
+                cursor = conn.execute(first_last_query, values)
+                items = cursor.fetchall()
+            return item_count, items[0], items[1]
+
+        return fetch
 
 
 def make_sql_fetcher(table, sorting_column=None):
@@ -1250,7 +1429,7 @@ def make_sql_fetcher(table, sorting_column=None):
         else:
             range_sql = 'LIMIT ? OFFSET ?'
             where_sql = f"WHERE {' AND '.join(where_clauses)} {range_sql}" if filters else f"{range_sql}"
-            values.extend([start + count, start])
+            values.extend([count, start])
 
 
         cur = conn.cursor()
@@ -1366,7 +1545,9 @@ class Chunk:
 
 
 class DataChunkLoader:
-    def __init__(self, db_path: str, table_name: str, chunk_size: int, offset: int = 0, sorting_column=None, row_offset=False, filters={}, data_struct=None):
+    def __init__(self, db_path: str, table_name: str, chunk_size: int, fetch_fun: callable,
+                 fetch_first_last_count_fun: callable, offset: int = 0, sorting_column=None,
+                 row_offset=False, filters={}, data_struct=None):
         """offset = distance from the beging of the array of elements
            filters = a dic with filter and value. EG. {'pk_state_id': 2, 'other_filter': 'yellow'}
            row_offset: bool; use the row number to select item, instead of the value of the sorting column (NOT IMPLEMENTED: at the moment
@@ -1387,8 +1568,11 @@ class DataChunkLoader:
         self.chunk_arena_size = 5  # n. of chunks kept in memory
         self.chunk_arena: list[Chunk] = [None] * self.chunk_arena_size
         self.main_chunk_pointer: int = 0
-        self.fetcher = make_sql_fetcher(table_name, self.sorting_column)
-        self.fetcher_first_last = make_sql_fetcher_first_last_element(table_name, self.sorting_column)
+        #self.fetcher = make_sql_fetcher(table_name, self.sorting_column)
+        #self.fetcher_first_last = make_sql_fetcher_first_last_element(table_name, self.sorting_column)
+        self.fetcher = fetch_fun
+        self.fetcher_first_last_count = fetch_first_last_count_fun
+        ### TODO: move the struct conversion in the FetchMaker
         self.data_struct = data_struct
         self.filters = filters
 
@@ -1435,7 +1619,7 @@ class DataChunkLoader:
 
     # probably it is very slow
     def update_total_row_count(self, conn):
-        total_row_count = get_row_count(conn, self.table_name, self.filters)
+        total_row_count, _, _ = self.fetcher_first_last_count(conn, self.filters)
         with self.lock:
             self.total_row_count = total_row_count
         return total_row_count
@@ -1447,9 +1631,16 @@ class DataChunkLoader:
     #    return self.idx_last_item
 
     def update_last_item(self, conn):
-        first_last_items = self.fetcher_first_last(conn, self.filters, 'DESC')
-        if first_last_items:
-            last_item = first_last_items[0]
+        a = self.fetcher_first_last_count(conn, self.filters)
+        a = self.fetcher_first_last_count(conn)
+        print('mam')
+        print(a)
+        print(self.fetcher_first_last_count)
+        print(self.filters)
+        print(len(a))
+        print(conn)
+        _, _, last_item = self.fetcher_first_last_count(conn, self.filters)
+        if last_item:
             with self.lock:
                 self.last_item = last_item
         else:
@@ -1464,6 +1655,7 @@ class DataChunkLoader:
         chunk_first_idx = chunk_idx * self.chunk_size
         # chunk_last_idx = chunk_first_idx + self.chunk_size
         data = self.fetch_db(conn, chunk_first_idx, self.chunk_size)
+        ### TODO: move the struct conversion in the FetchMaker
         if self.data_struct is not None:
             sturctured_data = []
             for d in data:
@@ -1560,12 +1752,6 @@ class DataChunkLoader:
 
             data = []
             chunk_idx = None
-            print("pre")
-            print(pre_chunk)
-            print("current")
-            print(current_chunk)
-            print("current offset")
-            print(self.current_offset)
             if pre_chunk and pre_chunk.chunk_idx < current_chunk.chunk_idx:
                 data.extend(pre_chunk.data)
                 chunk_idx = pre_chunk.chunk_idx
@@ -1699,6 +1885,14 @@ if __name__ == "__main__":
     print(classify_number(hash))
 
     print(obj[0][2])
+
+    fe = FetchMaker.block_first_last_count_fetcher(table, sorting_column)
+    print(fe)
+    a = fe(conn)
+    print(a)
+    for i in a:
+        print(i)
+    print(len(a))
 
     exit()
 
@@ -1922,6 +2116,8 @@ if __name__ == "__main__":
     offset = 4315870 #34000
     sorting_column = 'height'
     filters = {'in_main_chain': 1}
+
+    fe = FetchMaker.block_first_last_count_fetcher(table_name, sorting_column)
     data_loader = DataChunkLoader(sqlite_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=BlockState)
 
     last_item1 = data_loader.total_row_count

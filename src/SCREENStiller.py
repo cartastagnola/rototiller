@@ -24,7 +24,7 @@ from src.TYPEStiller import (
     FullNodeState, ScreenState, ScopeActions)
 
 from src.CONFtiller import (
-    debug_logger, logging, DEBUGGING, DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL,
+    debug_logger, logging, DEBUGGING, DB_BLOCKCHAIN_RO, DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL,
     BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO, full_node_port, full_node_rpc_port,
     FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST)
 
@@ -1831,9 +1831,11 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
 
+def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+    pass
+
 
 def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
-
 
     # search for anything.
     # At the moment only puzzle are supported
@@ -1883,10 +1885,32 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
 
     # prompt
     pos = UIgraph.Point(5,5)
-    pre_text = "Search for puzzle or address: "
+    pre_text = "Search: "
     prompt_lenght = min(80, width - 4)
     scope_search = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'search', pos,
                                           pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.go_to_block)
+
+    pos += UIgraph.Point(0,2)
+    pre_text = "Start height: "
+    prompt_lenght = min(80, width - 4)
+    scope_start_height = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'start_height', pos,
+                                                pre_text, prompt_lenght, P_text, True, False)
+
+    pos += UIgraph.Point(0,2)
+    pre_text = "End height: "
+    prompt_lenght = min(80, width - 4)
+    scope_end_height = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'end_height', pos,
+                                                pre_text, prompt_lenght, P_text, True, False)
+
+    pos += UIgraph.Point(0,2)
+    pre_text = "End height: "
+    prompt_lenght = min(80, width - 4)
+    scope_include_spent_coins = ELEMENTS.create_button(node_data, screenState, main_scope, 'include_spent_coins', pos)
+
+    pos += UIgraph.Point(0,2)
+    pre_text = "End height: "
+    prompt_lenght = min(80, width - 4)
+    scope_include_spent_coins = ELEMENTS.create_selector(node_data, screenState, main_scope, 'sel', pos)
 
     # the prompt shuuld avtivate the sql query, that create the list.
     # i will not go with chunks, i will try to handle them in a list. or not?
@@ -1899,6 +1923,7 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
     lapper.clocking("pre_init")
     if 'pressed_enter' in scope_search.data and scope_search.data['pressed_enter']:
 
+        #TODO: go to the search button, but do not execute. Double enter > execute
         scope_search.data['pressed_enter'] = False
         prompt = scope_search.data['prompt']
 
@@ -1928,14 +1953,24 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
     ###########################
     # implemnt chunk support
 
-        table_name = 'coin_record'
-        chunk_size = 1000  # 120  # height * 2  # to be sure to have at least 2 full screen of data
-        offset = self.full_node_meta.peak_height
-        sorting_column = 'confirmed_index'
-        filters = None  # {'in_main_chain': 1}
-        self.blocks_loader = WDB.DataChunkLoader(db_path, table_name, chunk_size, offset, filters=filters, sorting_column=sorting_column, data_struct=WDB.BlockState)
+        if 'address_loader' not in main_scope.data:
+            conn = sqlite3.connect(DB_BLOCKCHAIN_RO, timeout=SQL_TIMEOUT)
+            table_name = 'coin_record'
+            chunk_size = 1000  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+            offset = 0
+            sorting_column = 'confirmed_index'
+            filters = None  # {'in_main_chain': 1}
+            add = decode_puzzle_hash('xch1lv34uumcyg892zrv35rhrx87hu5nx87em7zcag5nc2vjecupkdzspc9xn6')
+            fetcher = WDB.FetchMaker.puzzle_hash_fetcher(add, sorting_column)
+            fetcher_first_last = WDB.FetchMaker.puzzle_hash_first_last_count_fetcher(add, sorting_column)
+
+            with conn:
+                main_scope.data['address_loader'] = WDB.DataChunkLoader(
+                    db_path, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+                    filters=filters, sorting_column=sorting_column)
 
         #######################3
+
 
 
     lapper.clocking("pressed enter")
@@ -1952,24 +1987,48 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         lapper.clocking("init tab")
         tab_size = UIgraph.Point(80, max_y)
 
-        print(len(records))
+        lapper.clocking("into coin rec")
+        data_loader: WDB.DataChunkLoader = main_scope.data['address_loader']
+        lapper.clocking("coin rec loaded")
 
-
-        ELEMENTS.create_tab(node_data,
-                            screenState,
-                            main_scope,
-                            "puzzle_hash_viewer",
-                            records,
-                            None,
-                            None,
-                            False,
-                            pos,
-                            tab_size,
-                            keyboardState,
-                            ScopeActions.exit_scope,
-                            False,
-                            False)  #,
-                            #block_legend)
+        if False:
+            ELEMENTS.create_tab(node_data,
+                                screenState,
+                                main_scope,
+                                "puzzle_hash_viewer",
+                                records,
+                                None,
+                                None,
+                                False,
+                                pos,
+                                tab_size,
+                                keyboardState,
+                                ScopeActions.exit_scope,
+                                False,
+                                False)  #,
+                                #block_legend)
+        else:
+            lapper.clocking("init tab")
+            loader_legend = ["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp"]
+            column_widths = [None, None, None, 15, 15, None, None]
+            ELEMENTS.create_tab(node_data,
+                                screenState,
+                                main_scope,
+                                "puzzle_hash_viewer",
+                                records,
+                                None,
+                                None,
+                                False,
+                                pos,
+                                tab_size,
+                                keyboardState,
+                                ScopeActions.exit_scope,
+                                False,
+                                False,
+                                loader_legend,
+                                column_widths,
+                                data_loader)
+            lapper.clocking("iend tab")
 
     lapper.clocking('end tab')
     #records = RPC.call_rpc_node('get_coin_records_by_puzzle_hash')
@@ -2174,7 +2233,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                     scope_go_to.data['valid_data'] = False
                     scope_go_to.data["invalid_data_message"] = 'invalid input. Use int or hash'
 
-            if height:
+            if height or height == 0:
                 scope_go_to.data['prompt'] = ''
                 scope_go_to.data['cursor'] = 0
                 blocks_loader.update_offset(height)
