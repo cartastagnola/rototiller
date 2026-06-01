@@ -48,7 +48,7 @@ USER_ADDX_WATCHLIST = Path('db/address_watchlist.csv')
 # DB_WDB = 'walletiller.db'
 DB_WDB = 'DBiller_wallets.db'  # TODO: rename to DB_CACHED_WALLET
 DB_CACHED_BLOCKCHAIN = DB_FOLDER / 'DBiller_cached_blockchain.db'
-DB_SB = 'DBiller_spend_bundles.db'
+DB_SB = 'db/DBiller_spend_bundles.db'
 
 blockchain_db_path = config["full_node"]["database_path"].replace("CHALLENGE", chain_network)
 DB_BLOCKCHAIN_RO = f"file:{blockchain_db_path}?mode=ro"
