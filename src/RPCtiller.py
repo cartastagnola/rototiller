@@ -19,6 +19,7 @@ from chia.daemon.client import connect_to_daemon_and_validate
 from chia_rs.sized_bytes import bytes32
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 
+from src.CONFtiller import (debug_logger, logging)
 
 async def get_wallet(coin_id: str):
     try:
@@ -139,6 +140,8 @@ async def fetch_rpc_daemon(method_name, *args, **kwargs):
         response = response['data']
     except Exception as e:
         logging(debug_logger, "DEBUG", "sometime wrong with a daemon rpc call")
+        logging(debug_logger, "DEBUG", "sometime wrong with a daemon rpc call")
+        logging(debug_logger, "DEBUG", f"LOAD sometime wrong with a daemon rpc call {e}")
         raise Exception(f"Request failed: {e}")
     finally:
         await daemon.close()
@@ -261,10 +264,17 @@ def call_rpc_node(method_name, *args, **kwargs):
 
     rpc_result = asyncio.run(fetch_rpc_node(method_name, **kwargs))
     output_filter = rpc_calls_full_node[method_name]
-    print(rpc_result)
+    if method_name == 'get_puzzle_and_solution':
+        logging(debug_logger, "DEBUG", f"LOAD i rpc method name: {method_name}")
+        logging(debug_logger, "DEBUG", f"LOAD i rpc res: {rpc_result}")
+        logging(debug_logger, "DEBUG", f"LOAD i rpc method name: {output_filter}")
 
+    # TODO: add case rpc result == False
     if len(output_filter) == 1:
-        return rpc_result[output_filter[0]]
+        try:
+            return rpc_result[output_filter[0]]
+        except:
+            raise Exception(f"casim: output_filter: {output_filter}")
     else:
         return rpc_result
 

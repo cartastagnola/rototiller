@@ -7,6 +7,8 @@ import sqlite3
 
 from typing import List, Dict
 
+from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
+
 import src.UIgraph as UIgraph
 from src.CONFtiller import (
     debug_logger, logging, DEBUGGING, DB_BLOCKCHAIN_RO,
@@ -22,6 +24,9 @@ import src.SCREENStiller as SCREENS
 import src.SERVICEStiller as SERVICES
 import src.KEYBOARDtiller as KEYBOARD
 import src.RPCtiller as RPC
+import src.CONFtiller as CONF
+import src.TYPEStiller as TYPES
+import src.UTILStiller as UTILS
 
 import src.DEBUGtiller as DEBUGtiller
 
@@ -71,15 +76,139 @@ def interFace(stdscr):
         ### check full node ###
         node_status = RPC.call_rpc_node('healthz')
 
+        ####### init daemon client ########
 
-        ### wallet data ###
-        # load data from WDB
-        # create the WDB or load the data
-        conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
-        WDB.create_wallet_db(conn)
-        logging(debug_logger, "DEBUG", f"WDB '{DB_WDB}' initialized successfully.")
-        SERVICES.load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active)
-        conn.close()
+        try:
+            daemon_dispatcher = SERVICES.SocketDispatcher()
+
+            def sync_status(data):
+                sync = data['data']['blockchain_state']['sync']
+                logging(debug_logger, "DEBUG", f"DYSPHER : sync status → {sync}")
+
+            daemon_dispatcher.subscribe(TYPES.DaemonEvent.GET_BLOCKCHAIN_STATE, sync_status)
+
+            # TODO: add shutdown event
+            daemon_thread = None
+            daemon_thread = threading.Thread(target=SERVICES.DaemonWebSocketClient.create_and_run_client,
+                                             args=(daemon_dispatcher, ),
+                                             daemon=True)
+            daemon_thread.start()
+        except Exception as e:
+            print("no daemon")
+            print(e)
+            traceback.print_exc()
+            logging(debug_logger, "DEBUG", f"DAEMON exception: {e}")
+
+
+        ####### init DBs ########
+        # watchlist csv
+        path = CONF.USER_ADDX_WATCHLIST
+        if not path.exists():
+            # write and empty file
+            empty_line = [('#address', ' name', " 'some notes'")]
+            WDB.save_csv(path, empty_line)
+
+        # blockchain cache
+        cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+        try:
+            WDB.create_cache_blockchain_db(cache_conn)
+        except Exception as e:
+            print('hole')
+            print(e)
+
+        cache_conn.close()
+
+        logging(debug_logger, "DEBUG", f"DB '{CONF.DB_CACHED_BLOCKCHAIN}' initialized successfully.")
+
+        def update_watchlisted_cached_addresses(data):
+            """data: websocket data from the daemon"""
+            # load the watch list
+            path = CONF.USER_ADDX_WATCHLIST
+            lines = WDB.load_csv(path)
+
+            logging(debug_logger, "DEBUG", f"DB UPDATING CACHE... ... ... ...")
+            logging(debug_logger, "DEBUG", f"DB {data}")
+            logging(debug_logger, "DEBUG", f"DB {data['data']['transaction_block']}")
+            logging(debug_logger, "DEBUG", f"DB {type(data['data']['transaction_block'])}")
+
+            if not data['data']['transaction_block']:
+                logging(debug_logger, "DEBUG", f"DB do nothinggggg")
+                return
+
+            ttime = time.perf_counter()
+
+            # TODO: move the whole fun elsewhere
+            from chia_rs.sized_bytes import bytes32
+            from chia.util.bech32m import decode_puzzle_hash
+
+            db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+            cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            logging(debug_logger, "DEBUG", f"DB starting cache fetcher for watchlist")
+            try:
+                for line in lines:
+                    add = line[0]
+                    try:
+                        if add.startswith(CONF.ADD_PREFIX):
+                            puzzle_hash = bytes(decode_puzzle_hash(add))
+                        else:
+                            puzzle_hash = bytes(UTILS.ensure_bytes32(add))
+
+                        # test if the add is correct
+                        encode_puzzle_hash(puzzle_hash, CONF.ADD_PREFIX)
+                        WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+
+                        # bacis info
+                        balance, unspent_coin_count, total_coin_count, peak_height = WDB.FetchMaker.get_total_amount_and_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)
+                        unspent_hinted_coin_count, total_hinted_coin_count = WDB.FetchMaker.get_hinted_amount_and_type_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)
+                        WDB.insert_cache_address_info(cache_conn, puzzle_hash, peak_height, balance, total_coin_count, unspent_coin_count, total_hinted_coin_count, unspent_coin_count)
+                    except Exception as e:
+                        logging(debug_logger, "DEBUG", f"exception decoding {puzzle_hash} - watchlist input: {add}")
+                        UTILS.logging_traceback('CACHE LOAD')
+
+            except Exception as e:
+                print(e)
+                logging(debug_logger, "DEBUG", f"UPDAYTE CACHE TIMO TRHE BIG ONE LOAD OUT exc {e}")
+                logging(debug_logger, "DEBUG", f"UPDATE CACHE TIMO LOAD edarbello {line}")
+                UTILS.logging_traceback('CACHE LOAD')
+
+            logging(debug_logger, "DEBUG", "DB ENDED cache fetcher for watchlist")
+            cache_conn.close()
+            db_conn.close()
+
+            new_tttime = time.perf_counter()
+            pp = new_tttime - ttime
+
+            logging(debug_logger, "DEBUG", f"DB ENDED cache fetcher for watchlist TOTALLLLL {pp}")
+
+        daemon_dispatcher.subscribe(TYPES.DaemonEvent.NEW_BLOCK, update_watchlisted_cached_addresses)
+
+        def chain_state(data):
+            logging(debug_logger, "DEBUG", f"CHAIN STATE update ... ... ... ...")
+            logging(debug_logger, "DEBUG", f"CHAIN STATE {data} ")
+            peak = data['data']['blockchain_state']['peak']
+            peak_height = peak['height']
+            peak_hash = peak['header_hash']
+            prev_hash = peak['prev_hash']
+            prev_tx_hash = peak['prev_transaction_block_hash']
+            prev_tx_height = peak['prev_transaction_block_height']
+            logging(debug_logger, "DEBUG", f"heihgt {peak_height}, header hash {peak_hash}, previous hash {prev_hash}")
+
+            # TODO: detect REORG
+            ## ...
+
+        daemon_dispatcher.subscribe(TYPES.DaemonEvent.GET_BLOCKCHAIN_STATE, chain_state)
+
+        logging(debug_logger, "DEBUG", f"DB ENDEDE without ERRRORSSS")
+        logging(debug_logger, "DEBUG", f"DB '{CONF.DB_CACHED_BLOCKCHAIN}' initialized successfully.")
+
+        #### wallet data ###
+        ## load data from WDB
+        ## create the WDB or load the data
+        #conn = sqlite3.connect(DB_WDB, timeout=SQL_TIMEOUT)
+        #WDB.create_wallet_db(conn)
+        #logging(debug_logger, "DEBUG", f"WDB '{DB_WDB}' initialized successfully.")
+        #SERVICES.load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active)
+        #conn.close()
 
 
         wallet_thread = None
@@ -101,6 +230,7 @@ def interFace(stdscr):
         conn.close()
 
         screenState = ScreenState()
+        screenState.daemon_socket_dispatcher = daemon_dispatcher
         screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
 
         ### TODO to fun
@@ -126,11 +256,13 @@ def interFace(stdscr):
         traceback.print_exc()
 
     # create the intro and the main menu scopes
-    scopeIntro = Scope('intro', SCREENS.screen_intro, screenState)
-    scopeMainMenu = Scope('main_menu', SCREENS.screen_main_menu, screenState)
+    scopeIntro: Scope = Scope('intro', SCREENS.screen_intro, screenState)
+    scopeMainMenu: Scope = Scope('main_menu', SCREENS.screen_main_menu, screenState)
 
     scopeMainMenu.exec = ScopeActions.activate_scope
+    scopeMainMenu.keyboard_exec = KEYBOARD.default_execution
     scopeIntro.sub_scopes[scopeMainMenu.name] = scopeMainMenu
+    scopeIntro.keyboard_exec = KEYBOARD.default_execution
     screenState.activeScope = scopeIntro
 
     try:
@@ -139,7 +271,7 @@ def interFace(stdscr):
         while not key:
 
             # keyboard input processing
-            activeScope = screenState.activeScope
+            activeScope: Scope = screenState.activeScope
             keyboardState = KeyboardState()
             key = KEYBOARD.processing(stdscr, screenState, keyboardState, activeScope)
 
@@ -159,8 +291,13 @@ def interFace(stdscr):
             with data_lock:
                 screenState.coins_data = coins_data
 
+            ### check windows size
             height, width = stdscr.getmaxyx()
-            screenState.screen_size = UIgraph.Point(width, height)
+            new_size = UIgraph.Point(width, height)
+            screenState.screen_resized = False
+            if screenState.screen_size != new_size:
+                screenState.screen_size = new_size
+                screenState.screen_resized = True
             windowDim = f"width={width}; height={height}"
             # the 32 and 16 can
             if width < 80 or height < 24:
@@ -237,6 +374,7 @@ def interFace(stdscr):
                 nLinesHeader = (len(title) + len(windowDim)) // width + 1
                 screenState.headerLines = nLinesHeader
 
+
                 # helper footer
                 footerText = f"Movement: ←↑↓→ or vim | confirm=enter back=esc q=quit {screenState.footer_text}"
                 screenState.footer_text = ""
@@ -246,6 +384,24 @@ def interFace(stdscr):
                 P_footer = P_header
                 footer.bkgd(' ', curses.color_pair(P_footer))
                 footer.addstr(0, 0, footerText)
+
+                # message footer
+                if len(screenState.footer_message) > 0:
+                    if screenState.footer_message_counter == 0:
+                        screenState.footer_message_counter = time.time()
+                    footer_message_text = 'MESSAGE: ' + screenState.footer_message
+                    nLines_message = int(len(footer_message_text) / width + 1)
+                    nLines += nLines_message
+                    footer_message = stdscr.subwin(nLines_message, width, height-nLines, 0)
+                    footer_message.bkgd(' ', curses.color_pair(P_footer) | curses.A_REVERSE)
+                    ELEMENTS.create_text_aligned(footer_message, UIgraph.Point(0,0), footer_message_text, P_footer, bold=False, inv_color=True, align_h=1)
+
+                    #footer_message.addstr(0, 0, footer_message_text)
+                    if (time.time() - screenState.footer_message_counter) > 10:
+                        screenState.footer_message_counter = 0
+                        screenState.footer_message = ''
+
+
 
                 # debug footer
                 extraLines = 1
@@ -288,14 +444,49 @@ def interFace(stdscr):
                     if len(DEBUG_TEXT) > 0:
                         footerDebug.addstr(2, 0, DEBUG_TEXT)
 
-                    screenState.footerLines = nLines + nLinesDebug
+                screenState.footerLines = nLines + nLinesDebug - 1
+
 
 
                 # screen selection
                 activeScope.screen(stdscr, keyboardState,
                                    screenState, fullNodeState)
-                KEYBOARD.execution(screenState, keyboardState, activeScope)
 
+                # keyboard execution
+                activeScope.keyboard_exec(screenState, keyboardState, activeScope)
+                for item_key, item_exec in activeScope.custom_keyboard_exec.items():
+                    item_exec(screenState, keyboardState, activeScope)
+
+                # LOADING
+                loading = False
+                names = []
+                names_text = ''
+                with screenState.lock:
+                    for i in range(len(screenState.running_threads) -1, -1, -1):
+                        thr: threading.Thread = screenState.running_threads[i]
+                        if thr.is_alive():
+                            loading = True
+                            names.append(str(thr.name))
+                            names.append(str(thr.getName()))
+                            names.append(str(thr.native_id))
+                            names_text = names_text + ' | ' + thr.getName()
+                        else:
+                            screenState.running_threads.pop(i)
+
+                if loading:
+                    win_loading = stdscr.subwin(2, width, 1, 0)  # height 2 to avoid the bug of the last char of a win
+                    P_loading = screenState.colorPairs["footer"]
+
+                    now = int(time.time())
+                    n_points = now % 4
+                    loading_text = f"{names_text} - loading{'.' * n_points}{' ' * (3 - n_points)}"
+                    loading_len = len(loading_text) + 3
+
+                    y, x = 0, width - loading_len
+                    win_loading.addstr(y, x, loading_text, curses.color_pair(P_loading))
+
+                    # DEBUG
+                    #win_loading.addstr(1, 2, '_|_'.join(names), curses.color_pair(P_loading))
 
             frame_curses_start = time.perf_counter()
             #curses.doupdate()
@@ -328,6 +519,14 @@ def interFace(stdscr):
             if frame_time > frame_time_real_max:
                 frame_time_real_max = frame_time
 
+
+            # TODO: on gnome terminal esc is slow, Why? the frame time is alwasy the same, also the frame after the escaped one
+            # if keyboardState.esc == True:
+            #     logging(debug_logger, "DEBUG", f"ESC: frame rate {frame_time}")
+            # else:
+            #     logging(debug_logger, "DEBUG", f"N: frame rate {frame_time}")
+
+
             # update counter
             if frame_time_total > 0.1:  # update rate
                 frame_time_total = 0
@@ -356,6 +555,18 @@ def interFace(stdscr):
 
 
 def curses_main_loop():
+    # reduce the esc delay
+    os.environ.setdefault('ESCDELAY', '25')
+    curses.set_escdelay(25)  # reduce esc delay
+
+    # if tmux try to reduce the delay
+    if "TMUX" in os.environ:
+        try:
+            import subprocess
+            subprocess.run(["tmux", "set-option", "-s", "escape-time", "25"], check=True)
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+
     # start curses
     curses.wrapper(interFace)
 

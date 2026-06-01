@@ -1,8 +1,9 @@
-import sqlite3
-import time
 import json
 import zstd
 import copy
+import traceback
+import sqlite3
+import time
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -20,9 +21,13 @@ except ImportError:
     except ImportError:
         print('probably a full_node verison not supporter')
 
-from chia_rs import CoinSpend, Coin, Program
+from chia_rs import CoinSpend, Coin
+from chia_rs import Program as RsProgram
+from chia.types.blockchain_format.program import Program as PyProgram
 from chia_rs.sized_bytes import bytes32
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+from clvm.casts import int_from_bytes, int_to_bytes
+from chia.types.condition_opcodes import ConditionOpcode
 
 from chia_rs import (ELIGIBLE_FOR_DEDUP, ELIGIBLE_FOR_FF, BLSCache, ConsensusConstants,
     G2Element, supports_fast_forward, validate_clvm_and_signature)
@@ -33,6 +38,20 @@ from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 from src.UTILStiller import timestamp_to_date
 from src.CONFtiller import (
     debug_logger, logging, XCH_FAKETAIL, XCH_PREFIX, XCH_MOJO, CAT_MOJO, SQL_TIMEOUT, DB_SB)
+import src.TYPEStiller as TYPES
+
+import src.RPCtiller as RPC
+import src.UTILStiller as UTILS
+import src.PUZZLEtiller as PUZ
+import src.CONFtiller as CONF
+
+
+
+
+import csv
+import os
+from pathlib import Path
+
 
 
 def print_json(dict):
@@ -45,6 +64,129 @@ def reconstruct_block_from_bytes(block_bytes: bytes):
 
 def reconstruct_block_record_from_bytes(block_bytes: bytes):
     return BlockRecord.from_bytes(block_bytes).to_json_dict()
+
+
+# Load and save csv
+def load_csv(path: Path):
+    with open(path, newline="", encoding="utf-8") as f:
+        #f = [row for row in f if not row.strip().startswith("#")]
+        reader = csv.reader(f, quotechar="'", skipinitialspace=True)
+        next(reader, None)  # jump the first line
+        return list(reader)
+
+
+def save_csv(path: Path, rows: list[tuple[str, str, str]]):
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+
+    with tmp_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerows(rows)
+        f.flush()
+        os.fsync(f.fileno())
+
+    os.replace(tmp_path, path)
+
+
+def get_connection(db_path):
+    conn = sqlite3.connect(db_path, timeout=CONF.SQL_TIMEOUT)
+    conn.execute("PRAGMA journal_mode=WAL;")  # allow writing and reading concurrently
+    conn.execute("PRAGMA synchronous=NORMAL;")  # Recommended for WAL mode
+    return conn
+
+
+def create_cache_blockchain_db(conn):
+    """Create a partial local enriched db of the blockchain"""
+
+    # add db version
+    # add info about last update?
+    #### spent coin, do not need update
+    #### unspent coin, add column last time checked?
+
+    CACHED_DB_VERSION = 0
+
+    try:
+        cursor = conn.cursor()
+        # DB verison
+
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_DB_version ("
+            "key TEXT PRIMARY KEY, "
+            "value INT "
+            ");"
+        )
+        logging(debug_logger, "DEBUG", "WDB cached error A")
+
+        # INIT the version if it is empty
+        cursor.execute(
+            f"INSERT OR IGNORE INTO cached_DB_version (key, value) "
+            f"VALUES ('version', {CACHED_DB_VERSION});"
+        )
+        logging(debug_logger, "DEBUG", "WDB cached error B")
+
+        # address summary
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_address_info ("
+            "puzzle_hash BLOB PRIMARY KEY, "
+            "last_height INT, "
+            "balance INT, "
+            "total_coin_count INT, "
+            "unspent_coin_count INT, "
+            "total_hinted_count INT, "
+            "unspent_hinted_count INT);"
+        )
+
+        # coin_records
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_coin_record ("
+            "coin_name BLOB PRIMARY KEY, "
+            "confirmed_index BIGINT, "
+            "spent_index BIGINT, "
+            "coinbase INT, "
+            "puzzle_hash BLOB, "
+            "coin_parent BLOB, "
+            "amount BIGINT, "
+            "timestamp BIGINT, "
+            "record_type INT, "  # 0-full, 1-partial (for children) # lets see, i could not be needed
+            "parent_puzzle_hash BLOB, "  # at the moment we will keep it. We will see it to store the full coin data later
+            "child_count INT, "
+            #"hinted_puzzle_hash BLOB, "
+            #"hinted_parent_puzzle_hash BLOB, "
+            #"tail BLOB, "
+            "coin_type INT, "
+            "full_memo BLOB);"
+        )
+
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS ooo ("
+            "key TEXT PRIMARY KEY, "
+            "value INT "
+            ");"
+        )
+
+        logging(debug_logger, "DEBUG", "WDB cached error C")
+        # indexes
+        ## puzzle hash
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_puzzle_hash ON cached_coin_record(puzzle_hash);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_parent_puzzle_hash ON cached_coin_record(parent_puzzle_hash);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_confirmed_index ON cached_coin_record(confirmed_index);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_spent_index ON cached_coin_record(spent_index);")
+        #cursor.execute("CREATE INDEX IF NOT EXISTS idx_cache_fetch ON cached_coin_record (puzzle_hash, confirmed_index, spent_index")  # new to check
+        ## tail
+        #cursor.execute("CREATE INDEX IF NOT EXISTS idx_tail ON cached_coin_record(tail);")
+        ## coin type
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_coin_type ON cached_coin_record(coin_type);")
+        ## parent coin id
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_parent ON cached_coin_record(coin_parent);")
+
+        conn.commit()
+        cursor.close()
+
+    except sqlite3.Error as e:
+        print(f"Error creating the cached DB: {e}")
+        logging(debug_logger, "DEBUG", f"WDB error while creating the cached DB: {e}")
+        logging(debug_logger, "DEBUG", "WDB cached error _________________________________________")
+        logging(debug_logger, "DEBUG", "WDB cached error _________________________________________")
+        logging(debug_logger, "DEBUG", "WDB cached error _________________________________________")
 
 
 def create_wallet_db(conn):
@@ -154,6 +296,33 @@ def create_wallet_db(conn):
         logging(debug_logger, "DEBUG", "WDB error _________________________________________")
         logging(debug_logger, "DEBUG", "WDB error _________________________________________")
 
+
+def insert_cache_address_info(conn, puzzle_hash, last_height, balance, total_coin_count,
+                              unspent_coin_count, total_hinted_count=None, unspent_hinted_count=None):
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO cached_address_info ("
+        "puzzle_hash, last_height, balance, total_coin_count, "
+        "unspent_coin_count, total_hinted_count, unspent_hinted_count) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?);",
+        (puzzle_hash, last_height, balance, total_coin_count, unspent_coin_count,
+         total_hinted_count, unspent_hinted_count)
+    )
+    conn.commit()
+
+
+def retrive_cache_address_info(conn, puzzle_hash):
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT "
+        "last_height, balance, total_coin_count, "
+        "unspent_coin_count, total_hinted_count, unspent_hinted_count "
+        "FROM cached_address_info "
+        "WHERE puzzle_hash = ?;",
+        (puzzle_hash,)
+    )
+    item = cursor.fetchone()
+    return item
 
 
 def insert_table_timestamp(conn, table_name):
@@ -1227,43 +1396,552 @@ class BlockState:
 
 
 class FetchMaker:
+    # TODO: merge first_last_count with the main fetcher...
+    # TODO: remove filters from fetch
+
+    # rename to cache builder / updater
     @staticmethod
-    def puzzle_hash_fetcher(puzzle_hash: bytes, sorting_column: str, start_height: uint32 = uint32(0),
+    def cache_fetcher(db_conn, cache_conn, puzzle_hash, start_height: uint32 = 0, end_height: uint32 = (2**32 - 1)):
+        # take all coin with puzz hash in batches
+
+        db_cursor = db_conn.cursor()
+        cache_cursor = cache_conn.cursor()
+        logging(debug_logger, "DEBUG", f"CACHE UPDATE")
+
+        import time
+        ttime = time.perf_counter()
+
+        ## check last peak
+        try:
+            cache_peak = 0
+            cache_cursor.execute(
+                "SELECT confirmed_index FROM cached_coin_record "
+                "  WHERE puzzle_hash = ? "
+                "  ORDER BY confirmed_index DESC "
+                "  LIMIT 1; ",
+                (puzzle_hash,)
+            )
+
+            rows = cache_cursor.fetchall()
+
+            if len(rows) != 0:
+                cache_peak = rows[0][0]
+                logging(debug_logger, "DEBUG", f"CACHE peak found: {cache_peak} SYNCING FROM THERE")
+            else:
+                logging(debug_logger, "DEBUG", f"CACHE no peak found NOOOOOOOOOOOOO PEAK")
+
+            db_cursor.execute(
+                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                "coin_parent, amount, timestamp FROM coin_record "  # INDEXED BY coin_puzzle_hash " 
+                "WHERE puzzle_hash=? AND (confirmed_index >= ? OR spent_index >= ? )",
+                (puzzle_hash, cache_peak, cache_peak,)
+            )
+
+            rr = db_cursor.fetchall()
+
+            logging(debug_logger, "DEBUG", f"TIMO CACHE LOAD ok for a total of {len(rr)} ALLLLLLLLLLLLL")
+
+
+            db_cursor.execute(
+                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                "coin_parent, amount, timestamp FROM coin_record "  # INDEXED BY coin_puzzle_hash " 
+                "WHERE puzzle_hash=? AND (confirmed_index >= ? OR spent_index >= ? )",
+                (puzzle_hash, cache_peak, cache_peak,)
+            )
+            logging(debug_logger, "DEBUG", f"TIMO CACHE LOAD ok")
+
+            sub_db_cursor = db_conn.cursor()
+            while True:
+                rows = db_cursor.fetchmany(1000)
+                logging(debug_logger, "DEBUG", f"DB fetchmany {len(rows)}")
+                if not rows:
+                    break
+
+                for row in rows:
+                    args = list(row)
+                    args.append(0)  # full coin_record
+                    coin_parent = row[5]
+                    coinbase = row[3]
+
+                    # find from
+                    if coinbase:
+                        args.append(None)
+                    else:
+                        sub_db_cursor.execute(
+                            "SELECT puzzle_hash FROM coin_record WHERE coin_name=? ",
+                            (coin_parent,),
+                        )
+                        items = sub_db_cursor.fetchall()
+                        if len(items) > 1:
+                            args.append(items[0][0])
+                            raise "one, and only one parent..."
+                        elif len(items) == 1:
+                            args.append(items[0][0])
+                        else:
+                            raise "zero... no way! terminate everything"
+
+
+                    # find all the child coin, count them, store them as coin
+                    coin_name = row[0]
+                    spent_index = row[2]
+                    amount = row[6]
+                    child_count = 0
+                    if spent_index > 0:
+                        sub_db_cursor.execute(
+                            "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                            "coin_parent, amount, timestamp FROM coin_record WHERE coin_parent=? ",
+                            (coin_name,),
+                        )
+
+                        items = sub_db_cursor.fetchall()
+                        child_count = len(items)
+
+                        if child_count == 0:
+                            ################
+                            # faked coin created to add a trace in outound coin spent without children
+                            ###############
+                            sub_args = []
+                            # coin_name | The Great Unknown
+                            # parent_coin_info, puzzle_hash, amount
+                            sub_args.append(UTILS.calc_coin_id(coin_name, puzzle_hash, amount))
+
+                            # confirmed_index
+                            sub_args.append(spent_index)
+
+                            # spent_index
+                            sub_args.append(spent_index)
+
+                            # coinbase
+                            sub_args.append(0)
+
+                            # puzzle_hash
+                            sub_args.append(bytes(32))  # the zero bytes
+                            #sub_args.append(None)
+
+                            # coin_parent
+                            sub_args.append(coin_name)
+
+                            # amount
+                            sub_args.append(amount)
+
+                            # timestamp
+                            sub_db_cursor.execute(
+                                "SELECT block_record FROM full_blocks WHERE height = ?",
+                                (spent_index,)
+                            )
+                            items = sub_db_cursor.fetchall()
+                            block_record = reconstruct_block_record_from_bytes(items[0][0])
+                            sub_args.append(block_record['timestamp'])  # retrive timestamp block spent
+
+                            #logging(debug_logger, "DEBUG", f"TIMO CACHE timestamp {block_record['timestamp']}")
+                            sub_args.append(TYPES.CacheCoinRecordType.PHANTOM_SPENT)  # spent coin without children (value=2)
+                            sub_args.append(puzzle_hash)  # parent puzzle hash
+
+                            cache_cursor.execute(
+                                "INSERT OR REPLACE INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
+                                "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
+                                "VALUES (?,?,?,?,?,?,?,?,?,?) ",
+                                sub_args
+                            )
+
+                        else:
+                            #logging(debug_logger, "DEBUG", f"TIMO CACHE with child")
+                            for sub_args in items:
+                                # store in the cache without extra data
+                                sub_args = list(sub_args)
+                                sub_args.append(TYPES.CacheCoinRecordType.CHILD)  # partial coin_record (value=1)
+                                sub_args.append(puzzle_hash)
+
+                                # TODO: add the case where the record already exist and it is a full record. (do not modify)
+                                cache_cursor.execute(
+                                    "INSERT INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
+                                    "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
+                                    "VALUES (?,?,?,?,?,?,?,?,?,?) "
+
+                                    "ON CONFLICT(coin_name) DO UPDATE SET "
+                                    "confirmed_index = excluded.confirmed_index, "
+                                    "spent_index = excluded.spent_index, "
+                                    "coinbase = excluded.coinbase, "
+                                    "puzzle_hash = excluded.puzzle_hash, "
+                                    "coin_parent = excluded.coin_parent, "
+                                    "amount = excluded.amount, "
+                                    "timestamp = excluded.timestamp, "
+                                    "record_type = excluded.record_type, "
+                                    "parent_puzzle_hash = excluded.parent_puzzle_hash "
+
+                                    f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
+                                    sub_args
+                                )
+                    args.append(child_count)
+
+                    args.append(None)  # coin type
+                    args.append(None)  # full memo
+
+
+                    # cache insert
+                    cache_cursor.execute(
+                        "INSERT OR REPLACE INTO cached_coin_record VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        args
+                    )
+
+                cache_conn.commit()
+                logging(debug_logger, "DEBUG", f"cached COMMIT")
+
+            ######
+            ### rescan upsent children coins that could have been spended
+            ### scan only children that are partial record (CHILD)
+            cache_cursor.execute(
+                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                "coin_parent, amount, timestamp FROM cached_coin_record "  # INDEXED BY coin_puzzle_hash " 
+                f"WHERE parent_puzzle_hash=? AND spent_index = 0 AND record_type = {TYPES.CacheCoinRecordType.CHILD}",
+                (puzzle_hash,)
+            )
+
+            sub_cache_cursor = cache_conn.cursor()
+            while True:
+                rows = cache_cursor.fetchmany(1000)
+                logging(debug_logger, "DEBUG", f"CACHE DB fetchmany {len(rows)}, check for childs updates")
+                if not rows:
+                    break
+
+                coin_names = [row[0] for row in rows]
+
+
+                placeholders = ','.join(['?'] * len(coin_names))
+                db_cursor.execute(
+                    f"SELECT * FROM coin_record WHERE coin_name IN ({placeholders}) AND spent_index > 0",
+                    coin_names
+                )
+
+                coin_records_updates = db_cursor.fetchall()
+
+                if coin_records_updates:
+                    for cr in coin_records_updates:
+                        sub_args = list(cr)
+                        sub_args.append(TYPES.CacheCoinRecordType.CHILD)  # partial coin_record
+                        sub_args.append(puzzle_hash)
+
+                        sub_cache_cursor.execute(
+                            "INSERT OR REPLACE INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
+                            "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?) ",
+                            sub_args
+                        )
+
+                cache_conn.commit()
+
+        except Exception as e:
+            print(e)
+            logging(debug_logger, "DEBUG", f"CACHE TIMO TRHE BIG ONE LOAD OUT exc {e}")
+            logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD edarbello")
+            text = traceback.format_exc()
+            text = text.replace("\n", "")
+            logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD irogram exc {text}")
+            import time
+            time.sleep(2)
+
+
+
+        endtime = time.perf_counter()
+
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        logging(debug_logger, "DEBUG", f"CACHE TIMO LOAD for {puzzle_hash} in {endtime - ttime}")
+        # find puzz hash of coin_id_parent
+        # secondary
+        # find hinted
+        pass
+
+    @staticmethod
+    def CACHE_puzzle_hash_fetcher(puzzle_hash: bytes, sorting_column: str,
+                                  start_height: uint32 = uint32(0),
+                                  end_height: uint32 = uint32((2**32) - 1),
+                                  remove_spent_coins: bool = False,
+                                  remove_self_transactions: bool = False,
+                                  order='DESC',
+                                  first_last_count: bool = False):
+        """ inbound cached fetcher"""
+
+        base_query = (
+            f" WITH main_coins AS ( "
+            f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
+            f"     FROM cached_coin_record INDEXED BY idx_puzzle_hash "
+            f"     WHERE puzzle_hash = ? "
+            f"       AND confirmed_index >= ? "
+            f"       AND confirmed_index < ? "
+            f"       {'AND spent_index <= 0' if remove_spent_coins else ''} "
+            f"       {'AND (parent_puzzle_hash IS NULL OR parent_puzzle_hash != ?1)' if remove_self_transactions else ''} "
+            f" ) "  # use the comma only if there is another statement for the CTE, otherwise do not place it
+        )
+
+        selection_query = (
+            f"SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"       coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
+            f"FROM main_coins "
+            f"ORDER BY {sorting_column} {order} "
+        )
+
+        logging(debug_logger, "DEBUG", f"LOAD query {base_query} ")
+
+        if first_last_count:
+            def fetch(conn):
+                flc_base_query = f"{base_query}, filtered AS ( {selection_query} ) "
+
+                # count
+                flc_selection_query = (
+                    f"SELECT COUNT(*) "
+                    f"FROM filtered "
+                )
+
+                count_query = flc_base_query + flc_selection_query
+
+                with conn:
+                    cursor = conn.execute(count_query,
+                                          (puzzle_hash, start_height, end_height))
+                    item_count = cursor.fetchall()[0][0]
+
+                # first last items
+                flc_selection_query = (
+                    f"SELECT * FROM (SELECT * FROM filtered ORDER BY {sorting_column} ASC LIMIT 1 ) "
+                    f" UNION ALL "
+                    f"SELECT * FROM (SELECT * FROM filtered ORDER BY {sorting_column} DESC LIMIT 1 ); "
+                )
+
+                first_last_query = flc_base_query + flc_selection_query
+
+                with conn:
+                    cursor = conn.execute(first_last_query,
+                                          (puzzle_hash, start_height, end_height))
+                    items = cursor.fetchall()
+
+                coin_record_list = []
+
+                #logging(debug_logger, "DEBUG", f"DB TIMO CACHE SLOW lenght {len(items[1])} ")
+                for i in items:
+                    coin_record_list.append(TYPES.CoinRecordRoto(i))
+
+                if item_count > 0:
+                    if len(coin_record_list) >= 2:
+                        return item_count, coin_record_list[0], coin_record_list[1]
+                    else:
+                        return item_count, None, None
+                else:
+                    return 0, None, None
+            return fetch
+        else:
+            def fetch(conn, start, count):
+
+                limit_offset_query = "LIMIT ? OFFSET ? "
+                query = base_query + selection_query + limit_offset_query
+
+                # debug sql
+                #query = f" EXPLAIN QUERY PLAN " + query
+                #query_exp = "EXPLAIN QUERY PLAN " + query
+                #with conn:
+                #    cursor = conn.execute(query_exp,
+                #                          (puzzle_hash, start_height, end_height, count, start))
+                #    items = cursor.fetchall()
+
+
+                with conn:
+                    cursor = conn.execute(query,
+                                          (puzzle_hash, start_height, end_height, count, start))
+                    items = cursor.fetchall()
+
+                coin_record_list = []
+                for i in items:
+                    coin_record_list.append(TYPES.CoinRecordRoto(i))
+
+                return coin_record_list
+
+            return fetch
+
+    @staticmethod
+    def CACHE_puzzle_hash_outbound_fetcher(puzzle_hash: bytes, sorting_column: str,
+                                           start_height: uint32 = uint32(0),
+                                           end_height: uint32 = uint32((2**32) - 1),
+                                           remove_spent_coins: bool = False,
+                                           remove_self_transactions: bool = False,
+                                           show_phantom_coin_outputs: bool = False,
+                                           order: str = 'DESC',
+                                           first_last_count: bool = False):
+        """ outbound cached fetcher"""
+        ### add coin spent with no child?
+
+        base_query = (
+            f" WITH main_coins AS ( "
+            f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
+            f"     FROM cached_coin_record INDEXED BY idx_parent_puzzle_hash "
+            f"     WHERE parent_puzzle_hash = ? "
+            f"       AND confirmed_index >= ? "
+            f"       AND confirmed_index < ? "
+            f"       {'AND spent_index <= 0' if remove_spent_coins else ''} "
+            f"       {'AND (puzzle_hash IS NULL OR puzzle_hash != ?1)' if remove_self_transactions else ''} "
+            f"       {'' if show_phantom_coin_outputs else 'AND record_type != 2'} "  # 2 are sibling input coins
+            f" ) "  # use the comma only if there is another statement for the CTE, otherwise do not place it
+        )
+
+        selection_query = (
+            f"SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"       coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
+            f"FROM main_coins "
+            f"ORDER BY {sorting_column} {order} "
+        )
+
+        if first_last_count:
+
+            def fetch(conn):
+
+                flc_base_query = f"{base_query}, filtered AS ( {selection_query} ) "
+
+                # count
+                flc_selection_query = (
+                    f"SELECT COUNT(*) "
+                    f"FROM filtered "
+                )
+
+                count_query = flc_base_query + flc_selection_query
+
+
+                with conn:
+                    cursor = conn.execute(count_query,
+                                          (puzzle_hash, start_height, end_height))
+                    item_count = cursor.fetchall()[0][0]
+
+                # first last items
+                flc_selection_query = (
+                    f"SELECT * FROM (SELECT * FROM filtered ORDER BY {sorting_column} ASC LIMIT 1 ) "
+                    f" UNION ALL "
+                    f"SELECT * FROM (SELECT * FROM filtered ORDER BY {sorting_column} DESC LIMIT 1 ); "
+                )
+
+                first_last_query = flc_base_query + flc_selection_query
+
+                with conn:
+                    cursor = conn.execute(first_last_query,
+                                          (puzzle_hash, start_height, end_height))
+                    items = cursor.fetchall()
+
+                coin_record_list = []
+                for i in items:
+                    coin_record_list.append(TYPES.CoinRecordRoto(i))
+
+                if item_count > 0:
+                    if len(coin_record_list) >= 2:
+                        return item_count, coin_record_list[0], coin_record_list[1]
+                    else:
+                        return item_count, None, None
+                else:
+                    return 0, None, None
+
+        else:
+            def fetch(conn, start, count):
+
+                limit_offset_query = "LIMIT ? OFFSET ? "
+                query = base_query + selection_query + limit_offset_query
+
+                # DEBUG SQL
+                #query = f" EXPLAIN QUERY PLAN " + query
+                #query_exp = "EXPLAIN QUERY PLAN " + query
+                #with conn:
+                #    cursor = conn.execute(query_exp,
+                #                          (puzzle_hash, start_height, end_height, count, start))
+                #    items = cursor.fetchall()
+
+                with conn:
+                    cursor = conn.execute(query,
+                                          (puzzle_hash, start_height, end_height, count, start))
+                    items = cursor.fetchall()
+
+                coin_record_list = []
+                for i in items:
+                    coin_record_list.append(TYPES.CoinRecordRoto(i))
+
+                return coin_record_list
+
+        return fetch
+
+    @staticmethod
+    def puzzle_hash_base_cte(remove_spent_coins: bool,
+                             remove_self_transactions: bool) -> str:
+
+        main_coins = (
+            f" WITH main_coins AS ( "
+            f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"            coin_parent, amount, timestamp "
+            f"     FROM coin_record INDEXED BY coin_puzzle_hash "
+            f"     WHERE puzzle_hash = ? "
+            f"       AND confirmed_index >= ? "
+            f"       AND confirmed_index < ? "
+            f"       {'AND spent_index <= 0' if remove_spent_coins else ''} "
+            f" ), "
+        )
+        where = "WHERE COALESCE(cr.puzzle_hash, '') != ?1" if remove_self_transactions else ""
+        filtered = (
+            f"filtered AS ( "
+            f"    SELECT mc.*, cr.puzzle_hash AS parent_puzzle_hash "
+            f"    FROM main_coins mc "
+            f"    LEFT JOIN coin_record cr "
+            f"      ON mc.coin_parent = cr.coin_name "
+            f"    {where} "
+            f") "
+        )
+
+        return f"{main_coins} {filtered}"
+
+    @staticmethod
+    def puzzle_hash_fetcher(puzzle_hash: bytes, sorting_column: str,
+                            start_height: uint32 = uint32(0),
                             end_height: uint32 = uint32((2**32) - 1),
-                            include_spent_coins: bool = True, order='DESC'):
+                            remove_spent_coins: bool = False,
+                            remove_self_transactions: bool = False,
+                            order='DESC'):
+        """ inbound fetcher the does not use cache """
 
-        def fetch(conn, start, count, filters=None):
-            select = ("SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
-                      "coin_parent, amount, timestamp FROM coin_record ")
-            indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
-            default_filter = "AND confirmed_index>=? AND confirmed_index<? "
-            spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
-            sorting = f"ORDER BY {sorting_column} {order} "  # add variable
-            limit_offset = 'LIMIT ? OFFSET ? '
-            query = select + indexed + default_filter + spent_coin_filter + sorting + limit_offset
+        def fetch(conn, start, count):
 
+            timo = UTILS.Timer()
+            timo.start()
+            timo.clocking('init')
+            base_query = FetchMaker.puzzle_hash_base_cte(remove_spent_coins, remove_self_transactions)
+
+            selection_query = (
+                f"SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+                f"       coin_parent, amount, timestamp, parent_puzzle_hash "
+                f"FROM filtered "
+                f"ORDER BY {sorting_column} {order} "
+                f"LIMIT ? OFFSET ? "
+            )
+
+            query = base_query + selection_query
+
+            # debug sql
+            # query = f" EXPLAIN QUERY PLAN " + query
             with conn:
                 cursor = conn.execute(query,
                                       (puzzle_hash, start_height, end_height, count, start))
                 items = cursor.fetchall()
 
-            #["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp"]
-            formated_list = []
+            coin_record_list = []
             for i in items:
-                new_item = []
-                new_item.append(i[0])
-                new_item.append(i[1])
-                if i[2] == 0:
-                    new_item.append("Coinbase")
-                else:
-                    new_item.append("")
-                new_item.append(encode_puzzle_hash(bytes32(i[3]), XCH_PREFIX))
-                new_item.append(f"0x{bytes32(i[4]).hex()}")
-                new_item.append(int.from_bytes(i[5], byteorder='big') / XCH_MOJO)
-                new_item.append(timestamp_to_date(i[6]))
-                formated_list.append(new_item)
+                coin_record_list.append(TYPES.CoinRecordRoto(i))
 
-            return formated_list
+            timo.clocking('end')
+            timo.end()
+            timo_s = f"{timo}"
+            timo_ss = timo_s.split('\n')
+            logging(debug_logger, "DEBUG", "DB TIMO SLOW fetch: ")
+            for n, i in enumerate(timo_ss):
+                logging(debug_logger, "DEBUG", f"DB TIMO SLOWWW i{n}-{i}")
+
+
+            return coin_record_list
 
         return fetch
 
@@ -1271,58 +1949,278 @@ class FetchMaker:
     @staticmethod
     def puzzle_hash_first_last_count_fetcher(
             puzzle_hash: bytes, sorting_column: str, start_height: uint32 = uint32(0),
-            end_height: uint32 = uint32((2**32) - 1), include_spent_coins: bool = True):
+            end_height: uint32 = uint32((2**32) - 1), remove_spent_coins: bool = True,
+            remove_self_transactions: bool = False, order: str = "DESC"):
+        """ inbound first last count fetcher the does not use cache """
+        # TODO: use the order to invert first last
 
-        def fetch(conn, filters=None):
-            # TODO: filters are not used here. Not sure, i remove them or not
+        def fetch(conn):
 
-            spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
+            base_query = FetchMaker.puzzle_hash_base_cte(remove_spent_coins, remove_self_transactions)
 
-            # total items count
-            count_query = "SELECT COUNT(*) FROM coin_record WHERE puzzle_hash=? AND confirmed_index>=? AND confirmed_index<? " + spent_coin_filter
+            # count
+            selection_query = (
+                f"SELECT COUNT(*) "
+                f"FROM filtered "
+            )
+            count_query = base_query + selection_query
+
             with conn:
                 cursor = conn.execute(count_query,
                                       (puzzle_hash, start_height, end_height))
                 item_count = cursor.fetchall()[0][0]
 
-            # first_last_query
-            first_last_query = (
-                f" SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
-                f"coin_parent, amount, timestamp "
-                f"FROM ( SELECT * FROM coin_record "
-                f"WHERE puzzle_hash=? AND confirmed_index>=? AND confirmed_index<? {spent_coin_filter} "
-                f"ORDER BY {sorting_column} ASC LIMIT 1 ) "
-                f"UNION ALL "
-                f" SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
-                f"coin_parent, amount, timestamp "
-                f"FROM ( SELECT * FROM coin_record "
-                f"WHERE puzzle_hash=? AND confirmed_index>=? AND confirmed_index<? {spent_coin_filter} "
-                f"ORDER BY {sorting_column} DESC LIMIT 1 ) "
+            # first last items
+            selection_query = (
+                f"SELECT * FROM (SELECT * FROM filtered ORDER BY {sorting_column} ASC LIMIT 1 ) "
+                f" UNION ALL "
+                f"SELECT * FROM (SELECT * FROM filtered ORDER BY {sorting_column} DESC LIMIT 1 ); "
             )
+
+            first_last_query = base_query + selection_query
 
             with conn:
                 cursor = conn.execute(first_last_query,
-                                      (puzzle_hash, start_height, end_height,
-                                       puzzle_hash, start_height, end_height))
+                                      (puzzle_hash, start_height, end_height))
                 items = cursor.fetchall()
 
-            #["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp"]
-            formatted_list = []
+            coin_record_list = []
             for i in items:
-                new_item = []
-                new_item.append(i[0])
-                new_item.append(i[1])
-                if i[2] == 0:
-                    new_item.append("Coinbase")
-                else:
-                    new_item.append("")
-                new_item.append(encode_puzzle_hash(bytes32(i[3]), XCH_PREFIX))
-                new_item.append(f"0x{bytes32(i[4]).hex()}")
-                new_item.append(int.from_bytes(i[5], byteorder='big') / XCH_MOJO)
-                new_item.append(timestamp_to_date(i[6]))
-                formatted_list.append(new_item)
+                coin_record_list.append(TYPES.CoinRecordRoto(i))
 
-            return item_count, formatted_list[0], formatted_list[1]
+            if item_count > 0:
+                if len(coin_record_list) >= 2:
+                    return item_count, coin_record_list[0], coin_record_list[1]
+                else:
+                    return item_count, None, None
+            else:
+                return 0, None, None
+
+        return fetch
+
+    @staticmethod
+    def get_total_amount_and_count_from_puzzle_hash(path: str, puzzle_hash: bytes):
+        """Not a fetcher"""
+        query_amount = "SELECT amount FROM coin_record WHERE puzzle_hash = ? AND spent_index <= 0;"
+        query_total_coin = "SELECT COUNT(*) FROM coin_record WHERE puzzle_hash = ? ;"
+        query_max_block_height = "SELECT max(height) FROM full_blocks WHERE in_main_chain = 1;"
+
+        conn = sqlite3.connect(path, uri=True, timeout=SQL_TIMEOUT)
+
+        timo = UTILS.Timer()
+        timo.start()
+        timo.clocking('init')
+
+        with conn:
+            cursor = conn.execute(query_amount, (puzzle_hash,))
+            items = cursor.fetchall()
+            balance = 0
+            unspent_coin_count = len(items)
+            for i in items:
+                balance += int_from_bytes(i[0])
+            timo.clocking('amount')
+
+            cursor = conn.execute(query_total_coin, (puzzle_hash,))
+            items = cursor.fetchall()
+            total_coin_count = items[0][0]
+            timo.clocking('total items count')
+
+            cursor = conn.execute(query_max_block_height)
+            peak_height = cursor.fetchone()[0]
+
+        return balance, unspent_coin_count, total_coin_count, peak_height
+
+    @staticmethod
+    def get_hinted_amount_and_type_count_from_puzzle_hash(path: str, puzzle_hash: bytes):
+        """Not a fetcher"""
+
+        query_unspent_hinted_coin_count = """ SELECT COUNT(*) FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE spent_index <= 0 AND h.hint = ? """
+        query_total_hinted_coin_count = """ SELECT COUNT(*) FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE h.hint = ? """
+
+        conn = sqlite3.connect(path, uri=True, timeout=SQL_TIMEOUT)
+
+        timo = UTILS.Timer()
+        timo.start()
+        timo.clocking('init')
+
+        with conn:
+
+            cursor = conn.execute(query_unspent_hinted_coin_count, (puzzle_hash,))
+            unspent_hinted_coin_count = cursor.fetchall()[0][0]
+            timo.clocking('unspent hinted items count')
+
+            cursor = conn.execute(query_total_hinted_coin_count, (puzzle_hash,))
+            total_hinted_coin_count = cursor.fetchall()[0][0]
+            timo.clocking('total hinted items count')
+
+            timo.end()
+            timo_s = f"{timo}"
+            timo_ss = timo_s.split('\n')
+            logging(debug_logger, "DEBUG", "DB TIMO INFO DATA : ")
+            for n, i in enumerate(timo_ss):
+                logging(debug_logger, "DEBUG", f"DB TIMO INFO DATA i{n}-{i}")
+
+        return unspent_hinted_coin_count, total_hinted_coin_count
+
+    @staticmethod
+    def get_coins_by_hint(path: str, puzzle_hash: bytes):
+        """Not a fetcher"""
+
+        query = """ SELECT cr.coin_name, cr.confirmed_index, cr.coin_parent, cr.puzzle_hash, cr.amount FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE h.hint = ? """
+
+        conn = sqlite3.connect(path, uri=True, timeout=SQL_TIMEOUT)
+
+        with conn:
+            cursor = conn.execute(query, (puzzle_hash,))
+            coins = cursor.fetchall()
+
+        # DB for hinted coins: normal coin + (parent_puzzle_hash, ) + (type, complete memo, )
+        for i in coins:
+            coin_name = bytes32.from_bytes(i[0])
+            spent_height = i[1]
+            parent = bytes32.from_bytes(i[2])
+            puzzle = bytes32.from_bytes(i[3])
+            amount = int_from_bytes(i[4])
+
+            out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent.hex(), height=spent_height)
+
+            puzzle_program = PyProgram.fromhex(out['puzzle_reveal'])
+            solution_program = PyProgram.fromhex(out['solution'])
+
+            # find the puzzle type
+            names, hashes = PUZ.unroll_puzzle_to_names(puzzle_program)
+
+            for n, h in zip(names, hashes):
+                print(f"{n.upper()} with hash; {h}")
+
+            name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
+
+            # Run the puzzle with the solution (returns cost and conditions)
+            max_cost = 11_000_000_000
+            try:
+                cost, result = puzzle_program.run_with_cost(max_cost, solution)
+            except Exception as e:
+                print(f"Failed to run puzzle: {e}")
+                return
+
+            # result is a Program object representing the list of conditions
+            for condition in result.as_iter():
+                cond_list = condition.as_python()
+                opcode = cond_list[0]
+
+                # Check for opcode 51 (CREATE_COIN)
+                if opcode == ConditionOpcode.CREATE_COIN:
+                    # Format: (51 puzzle_hash amount [memos])
+                    if len(cond_list) > 3:
+                        memos = cond_list[3]
+                        print(f"Target: {cond_list[1].hex()} | Amount: {int.from_bytes(cond_list[2], 'big')}")
+                        for memo in memos:
+                            print(f"  -> Found Memo: {memo.hex()}")
+                    else:
+                        print(f"Target: {cond_list[1].hex()} - No memos present.")
+
+
+    @staticmethod
+    def puzzle_hash_outbound_fetcher(puzzle_hash: bytes, sorting_column: str, start_height: uint32 = uint32(0),
+                                     end_height: uint32 = uint32((2**32) - 1),
+                                     include_self_spent_coin: bool = True, order='DESC'):
+        """ outbound fetcher - NO CACHE """
+
+        def fetch(conn, start, count, filters=None):
+
+            values = [puzzle_hash, start_height, end_height]
+            height_filter = "AND parent.confirmed_index>=? AND parent.confirmed_index<? "
+            filtering_self_spent = ''
+            if include_self_spent_coin:
+                filtering_self_spent = " AND child.puzzle_hash != ? "
+                values.append(puzzle_hash)
+            values.append(count)
+            values.append(start)
+            out_bound_query = (
+                f"SELECT child.confirmed_index, child.spent_index, child.coin_name, child.coinbase, child.puzzle_hash, "
+                f"       child.coin_parent, child.amount, child.timestamp "
+                f"FROM coin_record AS child "
+                f"JOIN coin_record AS parent ON child.coin_parent = parent.coin_name "
+                f"WHERE parent.puzzle_hash = ? {height_filter} {filtering_self_spent} "
+                f"ORDER BY child.{sorting_column} {order} LIMIT ? OFFSET ? "
+            )
+
+            with conn:
+                cursor = conn.execute(out_bound_query, values)
+                items = cursor.fetchall()
+
+            coin_record_list = []
+            for i in items:
+                coin_record_list.append(TYPES.CoinRecordRoto(i))
+
+            return coin_record_list
+
+        return fetch
+
+
+    @staticmethod
+    def puzzle_hash_outbound_first_last_count_fetcher(puzzle_hash: bytes, sorting_column: str,
+                                                      start_height: uint32 = uint32(0),
+                                                      end_height: uint32 = uint32((2**32) - 1),
+                                                      include_self_spent_coin: bool = True, order: str = 'DESC'):
+        """ outbound first last count fetcher the does not use cache """
+        # TODO: use the order to invert first last
+        def fetch(conn, filters=None):
+
+            values = [puzzle_hash, start_height, end_height]
+            height_filter = "AND parent.confirmed_index>=? AND parent.confirmed_index<? "
+            filtering_self_spent = ''
+            if include_self_spent_coin:
+                filtering_self_spent = " AND child.puzzle_hash != ? "
+                values.append(puzzle_hash)
+
+            # total items count
+            count_query = (
+                f"SELECT COUNT(*) "
+                f"FROM coin_record AS child "
+                f"JOIN coin_record AS parent ON child.coin_parent = parent.coin_name "
+                f"WHERE parent.puzzle_hash = ? {height_filter} {filtering_self_spent} "
+            )
+
+            with conn:
+                cursor = conn.execute(count_query, values)
+                item_count = cursor.fetchall()[0][0]
+
+            # first_last_query
+            first_last_query = (
+                f"SELECT * FROM ( "
+                f"  SELECT child.confirmed_index, child.spent_index, child.coin_name, child.coinbase, child.puzzle_hash, "
+                f"         child.coin_parent, child.amount, child.timestamp, child.coin_name "
+                f"    FROM coin_record AS child "
+                f"    JOIN coin_record AS parent ON child.coin_parent = parent.coin_name "
+                f"    WHERE parent.puzzle_hash = ? {height_filter} {filtering_self_spent} "
+                f"    ORDER BY child.{sorting_column} ASC LIMIT 1 ) "
+                f"UNION ALL "
+                f"SELECT * FROM ( "
+                f"  SELECT child.confirmed_index, child.spent_index, child.coin_name, child.coinbase, child.puzzle_hash, "
+                f"         child.coin_parent, child.amount, child.timestamp, child.coin_name "
+                f"    FROM coin_record AS child "
+                f"    JOIN coin_record AS parent ON child.coin_parent = parent.coin_name "
+                f"    WHERE parent.puzzle_hash = ? {height_filter} {filtering_self_spent} "
+                f"    ORDER BY child.{sorting_column} DESC LIMIT 1 )  "
+            )
+            valuesX2 = values + values
+
+            with conn:
+                cursor = conn.execute(first_last_query, valuesX2)
+                items = cursor.fetchall()
+
+            coin_record_list = []
+            for i in items:
+                coin_record_list.append(TYPES.CoinRecordRoto(i))
+
+            if item_count > 0:
+                if len(coin_record_list) >= 2:
+                    return item_count, coin_record_list[0], coin_record_list[1]
+                else:
+                    return item_count, None, None
+            else:
+                return 0, None, None
 
         return fetch
 
@@ -1574,7 +2472,7 @@ class DataChunkLoader:
         self.fetcher_first_last_count = fetch_first_last_count_fun
         ### TODO: move the struct conversion in the FetchMaker
         self.data_struct = data_struct
-        self.filters = filters
+        #self.filters = filters
 
         self.update_loader_thread = None
 
@@ -1619,7 +2517,7 @@ class DataChunkLoader:
 
     # probably it is very slow
     def update_total_row_count(self, conn):
-        total_row_count, _, _ = self.fetcher_first_last_count(conn, self.filters)
+        total_row_count, _, _ = self.fetcher_first_last_count(conn)
         with self.lock:
             self.total_row_count = total_row_count
         return total_row_count
@@ -1631,15 +2529,7 @@ class DataChunkLoader:
     #    return self.idx_last_item
 
     def update_last_item(self, conn):
-        a = self.fetcher_first_last_count(conn, self.filters)
-        a = self.fetcher_first_last_count(conn)
-        print('mam')
-        print(a)
-        print(self.fetcher_first_last_count)
-        print(self.filters)
-        print(len(a))
-        print(conn)
-        _, _, last_item = self.fetcher_first_last_count(conn, self.filters)
+        _, _, last_item = self.fetcher_first_last_count(conn)
         if last_item:
             with self.lock:
                 self.last_item = last_item
@@ -1648,7 +2538,7 @@ class DataChunkLoader:
         return self.last_item
 
     def fetch_db(self, conn, start, count):
-        return self.fetcher(conn, start, count, self.filters)
+        return self.fetcher(conn, start, count)
 
     def fetch_chunk(self, conn, data_index):
         chunk_idx = data_index // self.chunk_size
@@ -1761,7 +2651,10 @@ class DataChunkLoader:
             if post_chunk:
                 data.extend(post_chunk.data)
 
-            return data, chunk_idx * self.chunk_size
+            # deep copy of the nested lists
+            deep_data = copy.deepcopy(data)
+
+            return deep_data, chunk_idx * self.chunk_size
 
     def start_updater_thread(self):
         with self.lock:
@@ -1820,12 +2713,22 @@ class DataChunkLoader:
 if __name__ == "__main__":
 
 
-
     # hash
 
     db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
     # read only read
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+    height = 8568188
+    query = "SELECT block FROM full_blocks WHERE height = ?"
+    cursor = conn.cursor()
+    cursor.execute(query, (height,))
+    row = cursor.fetchall()
+
+    print(row)
+    print(len(row))
+    exit()
+
 
     hash = "0x186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
     hash = "186c2aeb854c599627c4c7268a7e3f99bae52bde15768093aa6cf7a0642f65e5"
@@ -1841,6 +2744,87 @@ if __name__ == "__main__":
     print(len(obj))
     print(obj)
 
+    #test NFT
+    coins = [
+        ('1aefa2cd07cf5fd091f68226f9fc76acebb926d256f30e0a623bf7e41d0a5d8b', 6048761),  # orange with no delegated at the end
+        ('40c6b2e7b86991873f63367102ad72224a42108bb6318da8d901e32637c99adb', 5868512),
+        ('64be88280bca492c4729ddfc8bb00c17c6f25413cd1ad6754e1973b5c56ab8c9', 8061050),
+        ('7781b5651c67fc2917c8fa6967fdb9fd81915a8abef5d34cd0b0e48e447a3f6a', 7714734),  # donald tre
+        ('aed02d1208b2c137867f18b86ff7c7236b693f8968b1a10c2c99c5a85c49c777', 6712403),
+
+    ]
+
+
+
+
+    from chia_puzzles_py.programs import CAT_PUZZLE, NFT_STATE_LAYER
+    CAT_MOD = PyProgram.from_bytes(CAT_PUZZLE)
+    NFT_STATE_LAYER_MOD = PyProgram.from_bytes(NFT_STATE_LAYER)
+
+    print("#############################################")
+    print("#############################################")
+    print("#############################################")
+    print("#############################################")
+    print("#############################################")
+
+    for c, s in coins:
+        out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=c, height=s)
+
+        puzzle = PyProgram.fromhex(out['puzzle_reveal'])
+        solution = PyProgram.fromhex(out['solution'])
+
+        # 2. Run the puzzle with the solution (returns cost and conditions)
+        # The 'run' method executes the CLVM code
+        max_cost = 11_000_000_000
+        try:
+            cost, result = puzzle.run_with_cost(max_cost, solution)
+        except Exception as e:
+            print(f"Failed to run puzzle: {e}")
+
+        # 3. Parse the result into a list of conditions
+        # result is a Program object representing the list of conditions
+        for condition in result.as_iter():
+            cond_list = condition.as_python()
+            opcode = cond_list[0]
+
+            # Check for opcode 51 (CREATE_COIN)
+            if opcode == ConditionOpcode.CREATE_COIN:
+                # Format: (51 puzzle_hash amount [memos])
+                if len(cond_list) > 3:
+                    memos = cond_list[3]
+                    print(f"Target: {cond_list[1].hex()} | Amount: {int.from_bytes(cond_list[2], 'big')}")
+                    for memo in memos:
+                        print(f"  -> Found Memo: {memo.hex()}")
+                else:
+                    print(f"Target: {cond_list[1].hex()} - No memos present.")
+
+        base_mod, args = puzzle.uncurry()
+        if base_mod == CAT_MOD:
+            print("IT IS A CAT")
+        elif base_mod == NFT_STATE_LAYER_MOD:
+            print("THIS IS A EWAL NFT")
+        else:
+            print("Standard or Other... BOOORINGGG")
+
+        name = PUZ.compare_to_known_puzzles(base_mod.get_tree_hash().hex())
+        print(name)
+        print(puzzle.get_tree_hash().hex())
+
+        unroll_puzzles = PUZ.unroll_puzzle_to_nodes(puzzle)
+        print("LEVELLL")
+        print("LEVELLL")
+        UTILS.print_json(unroll_puzzles)
+        print("####LEVELLL'#####")
+        print("####LEVELLL'#####")
+        names, hashes = PUZ.unroll_puzzle_to_names(puzzle)
+
+        for n, h in zip(names, hashes):
+            print(f"{n.upper()} with hash; {h}")
+
+        name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
+        print(f"THE NAME: {name}")
+        for i in unroll_puzzles:
+            print(i)
 
     def is_hex_bytes(s: str) -> bool:
         if not isinstance(s, str):
@@ -1894,6 +2878,186 @@ if __name__ == "__main__":
         print(i)
     print(len(a))
 
+
+
+    print("IT IS NOW")
+    ACH = 'xch1lv34uumcyg892zrv35rhrx87hu5nx87em7zcag5nc2vjecupkdzspc9xn6'  # only nft
+    bram = 'xch1322stwc3cw307dqnry884tu3as7jahzgxkavcqqatetqs3lkl72qhgcd7g'  # only cat
+    oran = 'xch1xwapr2g9vd3tl85c8vsdpxqyq686ecqyvt6trmyua3lhcw4tch6qkqfrd0'  # nft and cat
+
+    ACH_bytes: bytes32 = decode_puzzle_hash(bram)
+    ACH_bytes: bytes32 = decode_puzzle_hash(oran)
+    ACH_bytes: bytes32 = decode_puzzle_hash(ACH)
+    print(ACH_bytes.hex())
+
+    blob: bytes = bytes(ACH_bytes)
+
+    #PUZ.unroll_puzzle_to_nodes(program)
+
+    fetcher = FetchMaker.puzzle_hash_fetcher(blob, 'confirmed_index', 0, uint32((2**32) - 1), True)
+
+
+
+
+
+
+
+
+
+
+
+
+    #i = fetcher(conn, 0, uint32((2**32) - 1))
+    i = fetcher(conn, 0, 1000)
+
+
+    print(i)
+    print("END")
+    exit()
+
+
+
+
+    #def print_query_plan(connection, sql, params=()):
+    #    print("--- QUERY PLAN ---")
+    #    # Prepend the EXPLAIN command
+    #    explain_sql = f"EXPLAIN QUERY PLAN {sql}"
+    #    
+    #    cursor = connection.execute(explain_sql, params)
+    #    rows = cursor.fetchall()
+    #    
+    #    for row in rows:
+    #        # row[3] is typically the 'detail' column in SQLite
+    #        print(f"| {row[3]}")
+    #    print("------------------\n")
+
+    ## Usage with your CTE
+    #sql_query = puzzle_hash_base_cte(True, True) + " SELECT * FROM filtered"
+    #params = (b'my_puzzle_hash', 1000000, 2000000, b'my_puzzle_hash')
+
+    #print_query_plan(src_conn, sql_query, params)
+
+
+
+
+
+
+
+
+
+
+
+    a, b, c, _, _ = FetchMaker.get_total_amount_and_type_count_from_puzzle_hash(db_path, blob)
+    print(a)
+    print(b)
+    print(c)
+    print("ALLLAOLK")
+    #a = FetchMaker.get_coins_by_hint(db_path, blob)
+
+#    with open('watchlist.csv', 'w', newline='') as f:
+#        writer = csv.writer(f)
+#        # Optional: Add a header row
+#        writer.writerow(["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp", "parent_puzzle_hash"])
+#        # Write all tuples at once
+#        writer.writerows(data)
+#
+#    print("one")
+#    exit()
+#
+
+    coin_id = None
+    spent_height = None
+    fetcher = FetchMaker.puzzle_hash_fetcher(blob, 'confirmed_index', 0, uint32((2**32) - 1), True)
+    i = fetcher(conn, 0, 100)
+    for a in i:
+        if a.spent_block_index != 0:
+            print(a)
+            spent_height = a.spent_block_index
+            print(a.coin.puzzle_hash)
+            address = encode_puzzle_hash(a.coin.puzzle_hash, 'xch')
+            print(address)
+
+
+            ########## PART copied from coin hint
+            coin_name = UTILS.calc_coin_id(a.coin.parent_coin_info, a.coin.puzzle_hash, a.coin.amount)
+
+            #coin_name = bytes32.from_bytes(i[0])
+            spent_height = a.confirmed_block_index
+            parent = a.coin.parent_coin_info
+            puzzle = a.coin.puzzle_hash
+            #amount = int_from_bytes(i[4])
+            amount = a.coin.amount
+
+            out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent.hex(), height=spent_height)
+
+            puzzle_program = PyProgram.fromhex(out['puzzle_reveal'])
+            solution_program = PyProgram.fromhex(out['solution'])
+
+            # find the puzzle type
+            names, hashes = PUZ.unroll_puzzle_to_names(puzzle_program)
+
+            for n, h in zip(names, hashes):
+                print(f"{n.upper()} with hash; {h}")
+
+            name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
+
+
+            # Run the puzzle with the solution (returns cost and conditions)
+            max_cost = 11_000_000_000
+            try:
+                cost, result = puzzle_program.run_with_cost(max_cost, solution)
+            except Exception as e:
+                print(f"Failed to run puzzle: {e}")
+
+            # result is a Program object representing the list of conditions
+            for condition in result.as_iter():
+                cond_list = condition.as_python()
+                opcode = cond_list[0]
+
+                # Check for opcode 51 (CREATE_COIN)
+                if opcode == ConditionOpcode.CREATE_COIN:
+                    # Format: (51 puzzle_hash amount [memos])
+                    if len(cond_list) > 3:
+                        memos = cond_list[3]
+                        print(f"Target: {cond_list[1].hex()} | Amount: {int.from_bytes(cond_list[2], 'big')}")
+                        for memo in memos:
+                            print(f"  -> Found Memo: {memo.hex()}")
+                    else:
+                        print(f"Target: {cond_list[1].hex()} - No memos present.")
+
+            unrolled = PUZ.unroll_puzzle_to_nodes(puzzle_program)
+            UTILS.print_json(unrolled)
+            print()
+            print(name)
+
+            break
+
+    #print("puzzle")
+    #print(parent)
+    #print(puzzle)
+    #print(amount)
+    #import src.UTILStiller as UTILS
+    #coin_name = UTILS.calc_coin_id(parent, puzzle, amount)
+    #print("coin name")
+    #print(coin_name)
+
+    #import src.RPCtiller as RPC
+    #import src.PUZZLEtiller as PUZ
+    #out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=coin_name.hex(), height=spent_height)
+
+    #print(out)
+    #program = PyProgram.fromhex(out['puzzle_reveal'])
+    #puzzle = PUZ.unroll_coin_puzzle_to_puzzle_hashes(program)
+    #print(puzzle)
+    #puz_name = []
+    #for p in puzzle:
+    #    puz_name.append(PUZ.compare_to_known_puzzles(p))
+
+    #print("name")
+    #print(puz_name)
+    #from clvm_tools.binutils import assemble, disassemble
+    #dd = disassemble(program)
+    #print(dd)
     exit()
 
 

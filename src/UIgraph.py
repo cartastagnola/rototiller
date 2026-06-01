@@ -132,6 +132,12 @@ class Point():
     def deepcopy(self):
         return copy.deepcopy(self)
 
+    def __eq__(self, other):
+        """Equality test: Checks if 'other' is a Point and has identical coordinates."""
+        if not isinstance(other, Point):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
+
     def __add__(self, other):
         if not isinstance(other, Point):
             return NotImplemented

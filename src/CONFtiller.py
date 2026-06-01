@@ -30,13 +30,24 @@ full_node_port = config['full_node']['port']  # "8444"
 full_node_rpc_port = config["full_node"]["rpc_port"]  # 8555
 wallet_rpc_port = config["wallet"]["rpc_port"]  # 9256
 chain_network = config["full_node"]["selected_network"]
+DAEMON_CERT = Path(DEFAULT_ROOT_PATH) / config['daemon_ssl']['private_crt']
+DAEMON_KEY = Path(DEFAULT_ROOT_PATH) / config['daemon_ssl']['private_key']
+DAEMON_HOST = config['ui']['daemon_host']
+DAEMON_PORT = config['ui']['daemon_port']
+FULL_NODE_CERT = Path(DEFAULT_ROOT_PATH) / config['full_node']['ssl']['private_crt']
+FULL_NODE_KEY = Path(DEFAULT_ROOT_PATH) / config['full_node']['ssl']['private_key']
 
 
 # COSTANT
 
+
 ## database
+DB_FOLDER = Path('db')
+# user DB path
+USER_ADDX_WATCHLIST = Path('db/address_watchlist.csv')
 # DB_WDB = 'walletiller.db'
-DB_WDB = 'DBiller_wallets.db'
+DB_WDB = 'DBiller_wallets.db'  # TODO: rename to DB_CACHED_WALLET
+DB_CACHED_BLOCKCHAIN = DB_FOLDER / 'DBiller_cached_blockchain.db'
 DB_SB = 'DBiller_spend_bundles.db'
 
 blockchain_db_path = config["full_node"]["database_path"].replace("CHALLENGE", chain_network)
@@ -44,12 +55,19 @@ DB_BLOCKCHAIN_RO = f"file:{blockchain_db_path}?mode=ro"
 
 SQL_TIMEOUT = 10
 
+
+
 ## CLMV
 # load the known puzzles
+UNKNOWN_PUZZLE = 'unknown_puzzle'
 KNOWN_PUZZLES_PATH = './resources/puzzles/puzzles.json'
+KNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/layered_puzzles.json'
 KNOWN_PUZZLES = None
+KNOWN_LAYERED_PUZZLES = './resources/puzzles/layered_puzzles.json'
 with open(KNOWN_PUZZLES_PATH, 'r') as f:
     KNOWN_PUZZLES = json.load(f)
+with open(KNOWN_LAYERED_PUZZLES_PATH, 'r') as f:
+    KNOWN_LAYERED_PUZZLES = json.load(f)
 
 ## memepool
 TXS_MEMPOOL_DELAY = 1000  # ms
@@ -64,7 +82,8 @@ USD_CUR = 'USD'
 
 ## prefix
 # TODO: check if we are on testnet
-XCH_PREFIX = 'xch'
+ADD_PREFIX = 'xch'
+XCH_PREFIX = 'xch'  # REMOVE
 
 ## mojo
 CAT_MOJO = 1000

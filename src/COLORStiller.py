@@ -6,6 +6,17 @@ def init_colors(screen_state):  # UItiller.ScreenState
     screen_state.colors["chia_green"] = UIgraph.addCustomColor(
         (47, 165, 67),
         screen_state.cursesColors)
+    screen_state.colors["dark_green"] = UIgraph.addCustomColor(
+        #(37, 92, 63),
+        (17, 48, 53),  # backgorund prompt
+        screen_state.cursesColors)
+    screen_state.colors["dark_green_button"] = UIgraph.addCustomColor(
+        #(37, 92, 63),
+        (21, 58, 63),  # backgorund prompt
+        screen_state.cursesColors)
+    screen_state.colors["light_green"] = UIgraph.addCustomColor(
+        (80, 160, 80),
+        screen_state.cursesColors)
     screen_state.colors["mini_block"] = UIgraph.addCustomColor(
         (100, 200, 100),
         screen_state.cursesColors)
@@ -41,6 +52,9 @@ def init_colors(screen_state):  # UItiller.ScreenState
         screen_state.cursesColors)
     screen_state.colors["tab_softer"] = UIgraph.addCustomColor(
         (38, 46, 78),
+        screen_state.cursesColors)
+    screen_state.colors["tab_even_softer"] = UIgraph.addCustomColor(
+        (58, 66, 98),
         screen_state.cursesColors)
     screen_state.colors["tab_selected"] = UIgraph.addCustomColor(
         (244, 43, 3),
@@ -88,6 +102,14 @@ def init_colors(screen_state):  # UItiller.ScreenState
     screen_state.colorPairs["body"] = UIgraph.addCustomColorTuple(
         (screen_state.colors["chia_green"], screen_state.colors["background"]),
         screen_state.cursesColors)
+
+    screen_state.colorPairs["text_field"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["chia_green"], screen_state.colors["dark_green"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["text_field_banner"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["white"], screen_state.colors["tab_even_softer"]),
+        screen_state.cursesColors)
+
     screen_state.colorPairs["body_sel"] = UIgraph.addCustomColorTuple(
         (screen_state.colors["background"], screen_state.colors["chia_green"]),
         screen_state.cursesColors)
@@ -191,5 +213,9 @@ def init_colors(screen_state):  # UItiller.ScreenState
         screen_state.cursesColors)
     screen_state.colorPairs["scope_selected"] = UIgraph.addCustomColorTuple(
         (screen_state.colors["gray"], screen_state.colors["tab_dark"]),
+        screen_state.cursesColors)
+    # title white on soft background
+    screen_state.colorPairs["title"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["white"], screen_state.colors["tab_soft"]),
         screen_state.cursesColors)
 

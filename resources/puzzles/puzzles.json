@@ -300,6 +300,13 @@
         "clvm": "; this puzzle follows the Managed Inner Puzzle Spec MIPS01 as a Member Puzzle\n; this code offers a secure approval of a delegated puzzle passed in as a Truth to be run elsewhere\n\n; this code requires a signature including the coin's puzzle rather than the default which is the coin's id\n; this enables the signature to be used later, however users must be aware of replayability\n\n(mod (SECP_PK Delegated_Puzzle_Hash my_puzhash signature)  ; delegated puzzle is passed in from the above M of N layer\n  (include condition_codes.clib)\n\n  (c\n    (list ASSERT_MY_PUZZLEHASH my_puzhash)\n    (secp256k1_verify SECP_PK (sha256 Delegated_Puzzle_Hash my_puzhash) signature)\n  )\n)\n",
         "bytecode": "0xff02ffff01ff04ffff04ff02ffff04ff17ff808080ffff8413d61f00ff05ffff0bff0bff1780ff2f8080ffff04ffff0148ff018080"
     },
+    "b9ca4641016fc97006e363e94195101bbdd97a8b95aaaca977aaea3dd8f36e89": {
+        "file_name": "bls_with_taproot_member_puzzle_assert.clsp",
+        "name": "--mips_puzzles-member_puzzles-bls_with_taproot_member_puzzle_assert",
+        "puzzle_hash": "b9ca4641016fc97006e363e94195101bbdd97a8b95aaaca977aaea3dd8f36e89",
+        "clvm": "; this puzzle follows the Managed Inner Puzzle Spec MIPS01 as a Member Puzzle\n; this code offers a secure approval of a delegated puzzle passed in as a Truth to be run elsewhere\n\n; Delegated_Puzzle_Hash is added to the solution in the above layer\n; original_public_key, hidden_puzzle and solution are only for use in the taproot case\n; set original_public_key to 0 for non-taproot case\n(mod (SYNTHETIC_PUBLIC_KEY Delegated_Puzzle_Hash original_public_key hidden_puzzle)\n  (include condition_codes.clib)\n\n  (defmacro assert items\n    (if (r items)\n        (list if (f items) (c assert (r items)) (q . (x)))\n        (f items)\n    )\n  )\n\n  ; \"is_hidden_puzzle_correct\" returns true iff the hidden puzzle is correctly encoded\n\n  (defun-inline is_hidden_puzzle_correct (SYNTHETIC_PUBLIC_KEY original_public_key hidden_puzzle_hash)\n    (=\n      SYNTHETIC_PUBLIC_KEY\n      (point_add\n        original_public_key\n        (pubkey_for_exp (sha256 original_public_key hidden_puzzle_hash))\n      )\n    )\n  )\n\n  ; \"possibly_prepend_aggsig\" is the main entry point\n\n  (if original_public_key\n      (assert\n        (is_hidden_puzzle_correct SYNTHETIC_PUBLIC_KEY original_public_key Delegated_Puzzle_Hash)\n        ()\n      )\n      (list (list AGG_SIG_PUZZLE SYNTHETIC_PUBLIC_KEY Delegated_Puzzle_Hash))\n  )\n)\n\n",
+        "bytecode": "0xff02ffff01ff02ffff03ff17ffff01ff02ffff03ffff09ff05ffff1dff17ffff1effff0bff17ff0b80808080ff80ffff01ff088080ff0180ffff01ff04ffff04ff02ffff04ff05ffff04ff0bff80808080ff808080ff0180ffff04ffff012cff018080"
+    },
     "1d66225b71ec6caf33e3771ebaa7fcd50826fd31844dc8258116b37b3ff3c7ae": {
         "file_name": "passkey_member.clsp",
         "name": "--mips_puzzles-member_puzzles-passkey_member",
@@ -314,6 +321,13 @@
         "clvm": "; this puzzle follows the Managed Inner Puzzle Spec MIPS01 as a Member Puzzle\n; this code offers a secure approval of a delegated puzzle passed in as a Truth to be run elsewhere\n\n(mod (SECP_PK Delegated_Puzzle_Hash my_id signature)  ; delegated puzzle is passed in from the above M of N layer\n  (include condition_codes.clib)\n\n  (c\n    (list ASSERT_MY_COIN_ID my_id)\n    (secp256r1_verify SECP_PK (sha256 Delegated_Puzzle_Hash my_id) signature)\n  )\n)\n",
         "bytecode": "0xff02ffff01ff04ffff04ff02ffff04ff17ff808080ffff841c3a8f00ff05ffff0bff0bff1780ff2f8080ffff04ffff0146ff018080"
     },
+    "a7611d7cf6246399ff07469211d6efed96e47a44fc3be6ac9375aee995b0e010": {
+        "file_name": "singleton_member_with_mode.clsp",
+        "name": "--mips_puzzles-member_puzzles-singleton_member_with_mode",
+        "puzzle_hash": "a7611d7cf6246399ff07469211d6efed96e47a44fc3be6ac9375aee995b0e010",
+        "clvm": "(mod (SINGLETON_STRUCT MODE Delegated_Puzzle singleton_innerpuzhash singleton_amount)\n  ; SINGLETON_STRUCT is ((SINGLETON_MOD_HASH, (LAUNCHER_ID, LAUNCHER_PUZZLE_HASH)))\n\n  (include condition_codes.clib)\n  (include curry-and-treehash.clib)\n\n  ; return the full puzzlehash for a singleton with the innerpuzzle curried in\n  ; puzzle-hash-of-curried-function is imported from curry-and-treehash.clib\n  (defun-inline calculate_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)\n    (puzzle-hash-of-curried-function (f SINGLETON_STRUCT)\n      inner_puzzle_hash\n      (sha256tree SINGLETON_STRUCT)\n    )\n  )\n\n  (list (list\n      RECEIVE_MESSAGE\n      MODE ; the mode is curried in for flexibility\n      Delegated_Puzzle\n      (calculate_full_puzzle_hash SINGLETON_STRUCT singleton_innerpuzhash)\n  ))\n)\n",
+        "bytecode": "0xff02ffff01ff04ffff04ff12ffff04ff0bffff04ff17ffff04ffff02ff2effff04ff02ffff04ff09ffff04ff2fffff04ffff02ff3effff04ff02ffff04ff05ff80808080ff808080808080ff8080808080ff8080ffff04ffff01ffffff0204ff0101ffff4302ffff02ffff03ff05ffff01ff02ff16ffff04ff02ffff04ff0dffff04ffff0bff1affff0bff14ff1880ffff0bff1affff0bff1affff0bff14ff1c80ff0980ffff0bff1aff0bffff0bff14ff8080808080ff8080808080ffff010b80ff0180ffff0bff1affff0bff14ff1080ffff0bff1affff0bff1affff0bff14ff1c80ff0580ffff0bff1affff02ff16ffff04ff02ffff04ff07ffff04ffff0bff14ff1480ff8080808080ffff0bff14ff8080808080ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff3effff04ff02ffff04ff09ff80808080ffff02ff3effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080"
+    },
     "34ede3eadc52ed750e405f2b9dea9891506547f651290bb606356d997c64f219": {
         "file_name": "fixed_puzzle_member.clsp",
         "name": "--mips_puzzles-member_puzzles-fixed_puzzle_member",
@@ -327,6 +341,13 @@
         "puzzle_hash": "d77bbc050bff8dfe4eb4544fa2bf0d0fd0463b96801bf6445687bd35985e71db",
         "clvm": "; this puzzle follows the Managed Inner Puzzle Spec MIPS01 as a Member Puzzle\n; this code offers a secure approval of a delegated puzzle passed in as a Truth to be run elsewhere\n\n; this code requires a signature including the coin's puzzle rather than the default which is the coin's id\n; this enables the signature to be used later, however users must be aware of replayability\n\n(mod (SECP_PK Delegated_Puzzle_Hash my_puzhash signature)  ; delegated puzzle is passed in from the above M of N layer\n  (include condition_codes.clib)\n\n  (c\n    (list ASSERT_MY_PUZZLEHASH my_puzhash)\n    (secp256r1_verify SECP_PK (sha256 Delegated_Puzzle_Hash my_puzhash) signature)\n  )\n)\n",
         "bytecode": "0xff02ffff01ff04ffff04ff02ffff04ff17ff808080ffff841c3a8f00ff05ffff0bff0bff1780ff2f8080ffff04ffff0148ff018080"
+    },
+    "0db2c7260209fc59f28c2d188f62d8d85818f61744ade7794d675b4123acef19": {
+        "file_name": "bls_member_puzzle_assert.clsp",
+        "name": "--mips_puzzles-member_puzzles-bls_member_puzzle_assert",
+        "puzzle_hash": "0db2c7260209fc59f28c2d188f62d8d85818f61744ade7794d675b4123acef19",
+        "clvm": "; this puzzle follows the Managed Inner Puzzle Spec MIPS01 as a Member Puzzle\n; this code offers a secure approval of a delegated puzzle passed in as a Truth to be run elsewhere\n\n(mod (PUBLIC_KEY Delegated_Puzzle)  ; delegated puzzle is passed in from the above M of N layer\n  (include condition_codes.clib)\n\n  (list (list AGG_SIG_PUZZLE PUBLIC_KEY Delegated_Puzzle))\n)\n",
+        "bytecode": "0xff02ffff01ff04ffff04ff02ffff04ff05ffff04ff0bff80808080ff8080ffff04ffff012cff018080"
     },
     "046dfa794bb1df14d5dc891b23764a0e31f119546d2c56cdc8df0d31daaa555f": {
         "file_name": "prevent_condition_opcode.clsp",

@@ -1,8 +1,11 @@
 import sys
 import sqlite3  # remove it
 from typing import List, Tuple, Dict, Union, Callable
+from types import SimpleNamespace
 import curses
 from datetime import datetime
+import threading
+import traceback
 
 #from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 #from chia.rpc.rpc_server import RpcServer
@@ -12,21 +15,30 @@ from datetime import datetime
 #from chia.types.blockchain_format.program import Program
 #from chia.types.spend_bundle import SpendBundle
 #from clvm_tools.binutils import disassemble
+from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
+from chia_rs.sized_bytes import bytes32, bytes48
+from chia_rs.sized_ints import uint16, uint32, uint64, uint128
+from chia.types.blockchain_format.program import Program as PyProgram
+from clvm_tools.binutils import assemble, disassemble
 
 import src.UIgraph as UIgraph
+import src.KEYBOARDtiller as KEYBOARD
 import src.ELEMENTStiller as ELEMENTS
 import src.TEXTtiller as TEXT
 import src.WDBtiller as WDB
 import src.UTILStiller as UTILS
-from src.PUZZLEtiller import compare_to_known_puzzle, unroll_coin_puzzle, get_opcode_name
+import src.RPCtiller as RPC
+import src.PUZZLEtiller as PUZ
+import src.TYPEStiller as TYPES
 from src.TYPEStiller import (
     FingerState, CoinPriceData, ScreenState, FullNodeState, Scope, KeyboardState,
     FullNodeState, ScreenState, ScopeActions)
 
 from src.CONFtiller import (
-    debug_logger, logging, DEBUGGING, DB_BLOCKCHAIN_RO, DB_WDB, DB_SB, SQL_TIMEOUT, XCH_FAKETAIL,
+    debug_logger, logging, DEBUGGING, DB_BLOCKCHAIN_RO, DB_WDB, DB_SB, DB_BLOCKCHAIN_RO, SQL_TIMEOUT, XCH_FAKETAIL,
     BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO, full_node_port, full_node_rpc_port,
-    FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST)
+    FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST, SMALL_FONT, FUTURE_FONT)
+import src.CONFtiller as CONF
 
 import src.DEBUGtiller as DEBUGtiller
 DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
@@ -184,23 +196,30 @@ def screen_main_menu(stdscr, keyboardState: KeyboardState, screenState: ScreenSt
     menu_items = []
     if len(activeScope.sub_scopes) == 0:
         menu_items = [
-            ('full node', screen_full_node, ScopeActions.activate_scope),
+            ('full node', screen_full_node, ScopeActions.activate_scope, None)
         ]
+        print("indiddiie")
         if DEBUGGING:
             menu_items += [
-                ('wallet', screen_fingers, ScopeActions.activate_scope),
-                ('harvester analytics', screen_harvester, ScopeActions.activate_scope),
-                ('dex', screen_dex, ScopeActions.activate_scope),
-                ("tabs", screen_tabs, ScopeActions.activate_scope),
+                ('wallet', screen_fingers, ScopeActions.activate_scope, None),
+                ('harvester analytics', screen_harvester, ScopeActions.activate_scope, None),
+                ('dex', screen_dex, ScopeActions.activate_scope, None),
+                ("tabs", screen_tabs, ScopeActions.activate_scope, None),
                 #('debugging screen', DEBUGtiller.screen_debugging, ScopeActions.activate_scope),
             ]
 
-        for name, handler, exec_fun in menu_items:
-            newScope = Scope(name, handler, screenState)
-            newScope.exec = exec_fun
-            newScope.parent_scope = activeScope
-            activeScope.sub_scopes[name] = newScope
+        ## TODO: move it back in factory_menu?
+        for name, handler, exec_fun, exec_key in menu_items:
+            new_scope: Scope = Scope(name, handler, screenState)
+            new_scope.exec = exec_fun
+            new_scope.parent_scope = activeScope
+            activeScope.sub_scopes[name] = new_scope
+            if exec_key:
+                new_scope.keyboard_exec = exec_key
 
+    print(f"menu items {menu_items}")
+    print(f"scopes: {activeScope.sub_scopes}")
+    print(f"scopes name main: {activeScope.name}")
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
 
@@ -285,6 +304,8 @@ def screen_intro(stdscr, keyboardState, screenState: ScreenState, fullNodeState:
     stdscr.bkgd(' ', curses.color_pair(screenState.colorPairs["intro"]))
 
     screenState.scope_exec_args = [screenState]
+    active_scope = screenState.activeScope
+    active_scope.update(False)
 
     if height > sizeY * 2 and width > sizeX * 2:
 
@@ -304,11 +325,6 @@ def screen_intro(stdscr, keyboardState, screenState: ScreenState, fullNodeState:
 
         stdscr.addstr(y, x, text, curses.A_BOLD)
 
-    # keyboard controller
-    if keyboardState.enter:
-        screenState.screen = "main"
-        screenState.init = False
-
 
 def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, point: UIgraph.Point,
                   color_pairs, color_pairs_sel, parent_scope: Scope,
@@ -323,7 +339,7 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
         scope = Scope()
         scope.parent_scope = parent_scope
         parent_scope.sub_scopes[name] = scope
-        screenState.screen_data["scopes"][name]  = scope
+        screenState.screen_data["scopes"][name] = scope
 
     scope = screenState.screen_data["scopes"][name]
     if scope.active:
@@ -337,7 +353,7 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
 
         if scope.active:
             stdscr.addstr(point.y + len(menu_list) * s_height + 1, point.x, "H" * 10)
-        elif scope.selected:
+        elif scope.selected():
             stdscr.addstr(point.y + len(menu_list) * s_height + 1, point.x, "-" * 10)
 
         for i, item in enumerate(menu_list):
@@ -353,7 +369,7 @@ def menu_select_s(stdscr, screenState: ScreenState, name: str, menu_list: list, 
 
         if scope.active:
             stdscr.addstr(point.y + len(menu_list) + 1, point.x, "H" * 10)
-        elif scope.selected:
+        elif scope.selected():
             stdscr.addstr(point.y + len(menu_list) + 1, point.x, "-" * 10)
 
         for i, item in enumerate(menu_list):
@@ -1133,7 +1149,7 @@ def screen_wallet(stdscr, keyboardState, screenState: ScreenState, fullNodeState
                                     pos,
                                     tab_size,
                                     keyboardState,
-                                    open_coin_wallet,
+                                    ScopeActions.open_coin_wallet,
                                     True,
                                     False,
                                     data_table_legend)
@@ -1236,6 +1252,7 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
         scope.exec = ScopeActions.activate_scope
+        scope.base_point = position
         parent_scope.sub_scopes[name] = scope
 
 #        # create a child to create another window
@@ -1374,7 +1391,7 @@ def create_tab(scr, screenState: ScreenState, parent_scope: Scope, name: str,
     table.bkgd(' ', curses.color_pair(P_win_background))
 
     # selection
-    if scope.selected:
+    if scope.selected():
         scr.addstr(pos_y + y_tabSize - 1, pos_x, u'\u2580' * x_tabSize,
                    curses.color_pair(P_win_selected))
         scr.addstr(pos_y + y_tabSize - 1, pos_x + x_tabSize, u'\u2598',
@@ -1591,7 +1608,8 @@ def screen_harvester():
 
 
 def factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
-    """menu_items: is a list of tuple (name: str, called_function: callable, scope_action callable(scope))"""
+    """TODO: move scope creation here? -> menu_items: is a list of tuple (name: str, called_function: callable,
+    scope_action callable(scope), keyboard_exec callable)"""
     # use dexy logic for infine loop
     width = screenState.screen_size.x
     height = screenState.screen_size.y
@@ -1603,19 +1621,13 @@ def factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState: 
     test_win = createFullSubWin(stdscr, screenState, height, width)
     test_win.bkgd(' ', curses.color_pair(screenState.colorPairs["header"]))
 
+
     activeScope: Scope = screenState.activeScope
     screenState.scope_exec_args = [screenState]
 
-    if len(activeScope.sub_scopes) == 0:
-        for name, handler, exec_fun in menu_items:
-            newScope = Scope(name, handler, screenState)
-            newScope.exec = exec_fun
-            newScope.parent_scope = activeScope
-            activeScope.sub_scopes[name] = newScope
-
     # TODO it always active?
     if activeScope is screenState.activeScope:
-        activeScope.update_legacy()
+        activeScope.update(visibility_filter=False)
     screenState.selection = activeScope.cursor
 
     # new menu
@@ -1655,6 +1667,7 @@ def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: Ful
         print(len(bundles))
         with thread_db_lock:
             main_scope.data['watch_later_cache'] = bundles
+        conn.close()
 
     if 'thread_db_lock' not in main_scope.data:
         main_scope.data['thread_db_lock'] = threading.Lock()
@@ -1818,21 +1831,1027 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
 
     if DEBUGGING:
         menu_items = [
-            ('blocks', screen_blocks, ScopeActions.activate_scope),
-            ('memepool', screen_memepool, ScopeActions.activate_scope),
-            ('spend bundles', screen_spend_bundles, ScopeActions.activate_scope)
+            ('blocks', screen_blocks, ScopeActions.activate_scope, None),
+            ('memepool', screen_memepool, ScopeActions.activate_scope, None),
+            ('spend bundles', screen_spend_bundles, ScopeActions.activate_scope, None)
         ]
     else:
         menu_items = [
-            ('blocks', screen_blocks, ScopeActions.activate_scope),
-            ('search puzzles and addresses', screen_full_node_search, ScopeActions.activate_scope),
+            ('blocks', screen_blocks, ScopeActions.activate_scope, KEYBOARD.block_band_execution),
+            ('search puzzles and addresses', screen_full_node_search, ScopeActions.activate_scope, None),
+            ('address_watchlist', screen_address_watchlist, ScopeActions.activate_scope, None),
         ]
+
+    active_scope: Scope = screenState.activeScope
+    if len(active_scope.sub_scopes) == 0:
+        for name, handler, exec_fun, exec_key in menu_items:
+            new_scope: Scope = Scope(name, handler, screenState)
+            new_scope.exec = exec_fun
+            new_scope.parent_scope = active_scope
+            active_scope.sub_scopes[name] = new_scope
+            if exec_key:
+                new_scope.keyboard_exec = exec_key
 
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
 
+class AddressLoaders():
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.puzzle_hash: bytes32 = None
+        self.start_height: uint32 = uint32(0)
+        self.end_height: uint32 = uint32(2**32 - 1)
+        self.remove_spent_coins: bool = False
+        self.remove_self_transactions: bool = False
+        self.show_phantom_coin_outputs: bool = False
+        self.address_loader: WDB.DataChunkLoader = None
+        self.address_loader_outbound: WDB.DataChunkLoader = None
+        self.puzzle_and_sol_rpc = None
+        self.puzzle_disassembled = None
+        self.unrolled_puzzles = []
+        self.balance = -1
+        self.unspent_coin_count = -1
+        self.total_coin_count = -1
+        self.unspent_hinted_coin_count = -1
+        self.total_hinted_coin_count = -1
+        self.layered_puzzle_name = 'No data'
+
+
+### WHERE should i go?
+def load_the_loaders(address_loaders: AddressLoaders):
+    # TODO: make a class from the address_loaders
+    logging(debug_logger, "DEBUG", "LOAD the loader init")
+    table_name = 'coin_record'
+    chunk_size = 1000  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+    offset = 0
+    sorting_column = 'confirmed_index'
+    filters = None  # {'in_main_chain': 1}
+
+    with address_loaders.lock:
+        search_value = address_loaders.puzzle_hash
+        start_height = address_loaders.start_height
+        start_height = address_loaders.start_height
+        end_height = address_loaders.end_height
+        remove_spent_coins = address_loaders.remove_spent_coins
+        remove_self_transactions = address_loaders.remove_self_transactions
+
+    # basic address stats
+    balance, unspent_coin_count, total_coin_count, unspent_hinted_coin_count, total_hinted_coin_count = WDB.FetchMaker.get_total_amount_and_type_count_from_puzzle_hash(DB_BLOCKCHAIN_RO, search_value)
+    with address_loaders.lock:
+        address_loaders.balance = balance
+        address_loaders.unspent_coin_count = unspent_coin_count
+        address_loaders.total_coin_count = total_coin_count
+        address_loaders.unspent_hinted_coin_count = unspent_hinted_coin_count
+        address_loaders.total_hinted_coin_count = total_hinted_coin_count
+
+    logging(debug_logger, "DEBUG", "LOAD the loader param")
+
+    # Inbound
+    fetcher = WDB.FetchMaker.puzzle_hash_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins, remove_self_transactions)
+    fetcher_first_last = WDB.FetchMaker.puzzle_hash_first_last_count_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins, remove_self_transactions)
+
+    add_loader = WDB.DataChunkLoader(
+        DB_BLOCKCHAIN_RO, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+        filters=filters, sorting_column=sorting_column, data_struct=TYPES.CoinRecordRoto.to_list_inbound)
+    with address_loaders.lock:
+        address_loaders.address_loader = add_loader
+
+    logging(debug_logger, "DEBUG", "LOAD the loader INbound")
+
+    # Outbound
+    fetcher = WDB.FetchMaker.puzzle_hash_outbound_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins)
+    fetcher_first_last = WDB.FetchMaker.puzzle_hash_outbound_first_last_count_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins)
+
+    try:
+        add_loader_out: WDB.DataChunkLoader = WDB.DataChunkLoader(
+            DB_BLOCKCHAIN_RO, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+            filters=filters, sorting_column=sorting_column, data_struct=TYPES.CoinRecordRoto.to_list_outbound)
+        with address_loaders.lock:
+            address_loaders.address_loader_outbound = add_loader_out
+    except Exception as e:
+        logging(debug_logger, "DEBUG", f"LOAD OUT exc {e}")
+        logging(debug_logger, "DEBUG", f"LOAD edarbello")
+        text = traceback.format_exc()
+        text = text.replace("\n", "")
+        logging(debug_logger, "DEBUG", f"LOAD irogram exc {text}")
+        import time
+        time.sleep(2)
+
+    logging(debug_logger, "DEBUG", "LOAD the loader OUT obu")
+
+    # Uncurry puzzle
+    if add_loader_out.total_row_count > 0:
+        try:
+            parent = None
+            puzzle = None
+            amount = None
+            coin_id = None
+            spent_height = None
+            logging(debug_logger, "DEBUG", f"LOAD pre coin: {search_value}")
+            fetcher = WDB.FetchMaker.puzzle_hash_fetcher(search_value, 'spent_index', 0, uint32((2**32) - 1), True, order='DESC')
+
+            ### TODO: when importing from the db, i convert to xch and there is the possibility to lose some precision, remove this
+            conn = sqlite3.connect(DB_BLOCKCHAIN_RO, uri=True)
+            with conn:
+                spent_coin: TYPES.CoinRecordRoto = fetcher(conn, 0, 2)[1]
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher a check THIS: {spent_coin}")
+                #spent_height = int(spent_coin[1])
+                spent_height = spent_coin.spent_block_index
+                #parent = spent_coin[4]
+                parent = spent_coin.coin.parent_coin_info.hex()
+                #puzzle = decode_puzzle_hash(spent_coin[3]).hex()
+                puzzle = spent_coin.coin.puzzle_hash.hex()
+                #amount = int(spent_coin[5] * XCH_MOJO)
+                amount = spent_coin.coin.amount
+            conn.close()
+
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher parenty: {parent}")
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher puzz: {puzzle}")
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher amo: {amount}")
+            coin_name = UTILS.calc_coin_id(parent, puzzle, amount)  # we already have the coin_name
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher coin NAME: {coin_name}")
+
+            logging(debug_logger, "DEBUG", f"LOAD i here the COIN NAMEEEEE: {coin_name}")
+            logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name}")
+            out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=spent_coin.coin_name.hex(), height=spent_height)
+            program = PyProgram.fromhex(out['puzzle_reveal'])
+            puzzle_disassembled = disassemble(program)
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
+            unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
+            puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
+            layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
+
+            with address_loaders.lock:
+                address_loaders.puzzle_and_sol_rpc = out
+                address_loaders.puzzle_disassembled = puzzle_disassembled
+                address_loaders.unrolled_puzzles = unroll_puzzles
+                address_loaders.layered_puzzle_name = layered_puzzle_name
+
+            logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
+
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
+            logging(debug_logger, "DEBUG", f"LOAD program exc erbello")
+            text = traceback.format_exc()
+            s_text = text.split('\n')
+            text = text.replace("\n", "")
+            logging(debug_logger, "DEBUG", f"LOAD irogram exc {text}")
+            for n, i in enumerate(s_text):
+                logging(debug_logger, "DEBUG", f"LOAD i{n}-{i}")
+
+
+    else:
+        with address_loaders.lock:
+            address_loaders.unrolled_puzzles = None  # no spent coins
+
+
+
+    logging(debug_logger, "DEBUG", "LOAD the loader end")
+
+
+###################### CACHE MODE #######################################
+###################### CACHE MODE #######################################
+###################### CACHE MODE #######################################
+def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: AddressLoaders, inbound: bool = True,
+                                outbound: bool = True, uncurry_puzzle: bool = True, update_cache: bool = False):
+    # TODO: make a class from the address_loaders
+    logging(debug_logger, "DEBUG", "LOAD the loader init")
+    table_name = 'coin_record'
+    chunk_size = 200  # 120  # height * 2  # to be sure to have at least 2 full screen of data
+    offset = 0
+    sorting_column = 'confirmed_index'
+    filters = None  # {'in_main_chain': 1}
+
+    timo = UTILS.Timer()
+    timo.start()
+    timo.clocking('start')
+
+    with address_loaders.lock:
+        search_value = address_loaders.puzzle_hash
+        start_height = address_loaders.start_height
+        start_height = address_loaders.start_height
+        end_height = address_loaders.end_height
+        remove_spent_coins = address_loaders.remove_spent_coins
+        remove_self_transactions = address_loaders.remove_self_transactions
+        show_phantom_coin_outputs = address_loaders.show_phantom_coin_outputs
+        logging(debug_logger, "DEBUG", f"LOAD remove SPENT: {remove_spent_coins}")
+        logging(debug_logger, "DEBUG", f"LOAD remove SELF: {remove_self_transactions}")
+
+
+    if update_cache:
+        # basic address stats
+        def main_info_puzzle():
+            balance, unspent_coin_count, total_coin_count, peak_height = WDB.FetchMaker.get_total_amount_and_count_from_puzzle_hash(DB_BLOCKCHAIN_RO, search_value)
+            with address_loaders.lock:
+                address_loaders.balance = balance
+                address_loaders.unspent_coin_count = unspent_coin_count
+                address_loaders.total_coin_count = total_coin_count
+            unspent_hinted_coin_count, total_hinted_coin_count = WDB.FetchMaker.get_hinted_amount_and_type_count_from_puzzle_hash(DB_BLOCKCHAIN_RO, search_value)
+            with address_loaders.lock:
+                address_loaders.unspent_hinted_coin_count = unspent_hinted_coin_count
+                address_loaders.total_hinted_coin_count = total_hinted_coin_count
+
+            cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            try:
+                WDB.insert_cache_address_info(cache_conn, search_value, peak_height, balance, total_coin_count, unspent_coin_count, total_hinted_coin_count, unspent_hinted_coin_count)
+                logging(debug_logger, "DEBUG", f"LOAD INFOO INDDDDDDERST")
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"LOAD INFOO exc {e}")
+                logging(debug_logger, "DEBUG", f"LOAD INFOOO edarbello")
+                text = traceback.format_exc()
+                text = text.replace("\n", "")
+                logging(debug_logger, "DEBUG", f"LOAD irogram exc {text}")
+                import time
+                time.sleep(2)
+            finally:
+                cache_conn.close()
+
+        timo.clocking('init lock')
+        main_info_thread = threading.Thread(target=main_info_puzzle, daemon=True)
+        main_info_thread.start()
+        main_info_thread.setName('puzzle info')
+        with screenState.lock:
+            screenState.running_threads.append(main_info_thread)
+
+        logging(debug_logger, "DEBUG", "LOAD the loader param")
+        # start a thread the build the cache or update if alredy there
+        timo.clocking('init amount type count')
+
+
+        def update_cache_db_for_address(puzzle_hash):
+            aa_timo = UTILS.Timer()
+            aa_timo.start()
+            aa_timo.clocking('start')
+            cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+
+            logging(debug_logger, "DEBUG", f"DB LOAD starting cache fetcher")
+            WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+            logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
+
+            aa_timo.clocking('fetch')
+
+            cache_conn.close()
+            db_conn.close()
+            logging(debug_logger, "DEBUG", f"DB LOAD ENDEDE without ERRRORSSS")
+            aa_timo.clocking('end cache')
+
+            aa_timo.clocking('end')
+            aa_timo.end()
+            aa_timo_s = f"{aa_timo}"
+            aa_timo_ss = aa_timo_s.split('\n')
+            logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
+            for n, i in enumerate(aa_timo_ss):
+                logging(debug_logger, "DEBUG", f"DB TIMO LOAD i{n}-{i}")
+            # logica cache DB
+            # 1 create classe DB with:
+            ## - fun to create the cache DB
+            ## - fun to populate the cache DB from: puzz_hash (others? it could scan for tails or mints and keep track)
+            ## - update puzz_hash -> check for unspent coins, then recheck the DB from last height
+            ## - when running it? -> start up for watchlist, every time you watch an address, and update it every 10 sec while you are watching something?
+            ## - connect to the daemon to now when to update, also for the block part
+
+        timo.clocking('init')
+        # start thread to build the cache
+        update_cache_thread = threading.Thread(target=update_cache_db_for_address, args=(search_value,), daemon=True)
+        update_cache_thread.start()
+        update_cache_thread.setName("updating cache")
+        with screenState.lock:
+            screenState.running_threads.append(update_cache_thread)
+        #update_cache_db_for_address(search_value)
+
+    timo.clocking('cache update')
+    logging(debug_logger, "DEBUG", "LOAD updated the cache")
+
+    # coin_info
+    cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+    try:
+        add_info = WDB.retrive_cache_address_info(cache_conn, search_value)
+        if len(add_info) > 0:
+            with address_loaders.lock:
+                address_loaders.balance = add_info[1]
+                address_loaders.unspent_coin_count = add_info[3]
+                address_loaders.total_coin_count = add_info[2]
+                address_loaders.unspent_hinted_coin_count = add_info[5]
+                address_loaders.total_hinted_coin_count = add_info[4]
+    except Exception as e:
+        logging(debug_logger, "DEBUG", f"LOAD INFO ERROR{e}")
+        UTILS.logging_traceback("LOAD INFO")
+    finally;
+        cache_conn.close()
+
+    # Inbound from cache
+    def inbound_call():
+        fetcher = WDB.FetchMaker.CACHE_puzzle_hash_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins, remove_self_transactions)
+        fetcher_first_last = WDB.FetchMaker.CACHE_puzzle_hash_fetcher(search_value, sorting_column, start_height, end_height,
+                                                                      remove_spent_coins, remove_self_transactions, first_last_count=True)
+
+        logging(debug_logger, "DEBUG", "LOAD fetcher DONE")
+
+        timo.clocking('fetch_maker')
+        try:
+            add_loader = WDB.DataChunkLoader(
+                CONF.DB_CACHED_BLOCKCHAIN, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+                filters=filters, sorting_column=sorting_column, data_struct=TYPES.CoinRecordRoto.to_list_inbound)
+            with address_loaders.lock:
+                address_loaders.address_loader = add_loader
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"LOAD OUT exc {e}")
+            logging(debug_logger, "DEBUG", f"LOAD edarbello")
+            text = traceback.format_exc()
+            text = text.replace("\n", "")
+            logging(debug_logger, "DEBUG", f"LOAD irogram exc {text}")
+            import time
+            time.sleep(2)
+
+        timo.clocking('inbound')
+        logging(debug_logger, "DEBUG", "LOAD the loader INbound")
+        logging(debug_logger, "DEBUG", "LOAD eeeeeeeeeeeeeeeeeenddhe loader INbound")
+
+    # Outbound
+    def outbound_call():
+        fetcher = WDB.FetchMaker.CACHE_puzzle_hash_outbound_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins, remove_self_transactions, show_phantom_coin_outputs)
+        fetcher_first_last = WDB.FetchMaker.CACHE_puzzle_hash_outbound_fetcher(search_value, sorting_column, start_height, end_height, remove_spent_coins,
+                                                                               remove_self_transactions, show_phantom_coin_outputs, first_last_count=True)
+
+        timo.clocking('fetch_maker out')
+        try:
+            add_loader_out: WDB.DataChunkLoader = WDB.DataChunkLoader(
+                CONF.DB_CACHED_BLOCKCHAIN, table_name, chunk_size, fetcher, fetcher_first_last, offset,
+                filters=filters, sorting_column=sorting_column, data_struct=TYPES.CoinRecordRoto.to_list_outbound)
+            with address_loaders.lock:
+                address_loaders.address_loader_outbound = add_loader_out
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"LOAD OUT exc {e}")
+            logging(debug_logger, "DEBUG", f"LOAD edarbello")
+            text = traceback.format_exc()
+            text = text.replace("\n", "")
+            logging(debug_logger, "DEBUG", f"LOAD irogram exc {text}")
+            import time
+            time.sleep(2)
+
+        timo.clocking('outbound')
+
+        logging(debug_logger, "DEBUG", "LOAD the loader OUT OUT OUT")
+
+    if inbound:
+        inbound_call()
+        outbound_call()
+    else:
+        outbound_call()
+        inbound_call()
+
+    logging(debug_logger, "DEBUG", "LOAD the loader PUTPUTPUTPUTPUTPUTPTU")
+
+    # Uncurry puzzle
+    logging(debug_logger, "DEBUG", f"LOAD the bool {uncurry_puzzle}")
+    with address_loaders.lock:
+        add_loader_out = address_loaders.address_loader_outbound
+    logging(debug_logger, "DEBUG", f"LOAD row count {add_loader_out.total_row_count}")
+    if uncurry_puzzle:
+        if add_loader_out.total_row_count > 0:
+            try:
+                parent = None
+                puzzle = None
+                amount = None
+                coin_id = None
+                spent_height = None
+                logging(debug_logger, "DEBUG", f"LOAD pre coin: {search_value}")
+
+                fetcher = WDB.FetchMaker.CACHE_puzzle_hash_fetcher(search_value, 'spent_index', 0, uint32((2**32) - 1), False, False, order='DESC')
+                conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, uri=True)
+                with conn:
+                    coin_records: List[TYPES.CoinRecordRoto] = fetcher(conn, 0, 100)
+                conn.close()
+
+                spent_coin = None
+                for cr in coin_records:
+                    if cr.spent_block_index != 0:
+                        spent_coin = cr
+
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher a check THIS: {spent_coin}")
+                #spent_height = int(spent_coin[1])
+                spent_height = spent_coin.spent_block_index
+                #parent = spent_coin[4]
+                parent = spent_coin.coin.parent_coin_info.hex()
+                #puzzle = decode_puzzle_hash(spent_coin[3]).hex()
+                puzzle = spent_coin.coin.puzzle_hash.hex()
+                #amount = int(spent_coin[5] * XCH_MOJO)
+                amount = spent_coin.coin.amount
+
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher parenty: {parent}")
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher puzz: {puzzle}")
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher amo: {amount}")
+                coin_name = UTILS.calc_coin_id(parent, puzzle, amount)  # we already have the coin_name
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher coin NAME: {coin_name}")
+
+                logging(debug_logger, "DEBUG", f"LOAD i here the COIN NAMEEEEE: {coin_name}")
+                logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name}")
+                logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name.hex()}")
+                logging(debug_logger, "DEBUG", f"LOAD i SPENRT height: {spent_height}")
+                out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=spent_coin.coin_name.hex(), height=spent_height)
+                program = PyProgram.fromhex(out['puzzle_reveal'])
+                puzzle_disassembled = disassemble(program)
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
+                unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
+                puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
+                layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+                logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
+
+                with address_loaders.lock:
+                    address_loaders.puzzle_and_sol_rpc = out
+                    address_loaders.puzzle_disassembled = puzzle_disassembled
+                    address_loaders.unrolled_puzzles = unroll_puzzles
+                    address_loaders.layered_puzzle_name = layered_puzzle_name
+
+                logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
+
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
+                logging(debug_logger, "DEBUG", f"LOAD program exc erbello")
+                text = traceback.format_exc()
+                s_text = text.split('\n')
+                text = text.replace("\n", "")
+                logging(debug_logger, "DEBUG", f"LOAD irogram exc {text}")
+                for n, i in enumerate(s_text):
+                    logging(debug_logger, "DEBUG", f"LOAD i{n}-{i}")
+
+
+        else:
+            with address_loaders.lock:
+                address_loaders.unrolled_puzzles = None  # no spent coins
+            logging(debug_logger, "DEBUG", f"LOAD NOOOOO SPENT COIN")
+        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
+        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
+        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
+
+    logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
+    timo.clocking('end')
+    timo.end()
+    timo_s = f"{timo}"
+    timo_ss = timo_s.split('\n')
+    logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
+    for n, i in enumerate(timo_ss):
+        logging(debug_logger, "DEBUG", f"DB TIMO LOAD i{n}-{i}")
+
+
+    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
+    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
+    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
+
+
+load_the_loaders = load_the_loaders_cache_mode
+
+
+def scopeAction_address_loader(scope: Scope, screenState: ScreenState, search_value: str):
+
+    if search_value is None:
+        return scope
+
+    new_name = f"{scope.parent_scope.name}_{search_value}"
+    new_scope = Scope(new_name, screen_address_viewer, screenState)
+    new_scope.parent_scope = scope  # parent_scope
+    search_value = UTILS.address_to_bytes32(search_value)
+
+    logging(debug_logger, "DEBUG", f'LOAD type {type(search_value)}')
+    address_loaders: AddressLoaders = AddressLoaders()
+    address_loaders.puzzle_hash = search_value
+    new_scope.exec = None
+
+    start_height = uint32(0)
+    end_height = uint32((2**32) - 1)
+    remove_spent_coins = False
+    remove_self_transactions = False
+
+    # load_the_loaders(address_loaders)  # DEBUG
+    loaders_thread = threading.Thread(target=load_the_loaders, args=(screenState, address_loaders,), daemon=True)
+    loaders_thread.start()
+    loaders_thread.setName("loading address")
+    with screenState.lock:
+        screenState.running_threads.append(loaders_thread)
+
+    new_scope.data['address_loaders'] = address_loaders
+    screenState.activeScope = new_scope
+
+    return new_scope
+
+
+def screen_address_watchlist(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+
+    path = CONF.USER_ADDX_WATCHLIST
+
+    if path.exists():
+        addx = WDB.load_csv(path)
+    else:
+        # write and empty file
+        empty_line = [('#address', ' name', " 'some notes'")]
+        WDB.save_csv(path, empty_line)
+        addx = []
+
+    new_addx = [[] for _ in range(3)]
+    swap_col = [1,0,2]
+    for u, add in enumerate(addx):
+        for i in range(3):
+            new_addx[i].append('')
+        for n, a in enumerate(add):
+            new_addx[swap_col[n]][u] = a
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error_white"]
+    P_title = screenState.colorPairs["title"]
+    P_title_selected = screenState.colorPairs["xch"]
+    P_tab_soft = screenState.colorPairs["tab_soft"]
+
+    # init color table
+    data_table_colors = [[None] * len(new_addx[0]) for _ in range(3)]
+
+    # parse for watchlist error
+    for n, add in enumerate(new_addx[1]):
+        add_value = UTILS.address_to_bytes32(add)
+        try:
+            encode_puzzle_hash(add_value, CONF.ADD_PREFIX)
+        except:
+            new_addx[2][n] = 'ERROR: DECODING ADDRESS - ' + new_addx[2][n]
+            logging(debug_logger, "DEBUG", f"exception decoding watchlist address: {add}")
+            new_addx[1][n] = None
+            for i in range(3):
+                data_table_colors[i][n] = P_error
+
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    #main_scope.update_2d()
+    main_scope.update()
+
+    # sub win
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    main_win_size = win.getmaxyx()
+    main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+    pos = UIgraph.Point(1,1)
+    pos_orig = pos
+    max_y = main_win_size.y - pos.y - 3
+
+    text = 'watchlist'
+    ELEMENTS.create_text_double_space(win, screenState, pos, text, P_title_selected, C_background,
+                                      3, True, inv_color=False)
+
+
+    pos += UIgraph.Point(0,3)
+
+    tab_legend = ['name', 'address', 'notes']
+
+    max_y = main_win_size.y - pos.y - 3
+    min_y = max(15, len(new_addx[0]) + 1)
+    tab_size = UIgraph.Point(80, min_y)
+    tab_size = UIgraph.Point(80, max_y)
+
+
+
+    ### custom init scope and add to parent
+    tab_name = "address_watchlist"
+    scope_name = f"{main_scope.id}_{tab_name}"
+    if scope_name not in screenState.scopes:
+        tab_scope = Scope(scope_name, main_scope.screen, screenState)
+        tab_scope.parent_scope = main_scope
+        tab_scope.main_scope = main_scope
+        tab_scope.exec = ScopeActions.activate_scope
+        tab_scope.exec_esc = TYPES.ScopeActions.exit_scope_N(2)
+        main_scope.sub_scopes[tab_name] = tab_scope
+        tab_scope.visible = True
+
+        tab_scope.exec_own = scopeAction_address_loader
+    else:
+        tab_scope = screenState.scopes[scope_name]
+
+    # make the tab active
+    screenState.activeScope = tab_scope
+    tab_scope = ELEMENTS.create_tab(win,
+                                    screenState,
+                                    main_scope,
+                                    tab_name,
+                                    new_addx,
+                                    new_addx[1],
+                                    data_table_colors,
+                                    True,
+                                    pos,
+                                    tab_size,
+                                    keyboardState,
+                                    scopeAction_address_loader,  # TODO? already defined in tab_scope
+                                    False,
+                                    False,
+                                    tab_legend,
+                                    prepped_scope=tab_scope)
+
+
+
 def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
-    pass
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    #main_scope.update_2d()
+    main_scope.update()
+
+
+    # tab: inbound, outbound, puzzle
+    tab_selected = main_scope.cursor_x % 3
+
+    # sub win
+    add_viewer = createFullSubWin(stdscr, screenState, height, width)
+    add_viewer.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    # add loaders
+    address_loaders: AddressLoaders = main_scope.data['address_loaders']
+
+
+    # subscribe once 
+    def update_address_loaders(data):
+        # update only the current address_loader without triggering the cache update
+        logging(debug_logger, "DEBUG", f"reoloading the chunk for {address_loaders.puzzle_hash}")
+        loaders_thread = threading.Thread(target=load_the_loaders,
+                                          args=(screenState, address_loaders,),
+                                          kwargs={'uncurry_puzzle': False},
+                                          daemon=True)
+        loaders_thread.start()
+        loaders_thread.setName("re-loading loaders")
+        with screenState.lock:
+            screenState.running_threads.append(loaders_thread)
+
+    #logging(debug_logger, "DEBUG", f"FUN ID {id(update_address_loaders)}")
+
+    screenState.daemon_socket_dispatcher.subscribe_once(f'update_loaders_{address_loaders.puzzle_hash}',
+                                                        TYPES.DaemonEvent.NEW_BLOCK,
+                                                        update_address_loaders)
+
+    # footer
+    screenState.footer_text += "| save_to_watchlist=w "
+    screenState.footer_text += f"| remove_spent_coins=s ({str(address_loaders.remove_spent_coins).upper()}), remove_self_txs=t ({str(address_loaders.remove_self_transactions).upper()})"
+    if tab_selected == 1:
+        screenState.footer_text += f" | show_sibling_coins ({str(address_loaders.show_phantom_coin_outputs).upper()})"
+
+    ### keyboard
+    ### create a virtual fun and the add it to this and to the tab scope
+
+    toggle_coin_keys = 'toggle_keys'
+    #if toggle_coin_keys not in main_scope.custom_keyboard_exec:
+
+    def toggle_coin_visibility(address_loaders: AddressLoaders, tab_sel: bool):
+        def custom_keyboard_execution(screenState: TYPES.ScreenState, keyboardState: TYPES.KeyboardState,
+                                      active_scope: TYPES.Scope):
+
+            logging(debug_logger, "DEBUG", f"tab_selected is {tab_sel}")
+            inbound_first = True
+            if tab_sel== 1:
+                inbound_first = False
+                logging(debug_logger, "DEBUG", f"NO BOUND {tab_sel}")
+
+            # TODO: add update order according to inbound outbound
+            if 's' in keyboardState.keys:
+                with address_loaders.lock:
+                    address_loaders.remove_spent_coins = not address_loaders.remove_spent_coins
+                loaders_thread = threading.Thread(target=load_the_loaders,
+                                                  args=(screenState, address_loaders, inbound_first, True, False),
+                                                  daemon=True)
+                loaders_thread.start()
+                loaders_thread.setName("re-loading address")
+                with screenState.lock:
+                    screenState.running_threads.append(loaders_thread)
+
+            if 't' in keyboardState.keys:
+                with address_loaders.lock:
+                    address_loaders.remove_self_transactions = not address_loaders.remove_self_transactions
+                loaders_thread = threading.Thread(target=load_the_loaders,
+                                                  args=(screenState, address_loaders, inbound_first, True, False),
+                                                  daemon=True)
+                loaders_thread.start()
+                loaders_thread.setName("re-loading address")
+                with screenState.lock:
+                    screenState.running_threads.append(loaders_thread)
+
+            if 'i' in keyboardState.keys and tab_sel == 1:
+                with address_loaders.lock:
+                    address_loaders.show_phantom_coin_outputs = not address_loaders.show_phantom_coin_outputs
+                loaders_thread = threading.Thread(target=load_the_loaders,
+                                                  args=(screenState, address_loaders, inbound_first, True, False),
+                                                  daemon=True)
+                loaders_thread.start()
+                loaders_thread.setName("re-loading address")
+                with screenState.lock:
+                    screenState.running_threads.append(loaders_thread)
+
+
+        return custom_keyboard_execution
+
+    # TODO: find a way to pass tab_selected without redefining every time the toggle?
+    toggle_coin_keyboard = toggle_coin_visibility(address_loaders, tab_selected)
+    main_scope.custom_keyboard_exec[toggle_coin_keys] = toggle_coin_keyboard
+
+    toggle_coin_keyboard = main_scope.custom_keyboard_exec[toggle_coin_keys]
+
+    # colors
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error_white"]
+    P_title = screenState.colorPairs["title"]
+    P_title_selected = screenState.colorPairs["xch"]
+    P_tab_soft = screenState.colorPairs["tab_soft"]
+
+    main_win_size = add_viewer.getmaxyx()
+    main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+    pos = UIgraph.Point(1,0)
+    pos_orig = pos
+    max_y = main_win_size.y - pos.y - 3
+
+    address = encode_puzzle_hash(address_loaders.puzzle_hash, CONF.ADD_PREFIX)
+    text = f" address: {address} "
+
+    ELEMENTS.create_text_double_space(add_viewer, screenState, pos, text, P_title_selected, C_background,
+                                      3, True, inv_color=False)
+
+    path = CONF.USER_ADDX_WATCHLIST
+    if path.exists():
+        addx_list = WDB.load_csv(path)
+        only_addx = [[] for _ in range(3)]
+        for entry in addx_list:
+            if len(entry) > 1:
+                #logging(debug_logger, "DEBUG", f"entry {entry[0]} add {str(address_loaders.puzzle_hash)} and xch {address}")
+                if str(address_loaders.puzzle_hash) == entry[0] or address == entry[0]:
+                    pos_tr = pos + UIgraph.Point(len(text) + 4, 0)
+                    name = entry[1]
+
+                    lenght_name = len(name) + 4
+                    if pos.x + len(text) + 3 + lenght_name < main_win_size.x:
+                        pos_tr = pos + UIgraph.Point(len(text) + 4, 0)
+                    else:
+                        pos_tr = pos + UIgraph.Point(0, pos.y + 3)
+                        pos = pos + UIgraph.Point(0, pos.y + 3)
+                    ELEMENTS.create_text_double_space(add_viewer, screenState, pos_tr, name, P_title_selected, C_background,
+                                                      3, True, inv_color=False)
+
+    pos += UIgraph.Point(0,4)
+
+    data_table_legend = ["puzzle hash", "total balance"]
+    data_table_legend = ["total balance", "unspent", "coins", "unspent hinted", "hinted", "puzzle hash", "address"]  # hinted, unspent hinted,
+    # total coin | total unspent coin
+    data_table = [[f"{address_loaders.balance / XCH_MOJO:.4f}",
+                   address_loaders.unspent_coin_count,
+                   address_loaders.total_coin_count,
+                   address_loaders.unspent_hinted_coin_count,
+                   address_loaders.total_hinted_coin_count,
+                   address_loaders.puzzle_hash,
+                   address]]
+
+    tab_size = UIgraph.Point(150, 7)
+
+
+    column_widths = [None, None, None, None, None, 15, 15]
+    #formatters = [None, None, None, UTILS.human_amount, None, None, None]
+    ELEMENTS.create_tab_large(add_viewer,        # scr
+                              screenState,       # screen_state
+                              main_scope,        # parent_scope
+                              "add_data",        # tab_name
+                              data_table,        # list data
+                              None,              # data_keys
+                              None,              # data_colors
+                              False,             # transpose
+                              pos,               # pos
+                              tab_size,          # size
+                              keyboardState,     # keyboardState
+                              ScopeActions.exit_scope,              # activation func
+                              2,                 # row_height
+                              False,             # active
+                              False,             # multiple selection
+                              data_table_legend, # data_legend
+                              column_widths=column_widths)
+
+    pos += UIgraph.Point(0, tab_size.y)
+    pos_tab_title = pos
+    pos += UIgraph.Point(0,2)
+    max_y = main_win_size.y - pos.y - 2
+
+    match tab_selected:
+        ### INBOUND coins ###
+        case 0:
+            tab_size = UIgraph.Point(80, max_y)
+
+            data_loader: WDB.DataChunkLoader = main_scope.data['address_loaders'].address_loader
+            #loader_legend = ["confirmed_index", "spent_index", "from_add", "coin_parent", "amount", "timestamp", "parent add"]
+            # TODO: coin_id is in reality the coin_parent_id -> change when createing the cache db
+            loader_legend = ["confirmed_index", "spent_index", "from", "amount", "coin_id", "coin_parent_id", "timestamp"]
+            column_widths = [None, None, 15, None, 15, 15, None]
+            formatters = [None, None, None, UTILS.human_amount, None, None, None]
+            inbound_scope = ELEMENTS.create_tab(add_viewer,
+                                                screenState,
+                                                main_scope,
+                                                "puzzle_hash_viewer",
+                                                None,
+                                                None,
+                                                None,
+                                                False,
+                                                pos,
+                                                tab_size,
+                                                keyboardState,
+                                                ScopeActions.exit_scope,
+                                                False,
+                                                False,
+                                                loader_legend,
+                                                column_widths,
+                                                formatters,
+                                                data_loader)
+
+            if toggle_coin_keys not in inbound_scope.custom_keyboard_exec:
+                inbound_scope.custom_keyboard_exec[toggle_coin_keys] = toggle_coin_keyboard
+
+        ### OUTBOUND coins ###
+        case 1:
+            tab_size = UIgraph.Point(80, max_y)
+
+            data_loader: WDB.DataChunkLoader = main_scope.data['address_loaders'].address_loader_outbound
+                           #["confirmed_index", "spent_index",  "puzzle_hash", "coin_parent", "amount", "timestamp"]
+            loader_legend = ["confirmed_index", "spent_index", "to", "amount", "coin_id", "coin_parent_id", "timestamp"]
+            column_widths = [None, None, 15, None, 15, 15, None]
+            formatters = [None, None, None, UTILS.human_amount, None, None, None]
+            outbound_scope = ELEMENTS.create_tab(add_viewer,
+                                                 screenState,
+                                                 main_scope,
+                                                 "puzzle_hash_outbound_viewer",
+                                                 None,
+                                                 None,
+                                                 None,
+                                                 False,
+                                                 pos,
+                                                 tab_size,
+                                                 keyboardState,
+                                                 ScopeActions.exit_scope,
+                                                 False,
+                                                 False,
+                                                 loader_legend,
+                                                 column_widths,
+                                                 formatters,
+                                                 data_loader)
+
+            if toggle_coin_keys not in outbound_scope.custom_keyboard_exec:
+                outbound_scope.custom_keyboard_exec[toggle_coin_keys] = toggle_coin_keyboard
+
+    ### puzzle ###
+        case 2:
+            #text = "puzzle composition: "
+            #pos += UIgraph.Point(0,2)
+            #ELEMENTS.create_text(add_viewer, pos, text, P_text, True)
+            #pos += UIgraph.Point(0,2)
+
+
+            address_loaders: AddressLoaders = main_scope.data['address_loaders']
+            with address_loaders.lock:
+                puz_and_sol = address_loaders.puzzle_and_sol_rpc
+                puzzle_disassembled = address_loaders.puzzle_disassembled
+                unrolled_puzzles = address_loaders.unrolled_puzzles
+                layered_puzzle_name = address_loaders.layered_puzzle_name
+
+            if unrolled_puzzles is None:
+                # no spent coins
+                pos += UIgraph.Point(0,2)
+                text = "no spent coins founded"
+                ELEMENTS.create_text(add_viewer, pos, text, P_text, True)
+
+            else:
+                labels = []
+                data = []
+
+                labels.append('LAYERED_PUZZLE')
+                data.append('')
+
+                labels.append('-puzzle_name')
+                data.append(layered_puzzle_name)
+
+
+                labels.append('-sub_puzzle_list')
+                data.append('')
+                for n, puz in enumerate(unrolled_puzzles):
+                    value = f"({n}) {puz['puzz_name']}"
+                    if n == 0:
+                        data[-1] = value
+                    else:
+                        labels.append('')
+                        data.append(value)
+
+                labels.append('-clvm')
+                if puz_and_sol:
+                    data.append(puz_and_sol['puzzle_reveal'])
+                else:
+                    data.append(None)
+                labels.append('-disassembled_clvm')
+                data.append(puzzle_disassembled)
+
+                lev = 0
+                labels.append('')
+                data.append('')
+                labels.append('UNCURRIED_PUZZLEs')
+                data.append('')
+
+                # formattin unrolled puzzles
+                for puz in unrolled_puzzles:
+                    labels.append('-sub_puzzle_name')
+                    data.append(puz['puzz_name'])
+
+                    labels.append('--path:')
+                    data.append(puz['path'])
+
+                    labels.append('--puzzle_disassembled')
+                    data.append(puz['disassembly'])
+
+                    labels.append('--args:')
+                    data.append('')
+                    # args
+                    for n, arg in enumerate(puz['args']):
+                        value = f"<...>(R, {n}) | {arg} "
+                        if n == 0:
+                            data[-1] = value
+                        else:
+                            labels.append('')
+                            data.append(value)
+
+                    labels.append('')
+                    data.append('')
+
+
+
+                tab_legend = ['property', 'value']
+                tab_data = [labels, data]
+
+                max_y = main_win_size.y - pos.y - 3
+                min_y = max(15, len(data) + 1)
+                tab_size = UIgraph.Point(80, min_y)
+                tab_size = UIgraph.Point(80, max_y)
+
+                ELEMENTS.create_tab(add_viewer,
+                                    screenState,
+                                    main_scope,
+                                    "puzzle_data",
+                                    tab_data,
+                                    None,
+                                    None,
+                                    True,
+                                    pos,
+                                    tab_size,
+                                    keyboardState,
+                                    ScopeActions.exit_scope,
+                                    False,
+                                    False,
+                                    tab_legend)
+
+    # run copy/paste action or other pending stuffs
+    if len(screenState.pending_action) > 0:
+        for i, fn in screenState.pending_action:
+            fn()
+        screenState.pending_action = []
+
+
+    def blend_selector(selected: bool, pos: UIgraph.Point):
+        pos_t = pos + UIgraph.Point(0,2)
+        if selected:
+            ELEMENTS.create_text(add_viewer, pos_t, u'\u2580' * (len(text) + 2), P_tab_soft, True)
+        else:
+            ELEMENTS.create_text(add_viewer, pos_t, ' ' * (len(text) + 2), P_used, True)
+
+
+    pos = pos_tab_title
+    with address_loaders.lock:
+        layered_puzzle_name = address_loaders.layered_puzzle_name
+
+    title_list = [" INBOUND coins ", " OUTBOUND coins ", f" PUZZLE [{layered_puzzle_name}]"]
+    for n, text in enumerate(title_list):
+        P_used, blend = (P_title_selected, True) if tab_selected == n else (P_title, False)
+        ELEMENTS.create_text_double_space(add_viewer, screenState, pos, text, P_used, C_background, 3, True)
+        blend_selector(blend, pos)
+        pos += UIgraph.Point(len(text) + 2,0)
+
+    pos = UIgraph.Point(pos_orig.x, pos.y + 2)
+
+    # save address
+    banner_name = 'save_address_banner'
+    save_scope: TYPES.Scope = None
+    if banner_name in screenState.scopes:
+        save_scope = screenState.scopes[banner_name]
+    # TODO:
+    # change the way the banner is drawn, checking if it is the main scope is not optimal if there are subscope inside
+    if 'w' in keyboardState.keys:
+        screenState.activeScope = save_scope
+
+    if screenState.activeScope == save_scope or save_scope is not None and screenState.activeScope.name in save_scope.sub_scopes:
+        ELEMENTS.create_save_address_banner(add_viewer, screenState, main_scope, address)
+
 
 
 def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
@@ -1849,7 +2868,7 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
     active_scope: Scope = screenState.activeScope
     main_scope: Scope = active_scope.main_scope
     screenState.scope_exec_args = [screenState]
-    main_scope.update()
+    main_scope.update_2d()
 
     if 'lapper' not in main_scope.data:
         main_scope.data["lapper"] = UTILS.Timer('block_band')
@@ -1863,54 +2882,73 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
 
     # colors
     P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error"]
 
+    # address loaders init
 
-    def fetch_coin_records_by_puzzle_hash(conn, puzzle_hash: bytes, sorting_column: str, 
-                                          start_height, end_height, include_spent_coins: bool):
-        sorting_column = 'confirmed_index'
-        select = ("SELECT confirmed_index, spent_index, coinbase, puzzle_hash, "
-                  "coin_parent, amount, timestamp FROM coin_record ")
-        indexed = "INDEXED BY coin_puzzle_hash WHERE puzzle_hash=? "
-        default_filter = "AND confirmed_index>=? AND confirmed_index<? "
-        spent_coin_filter = f"{'' if include_spent_coins else 'AND spent_index <= 0 '}"
-        order = f"ORDER BY {sorting_column}"
-        query = select + indexed + default_filter + spent_coin_filter + order
+    if 'address_loaders' not in main_scope.data:
+        address_loaders = AddressLoaders()
+        main_scope.data['address_loaders'] = address_loaders
 
-        with conn:
-            cursor = conn.execute(query, (puzzle_hash, start_height, end_height))
-            out = cursor.fetchall()
-
-        return out
-
-
-    # prompt
-    pos = UIgraph.Point(5,5)
+    #### prompts
+    pos = UIgraph.Point(2,1)
+    pos_original_x = pos.x
     pre_text = "Search: "
     prompt_lenght = min(80, width - 4)
     scope_search = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'search', pos,
-                                          pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.go_to_block)
+                                          pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.press_enter)
 
-    pos += UIgraph.Point(0,2)
+    new_prompt_lenght = 30
+    if pos.x + prompt_lenght + 3 + new_prompt_lenght < width:
+        pos += UIgraph.Point(prompt_lenght + 3,0)
+    else:
+        pos = UIgraph.Point(pos_original_x, pos.y + 3)
+
+    prompt_lenght = new_prompt_lenght
     pre_text = "Start height: "
-    prompt_lenght = min(80, width - 4)
     scope_start_height = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'start_height', pos,
-                                                pre_text, prompt_lenght, P_text, True, False)
+                                                pre_text, new_prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.press_enter)
 
-    pos += UIgraph.Point(0,2)
+    new_prompt_lenght = 30
+    if pos.x + prompt_lenght + 3 + new_prompt_lenght < width:
+        pos += UIgraph.Point(prompt_lenght + 3,0)
+    else:
+        pos = UIgraph.Point(pos_original_x, pos.y + 3)
+
+    prompt_lenght = new_prompt_lenght
     pre_text = "End height: "
-    prompt_lenght = min(80, width - 4)
     scope_end_height = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'end_height', pos,
-                                                pre_text, prompt_lenght, P_text, True, False)
+                                              pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.press_enter)
 
-    pos += UIgraph.Point(0,2)
-    pre_text = "End height: "
-    prompt_lenght = min(80, width - 4)
-    scope_include_spent_coins = ELEMENTS.create_button(node_data, screenState, main_scope, 'include_spent_coins', pos)
+    button_name = u'remove_spent_coins'
+    button_lenght = len(button_name) + 6
+    pos += UIgraph.Point(0,-1)  # move buttons up
+    if pos.x + prompt_lenght + 3 + button_lenght < width:
+        pos += UIgraph.Point(prompt_lenght + 3,0)
+    else:
+        pos = UIgraph.Point(pos_original_x, pos.y + 3)
 
-    pos += UIgraph.Point(0,2)
-    pre_text = "End height: "
-    prompt_lenght = min(80, width - 4)
-    scope_include_spent_coins = ELEMENTS.create_selector(node_data, screenState, main_scope, 'sel', pos)
+    scope_remove_spent_coins: Scope = ELEMENTS.create_button(node_data, screenState, main_scope, button_name, pos, custom_scope_function=ScopeActions.change_button_bool, button_type='boolean')
+    address_loaders: AddressLoaders = main_scope.data['address_loaders']
+
+    button_name = u'remove_self_transactions'
+    old_button_length = button_lenght
+    button_lenght = len(button_name) + 6
+    if pos.x + prompt_lenght + 3 + button_lenght < width:
+        pos += UIgraph.Point(old_button_length + 5,0)
+    else:
+        pos = UIgraph.Point(pos_original_x, pos.y + 3)
+
+    scope_remove_self_transactions: Scope = ELEMENTS.create_button(node_data, screenState, main_scope, button_name, pos, custom_scope_function=ScopeActions.change_button_bool, button_type='boolean')
+
+    pos = UIgraph.Point(pos_original_x, pos.y + 3)
+
+    button_name = 'search_button'
+    button_lenght = len(button_name) + 6
+    scope_search_button: Scope = ELEMENTS.create_button(node_data, screenState, main_scope, button_name, pos, custom_scope_function=ScopeActions.press_enter, button_type='execution')
+    pos_search_err = pos.deepcopy() + UIgraph.Point(button_lenght + 3, 1)
+    pos += UIgraph.Point(0,4)
+
 
     # the prompt shuuld avtivate the sql query, that create the list.
     # i will not go with chunks, i will try to handle them in a list. or not?
@@ -1921,114 +2959,258 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
     ########################
 
     lapper.clocking("pre_init")
+
+    # parse data
+    # parse halways start, end and bool and check the data on esc and enter
+    # save on scope.data and check for change
+    # if change start counter for one sec, before updating or waiting for enter???????????
+
+
+    #if 'parameters' not in main_scope.data:
+    #    main_scope.data['parameters'] = [None, uint32(0), uint32((2**32) - 1), False, False]
+    #    # search_value, start, end, remove_spent_coins
+
+    run_loader = False
+    if 'invalid_data_err' not in main_scope.data:
+        main_scope.data['invalid_data_err'] = {}
+    invalid_data_err = main_scope.data['invalid_data_err']
+
+    if 'pressed_enter' in scope_start_height.data and scope_start_height.data['pressed_enter']:
+        scope_start_height.data['pressed_enter'] = False
+        prompt = scope_start_height.data['prompt']
+        input_type = UTILS.classify_number(prompt)
+        if len(prompt) == 0:
+            invalid_data_err.pop('start', None)
+            address_loaders.start_height = uint32(0)
+            run_loader = True
+        elif input_type != 'int':
+            invalid_data_err['start'] = "start_height must be a valid int | "
+            scope_start_height.data['valid_data'] = False
+        else:
+            invalid_data_err.pop('start', None)
+            height = int(prompt)
+            address_loaders.start_height = height
+            run_loader = True
+
+    if 'pressed_enter' in scope_end_height.data and scope_end_height.data['pressed_enter']:
+        scope_end_height.data['pressed_enter'] = False
+        prompt = scope_end_height.data['prompt']
+        input_type = UTILS.classify_number(prompt)
+        if len(prompt) == 0:
+            invalid_data_err.pop('end', None)
+            address_loaders.end_height = uint32(2**32 - 1)
+            run_loader = True
+        elif input_type != 'int':
+            invalid_data_err['end'] = "end_height must be a valid int | "
+            scope_end_height.data['valid_data'] = False
+        else:
+            invalid_data_err.pop('end', None)
+            height = int(prompt)
+            address_loaders.end_height = height
+            run_loader = True
+
     if 'pressed_enter' in scope_search.data and scope_search.data['pressed_enter']:
 
         #TODO: go to the search button, but do not execute. Double enter > execute
         scope_search.data['pressed_enter'] = False
         prompt = scope_search.data['prompt']
 
-        from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
-        from chia_rs.sized_bytes import bytes32, bytes48
-        from chia_rs.sized_ints import uint16, uint32, uint64, uint128
-        puzz_hash: bytes32 = decode_puzzle_hash(prompt)
+        puzz_hash: bytes32 = UTILS.address_to_bytes32(prompt)
+        if puzz_hash is not None:
+            invalid_data_err.pop('add', None)
+            address_loaders.puzzle_hash = puzz_hash
+            run_loader = True
+            main_scope.select_sub_scope_2d(scope_search_button)
 
-        table = 'coin_record'
-        sorting_column = 'confirmed_index'
+        else:
+            invalid_data_err['add'] = "the address or the hex string is not valid | "
+            scope_search.data['valid_data'] = False
 
-        # read only read
-        db_path = "/mnt/chiaDB/mainnet/db/blockchain_v2_mainnet.sqlite"
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
 
-        filters = {'puzzle_hash': bytes(puzz_hash)}
-        start = 0
-        count = 100
-        start: uint32 = uint32(0)
-        count: uint32 = uint32((2**32) - 1)
-        res = fetch_coin_records_by_puzzle_hash(conn, puzz_hash, sorting_column,
-                                                start, count, True)
-        main_scope.data['coin_records'] = ELEMENTS.cast_table_items_to_string(res)
+    if scope_remove_spent_coins.changed:
+        scope_remove_spent_coins.changed = False
+        address_loaders.remove_spent_coins = scope_remove_spent_coins.bool
+        run_loader = True
+    else:
+        if scope_remove_spent_coins.bool != address_loaders.remove_spent_coins:
+            scope_remove_spent_coins.bool = not scope_remove_spent_coins
 
-    ########################
+
+    if scope_remove_self_transactions.changed:
+        scope_remove_self_transactions.changed = False
+        address_loaders.remove_self_transactions = scope_remove_self_transactions.bool
+        run_loader = True
+    else:
+        if scope_remove_self_transactions.bool != address_loaders.remove_self_transactions:
+            scope_remove_self_transactions.bool = not scope_remove_self_transactions
+
+
+    # pharsing errors message
+    err_msg = ''
+    for lab, text in invalid_data_err.items():
+        err_msg += text
+    ELEMENTS.create_text(node_data, pos_search_err, err_msg, P_error, bold=True)
+    main_scope.data['invalid_data_err'] = invalid_data_err
 
     ###########################
     # implemnt chunk support
 
-        if 'address_loader' not in main_scope.data:
-            conn = sqlite3.connect(DB_BLOCKCHAIN_RO, timeout=SQL_TIMEOUT)
-            table_name = 'coin_record'
-            chunk_size = 1000  # 120  # height * 2  # to be sure to have at least 2 full screen of data
-            offset = 0
-            sorting_column = 'confirmed_index'
-            filters = None  # {'in_main_chain': 1}
-            add = decode_puzzle_hash('xch1lv34uumcyg892zrv35rhrx87hu5nx87em7zcag5nc2vjecupkdzspc9xn6')
-            fetcher = WDB.FetchMaker.puzzle_hash_fetcher(add, sorting_column)
-            fetcher_first_last = WDB.FetchMaker.puzzle_hash_first_last_count_fetcher(add, sorting_column)
+    #if 'address_loader' not in main_scope.data:
+    if run_loader:
 
-            with conn:
-                main_scope.data['address_loader'] = WDB.DataChunkLoader(
-                    db_path, table_name, chunk_size, fetcher, fetcher_first_last, offset,
-                    filters=filters, sorting_column=sorting_column)
+        address_loaders = main_scope.data['address_loaders']
 
-        #######################3
+        main_scope.data['address_loaders'] = address_loaders
 
+        #load_the_loaders(address_loaders)  # DEBUG
+        loaders_thread: threading.Thread = threading.Thread(target=load_the_loaders,
+                                                            args=(screenState, address_loaders,),
+                                                            kwargs={'update_cache': True},
+                                                            daemon=True)
+        loaders_thread.start()
+        loaders_thread.setName("loading address")
+        with screenState.lock:
+            screenState.running_threads.append(loaders_thread)
+
+
+        # load the preview
+
+        sorting_column = 'confirmed_index'
+        preview_fecher = WDB.FetchMaker.puzzle_hash_fetcher(address_loaders.puzzle_hash,
+                                                            sorting_column,
+                                                            order='DESC')
+        db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+        try:
+            last_10_entries = preview_fecher(db_conn, 0, 10)
+            main_scope.data['tab_preview'] = last_10_entries
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"preview ERROR{e}")
+            UTILS.logging_traceback("TAB_PREV")
+        finally:
+            db_conn.close()
+
+
+
+        def make_update_cached_address(puzzle_hash):
+            puzzle_hash = bytes32(puzzle_hash)
+
+            def update_cached_address(data):
+                """data: websocket data from the daemon"""
+
+                if not data['data']['transaction_block']:
+                    return
+
+                # TODO: move the whole fun elsewhere
+                from chia_rs.sized_bytes import bytes32
+                from chia.util.bech32m import decode_puzzle_hash
+
+                db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+                cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+                logging(debug_logger, "DEBUG", f"DB starting cache fetcher for watchlist")
+                try:
+                    #if add.startswith(CONF.ADD_PREFIX):
+                    #    puzzle_hash = bytes(decode_puzzle_hash(add))
+                    #else:
+                    #    puzzle_hash = bytes(UTILS.ensure_bytes32(add))
+
+                    WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"update cache ERROR{e}")
+                    UTILS.logging_traceback("CACHE UPDATE")
+                finally:
+                    cache_conn.close()
+                    db_conn.close()
+
+                logging(debug_logger, "DEBUG", f"DB cache fetcher for SINGLE DONE")
+            return update_cached_address
+
+        screenState.daemon_socket_dispatcher.subscribe(TYPES.DaemonEvent.NEW_BLOCK, make_update_cached_address(address_loaders.puzzle_hash))
 
 
     lapper.clocking("pressed enter")
-    pos += UIgraph.Point(0, 2)
+    if 'tab_preview' in main_scope.data and main_scope.data['tab_preview'] is not None:
+
+        ELEMENTS.create_text(node_data, pos, 'preview', P_text, bold=True, underline=True)
+        pos += UIgraph.Point(0, 2)
+
+        tab_size = UIgraph.Point(80, 15)
+
+        preview_coin_record = main_scope.data['tab_preview']
+        preview_data = []
+        for i in preview_coin_record:
+            coin_data = i.to_list_inbound()
+            del coin_data[2]  # remove 'from' data,
+            preview_data.append(coin_data)
+
+        loader_legend = ["confirmed_index", "spent_index", "amount", "coin_id", "coin_parent_id", "timestamp"]
+        column_widths = [None, None, None, 15, 15, None]
+        formatters = [None, None, UTILS.human_amount, None, None, None]
+        print(preview_data)
+
+        ELEMENTS.create_tab(node_data,
+                            screenState,
+                            main_scope,
+                            "preview",
+                            preview_data,
+                            None,
+                            None,
+                            False,
+                            pos,
+                            tab_size,
+                            keyboardState,
+                            ScopeActions.exit_scope,
+                            False,
+                            False,
+                            loader_legend,
+                            column_widths,
+                            formatters)
+        pos += UIgraph.Point(0, tab_size.y + 2)
+
 
     #block_legend = ['height', 'header hash', 'block type']
     main_win_size = node_data.getmaxyx()
     main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+
+    #preview
+    pos += UIgraph.Point(0, 2)
+
     max_y = main_win_size.y - pos.y - 3
     tab_size = UIgraph.Point(100, max_y)
-    if 'coin_records' in main_scope.data and main_scope.data['coin_records'] is not None:
-        lapper.clocking("init tab")
-        records = main_scope.data['coin_records']
+
+
+
+    if 'address_loaders' in main_scope.data and main_scope.data['address_loaders'].address_loader is not None:
         lapper.clocking("init tab")
         tab_size = UIgraph.Point(80, max_y)
 
         lapper.clocking("into coin rec")
-        data_loader: WDB.DataChunkLoader = main_scope.data['address_loader']
+        data_loader: WDB.DataChunkLoader = main_scope.data['address_loaders'].address_loader
         lapper.clocking("coin rec loaded")
 
-        if False:
-            ELEMENTS.create_tab(node_data,
-                                screenState,
-                                main_scope,
-                                "puzzle_hash_viewer",
-                                records,
-                                None,
-                                None,
-                                False,
-                                pos,
-                                tab_size,
-                                keyboardState,
-                                ScopeActions.exit_scope,
-                                False,
-                                False)  #,
-                                #block_legend)
-        else:
-            lapper.clocking("init tab")
-            loader_legend = ["confirmed_index", "spent_index", "coinbase", "puzzle_hash", "coin_parent", "amount", "timestamp"]
-            column_widths = [None, None, None, 15, 15, None, None]
-            ELEMENTS.create_tab(node_data,
-                                screenState,
-                                main_scope,
-                                "puzzle_hash_viewer",
-                                records,
-                                None,
-                                None,
-                                False,
-                                pos,
-                                tab_size,
-                                keyboardState,
-                                ScopeActions.exit_scope,
-                                False,
-                                False,
-                                loader_legend,
-                                column_widths,
-                                data_loader)
-            lapper.clocking("iend tab")
+        loader_legend = ["confirmed_index", "spent_index", "from", "amount", "coin_id", "coin_parent_id", "timestamp"]
+        column_widths = [None, None, 15, None, 15, 15, None]
+        formatters = [None, None, None, UTILS.human_amount, None, None, None]
+
+        #ELEMENTS.create_tab(node_data,
+        #                    screenState,
+        #                    main_scope,
+        #                    "puzzle_hash_viewer",
+        #                    None,
+        #                    None,
+        #                    None,
+        #                    False,
+        #                    pos,
+        #                    tab_size,
+        #                    keyboardState,
+        #                    ScopeActions.exit_scope,
+        #                    False,
+        #                    False,
+        #                    loader_legend,
+        #                    column_widths,
+        #                    formatters,
+        #                    data_loader)
+        lapper.clocking("iend tab")
 
     lapper.clocking('end tab')
     #records = RPC.call_rpc_node('get_coin_records_by_puzzle_hash')
@@ -2039,9 +3221,19 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
             fn()
         screenState.pending_action = []
     lapper.clocking('end end')
-
     lapper.end()
     print(lapper)
+
+    if 'pressed_enter' in scope_search_button.data and scope_search_button.data['pressed_enter']:
+        # open a new win
+
+        scope_add_viewer: Scope = Scope("add_viewer", screen_address_viewer, screenState)
+        scope_add_viewer.parent_scope = main_scope
+        scope_add_viewer.data['address_loaders'] = main_scope.data['address_loaders']
+        scope_add_viewer.exec = None
+        screenState.activeScope = scope_add_viewer
+
+        scope_search_button.data['pressed_enter'] = False
 
 
 def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
@@ -2177,7 +3369,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     pre_text = "Go to block: "
     prompt_lenght = min(80, width - 4)
     scope_go_to = ELEMENTS.create_prompt(node_data, screenState, keyboardState, main_scope, 'go to block', pos,
-                                         pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.go_to_block)
+                                         pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.press_enter)
     pos += UIgraph.Point(0,3)
 
     def to_int(text: str):
@@ -2196,8 +3388,6 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
         if 'pressed_enter' in scope_go_to.data and scope_go_to.data['pressed_enter']:
             scope_go_to.data['pressed_enter'] = False
-
-
             prompt = scope_go_to.data['prompt']
             input_type = UTILS.classify_number(prompt)
             height = None
@@ -2217,14 +3407,20 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                     if len(prompt) == 64:
                         hash = bytes32.fromhex(prompt)
                         conn = blocks_loader.create_sql_conneciton()
-                        table = 'full_blocks'
-                        fetcher = WDB.make_sql_fetcher(table)
-                        block = fetcher(conn, 0, 1, filters={'header_hash':hash})
-                        if len(block) < 1:
-                            scope_go_to.data['valid_data'] = False
-                            scope_go_to.data["invalid_data_message"] = 'hash not found'
-                        else:
-                            height = block[0][2]  # from the tuple select the third element > block_height
+                        try:
+                            table = 'full_blocks'
+                            fetcher = WDB.make_sql_fetcher(table)
+                            block = fetcher(conn, 0, 1, filters={'header_hash':hash})
+                            if len(block) < 1:
+                                scope_go_to.data['valid_data'] = False
+                                scope_go_to.data["invalid_data_message"] = 'hash not found'
+                            else:
+                                height = block[0][2]  # from the tuple select the third element > block_height
+                        except Exception as e:
+                            logging(debug_logger, "DEBUG", f"block band validate input{e}")
+                            UTILS.logging_traceback("BLOCK_BAND")
+                        finally:
+                            conn.close()
                     else:
                         scope_go_to.data['valid_data'] = False
                         scope_go_to.data["invalid_data_message"] = 'hash must be 32 bytes'
@@ -2504,6 +3700,7 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
             main_scope.data["watch_later"] = False
         else:
             main_scope.data["watch_later"] = True
+        conn.close()
 
 
     if keyboardState.key == 'w':
@@ -2514,6 +3711,7 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
         else:
             pass
             # remove
+        conn.close()
 
 
     if "tx_cache" not in main_scope.data:
@@ -2545,21 +3743,8 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
                         print(sp_json)
                         transactions[i.spend_bundle_hash] = WDB.MempoolItem(raw_json_spendbundle=sp_json, timestamp=i.timestamp)
                     except Exception as e:
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print('except_')
-                        print(e)
-                        traceback.print_exc()
-                        rpc = call_rpc_node('get_all_mempool_items')
-                        #for k, i in rpc.items():
-                        #    print(k)
-                        #    WDB.print_json(i)
+                        logging(debug_logger, "DEBUG", f"mempool ERROR{e}")
+                        UTILS.logging_traceback("MEME")
 
                 tx_cache["tx"] = transactions[spend_bundle_hash]
 
@@ -2596,8 +3781,6 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
     coins.append([''] * len(legend))
 
     # additions
-    print('addddditions')
-    print(tx.additions)
     for add in tx.additions:
         coin_id = calc_coin_id(uint64(add['amount']), add['parent_coin_info'], add['puzzle_hash'])
         add = ['addition', coin_id, add['amount'], add['parent_coin_info'], add['puzzle_hash']]
@@ -2639,10 +3822,10 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
             c_solution = Program.fromhex(c['solution'])
 
             # unroll puzzle
-            c_puzzle_unrolled = unroll_coin_puzzle(c_puzzle)
+            c_puzzle_unrolled = PUZ.unroll_coin_puzzle_to_puzzle_hashes(c_puzzle)
             c_puzzle_names = []
             for p in c_puzzle_unrolled:
-                c_puzzle_names.append(compare_to_known_puzzle(p))
+                c_puzzle_names.append(PUZ.compare_to_known_puzzle(p))
 
 
             pos += UIgraph.Point(0, tab_size.y + 1)
@@ -2669,7 +3852,7 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
                 pos += UIgraph.Point(0,1)
                 i = i.replace(' ', ',')
                 i = ast.literal_eval(i)
-                code = get_opcode_name(i[0])
+                code = PUZ.get_opcode_name(i[0])
                 ELEMENTS.create_text(tx_win, pos, f"{code}: {i} and type f{type(i)}", P_text, bold=False)
 
     pos += UIgraph.Point(0,2)

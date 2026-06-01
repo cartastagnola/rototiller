@@ -1,3 +1,4 @@
+from __future__ import annotations
 import sys
 import os
 import traceback
@@ -40,19 +41,22 @@ DEBUG_OBJ = DEBUGtiller.DEBUG_OBJ
 ## lower half block u2584
 
 
-def cast_table_items_to_string(table: List[List]):
+def cast_table_items_to_string(table: List[List], formatters: List[Callable] = None):
     """Convert each item of a 2dim list to string"""
+
+    if formatters is None:
+        formatters = [None] * len(table[0])
 
     table_str = []
     for col in table:
         col_str = []
-        for u in col:
-            if isinstance(u, float):
-                #if u > 1:
-                u = DEX.format_and_round_number(u, 5, 10)
-                col_str.append(str(u))
+        for n, u in enumerate(col):
+            if formatters[n] and u != '':
+                u = formatters[n](u)
             else:
-                col_str.append(str(u))
+                if isinstance(u, float):
+                    u = DEX.format_and_round_number(u, 5, 10)
+            col_str.append(str(u))
         table_str.append(col_str)
 
     return table_str
@@ -75,33 +79,40 @@ def delete_table_column(table, idx_col):
 
 
 def calc_size_column(data_table, data_table_color, data_table_legend, scope, max_table_width,
-                     multiple_selection, x_tab_size, column_widths):
+                     multiple_selection, x_tab_size, column_widths, formatters):
     """Return max_dims, but it changes also all the data table input to trunkate the tab
-    if needed"""
+    if needed
+    column_widths: it is possible to set fixed size to columns
+    """
+
+    casted_data_table = cast_table_items_to_string(data_table, formatters)
 
     n_rows = len(data_table)
     n_columns = len(data_table[0])
 
     ### calculate max dim for columns
-    max_dims = [0] * n_columns
+    max_dims_origin = [0] * n_columns
     total_dims = 0
     x_col_start = [0]
     x_col_dim = []
-    column_separator = 2
+    column_separator = 3
     for idx in range(n_rows):
-        for idx2, u in enumerate(data_table[idx]):
-            if len(str(u)) > max_dims[idx2]:
-                max_dims[idx2] = len(u)
+        for idx2, u in enumerate(casted_data_table[idx]):
+            if len(str(u)) > max_dims_origin[idx2]:
+                max_dims_origin[idx2] = len(u)
 
-    # trunks string too long (if str > 2/3 of the witdh of the table)
-    # max_dims[0] it the first columns, it should have more space in some cases
-    # but here is not clear
+    # trim string too long (if str > 2/3 of the witdh of the table)
+    # max_dims[0] is the first columns, it should have more space in some cases
+    # but here is not clear... WIP
+    max_dims = [0] * n_columns
     max_str_length = int((x_tab_size - max_dims[0]) * (2/3))
-    for n, i in enumerate(max_dims):
+    for n, i in enumerate(max_dims_origin):
         if column_widths[n]:
             max_dims[n] = column_widths[n]
         elif i > max_str_length:
             max_dims[n] = max_str_length
+        else:
+            max_dims[n] = i
 
     if data_table_legend is not None:
         #assert length legend == n_columns
@@ -135,8 +146,11 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
     # remove column based on the cursor value
     while scope_x > 0:  # and total_dims > max_table_width:
         dim = max_dims.pop(idx_fix_item)
+        max_dims_origin.pop(idx_fix_item)
         delete_table_column(data_table, idx_fix_item)
         delete_table_column(data_table_color, idx_fix_item)
+        formatters.pop(idx_fix_item)
+        column_widths.pop(idx_fix_item)
         if data_table_legend is not None:
             data_table_legend.pop(idx_fix_item)
         total_dims -= dim
@@ -147,11 +161,29 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
     if total_dims > max_table_width:
         while total_dims > max_table_width:
             dim = max_dims.pop(-1)
+            max_dims_origin.pop(-1)
             delete_table_column(data_table, -1)
             delete_table_column(data_table_color, -1)
+            formatters.pop(-1)
+            column_widths.pop(-1)
             if data_table_legend is not None:
                 data_table_legend.pop(-1)
             total_dims -= dim
+    else:
+        ## WIP: if there are enough space, it enlarge fixed size columns
+        count_fix_size_col = 0
+        for n in column_widths:
+            if n:
+                count_fix_size_col += 1
+        if count_fix_size_col > 0:
+            remainder = max_table_width - total_dims - column_separator * 2
+            remainder_per_item = remainder // count_fix_size_col
+
+        total_dims = 0
+        for n, i in enumerate(max_dims):
+            if column_widths[n]:
+                max_dims[n] = min(max_dims[n] + remainder_per_item, max_dims_origin[n] + 2)
+            total_dims += max_dims[n]
 
 
     ### calculate the remainder space to re-distribuite later
@@ -200,7 +232,8 @@ def recalcultate_first_and_last_element_BAND(select, idx_last_item, items_count)
     return idx_first_item, idx_last_item, select
 
 
-def create_text(stdscr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False, align: int = 0, inv_color=False):
+def create_text(stdscr, pos: UIgraph.Point, text: str, P_text_color, bold: bool = False,
+                align: int = 0, inv_color: bool = False, underline: bool = False):
     """Create normal text."""
 
     stdscr.attron(curses.color_pair(P_text_color))
@@ -208,9 +241,12 @@ def create_text(stdscr, pos: UIgraph.Point, text: str, P_text_color, bold: bool 
         stdscr.attron(curses.A_BOLD)
     if inv_color:
         stdscr.attron(curses.A_REVERSE)
+    if underline:
+        stdscr.attron(curses.A_UNDERLINE)
     stdscr.addstr(pos.y, pos.x, str(text))
     stdscr.attroff(curses.A_BOLD)
     stdscr.attroff(curses.A_REVERSE)
+    stdscr.attroff(curses.A_UNDERLINE)
 
 
 def get_win_dimension(stdscr):
@@ -220,7 +256,7 @@ def get_win_dimension(stdscr):
 
 def align_bounding_box(stdscr, bbox: UIgraph.Point, margin: UIgraph.Point,
                        align_h: int = 0, align_v: int = 0):
-    """Give the position for the bounding box aligned according the options,
+    """Give the position of the bounding box aligned according the options,
     align_h: right=0, center=1, left=2
     align_v: top=0, center=1, bottom=2
     the margin.x is used as distance from the margin, both in align right and left
@@ -321,7 +357,8 @@ def create_blinking_text(scr, pos: UIgraph.Point, text: str, P_text_color, bold:
 
 def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardState, parent_scope: Scope, name: str,
                   pos: UIgraph.Point, pre_text: str, total_length: int, P_text_color, bold: bool = False,
-                  inverse_color: bool = False, custom_scope_function=None):
+                  inverse_color: bool = False, custom_scope_function=None, ui_error_inside_the_prompt=False, prepped_scope=None,
+                  P_text_field=None, C_selected=None):
     """prompt text"""
     # TODO limit text displayed...
     # TODO when esc, check the data, or esc and enter should be the same...
@@ -329,11 +366,32 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
     nome_str = name
     name = f"{parent_scope.id}_{name}"
 
-    P_select = screen_state.colorPairs["win_selected"]
+    # selection color
+    text_color_pair = UIgraph.customColorsPairs_findByValue(
+        screen_state.cursesColors,
+        P_text_color)
+    text_color_background = text_color_pair[1]
+    gray = UIgraph.customColors_findByValue(screen_state.cursesColors, screen_state.colors['gray'])
+
+    P_select = UIgraph.addCustomColorTuple(
+        (gray, text_color_background),
+        screen_state.cursesColors
+    )
+
+    RGB_selected = UIgraph.customColors_findByValue(screen_state.cursesColors, C_selected)
+    if C_selected is not None:
+        P_selected = UIgraph.addCustomColorTuple(
+            (RGB_selected, text_color_background),
+            screen_state.cursesColors
+        )
+    else:
+        P_selected = screen_state.colorPairs["tab_dark"]
     P_error = screen_state.colorPairs["error"]
     P_error_white = screen_state.colorPairs["error_white"]
+    if P_text_field is None:
+        P_text_field = screen_state.colorPairs["text_field"]
 
-    if name not in screen_state.scopes:
+    if name not in screen_state.scopes and prepped_scope is None:
         scope = Scope(name, parent_scope.screen, screen_state)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
@@ -345,13 +403,16 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
             scope.exec_own = ScopeActions.exit_scope
         else:
             scope.exec_own = custom_scope_function
+
         scope.data["prompt"] = ""
         scope.data["cursor"] = 0
         scope.data["valid_data"] = True
         scope.data["invalid_data_message"] = 'INV'
+        scope.data["short_invalid_data_message"] = 'Invalid'
 
     scope: Scope = screen_state.scopes[name]
     scope.visible = True
+    scope.base_point = pos
     scope_exec_args = [screen_state]
     prompt = scope.data["prompt"]
     invalid_data_message = scope.data['invalid_data_message']
@@ -367,15 +428,16 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         scope.mode = ScopeMode.INSERT
         screen_state.scope_exec_args = scope_exec_args
         scope_state = True
-        P_select = screen_state.colorPairs["tab_dark"]
+        P_select = P_selected
         scope.data["valid_data"] = True
 
     # text area
-    field = u'\u2591' * total_length
-    if scope.selected:
+    # field = u'\u2591' * total_length  # old filler
+    field = ' ' * total_length
+    if scope.selected():
         screen_state.footer_text += "| paste=ctrl-v "
         stdscr.attron(curses.A_REVERSE)
-        stdscr.addstr(pos.y, pos.x, field, P_text_color)
+        stdscr.addstr(pos.y, pos.x, field, curses.color_pair(P_text_field))
         stdscr.attroff(curses.A_REVERSE)
         stdscr.addstr(pos.y + 1, pos.x, u'\u2580' * total_length,
                       curses.color_pair(P_select))
@@ -384,17 +446,22 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         for i in range(1):
             stdscr.addstr(pos.y + i, pos.x + total_length, u'\u258c',
                           curses.color_pair(P_select))
+        # special keyboard 
+        if keyboard_state.delete:
+            scope.data['prompt'] = ''
+            scope.data['cursor'] = 0
+
     else:
-        stdscr.addstr(pos.y, pos.x, field, curses.color_pair(P_text_color))
+        stdscr.addstr(pos.y, pos.x, field, curses.color_pair(P_text_field))
 
     # pre text
     if bold:
         stdscr.attron(curses.A_BOLD)
     if inverse_color:
         stdscr.attron(curses.A_REVERSE)
-    stdscr.addstr(pos.y, pos.x, pre_text, curses.color_pair(P_text_color))
+    stdscr.addstr(pos.y, pos.x, pre_text, curses.color_pair(P_text_color) | curses.A_BOLD)
 
-    # trucate prompt if needed
+    # truncate prompt if needed
     field_length = len(field) - len(pre_text) - 1
     prompt_idx = scope.data['cursor']
     local_prompt_idx = prompt_idx
@@ -408,27 +475,24 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         if len(prompt) >= field_length:
             formatted_prompt = prompt[:field_length]
 
-    stdscr.addstr(pos.y, pos.x + len(pre_text), formatted_prompt)
+    stdscr.addstr(pos.y, pos.x + len(pre_text), formatted_prompt, curses.color_pair(P_text_field) | curses.A_BOLD)
     stdscr.attroff(curses.A_REVERSE)
 
     if scope_state:
-        #idx = scope.data['cursor']
-        #s = scope.data['prompt']
         if len(prompt) <= prompt_idx:  # check if we are on the peak o the string
-            stdscr.addstr(pos.y, pos.x + len(pre_text) + local_prompt_idx, u'\u2588')
+            stdscr.addstr(pos.y, pos.x + len(pre_text) + local_prompt_idx, u'\u2588', curses.color_pair(P_text_field))
             cursor_pos = pos + UIgraph.Point(len(pre_text) + local_prompt_idx, 0)
-            create_blinking_text(stdscr, cursor_pos, u'\u2588', P_text_color)
+            create_blinking_text(stdscr, cursor_pos, u'\u2588', P_text_field)
         else:
             cursor_pos = pos + UIgraph.Point(len(pre_text) + local_prompt_idx, 0)
-            create_blinking_text(stdscr, cursor_pos, prompt[prompt_idx], P_text_color)
+            create_blinking_text(stdscr, cursor_pos, prompt[prompt_idx], P_text_field)
 
     if not scope.data['valid_data']:
-        if pos.x + len(field) + len(invalid_data_message) < stdscr.getmaxyx()[1]:
+        if pos.x + len(field) + len(invalid_data_message) < stdscr.getmaxyx()[1] and ui_error_inside_the_prompt:
             stdscr.addstr(pos.y, pos.x + len(field) + 1, invalid_data_message, curses.color_pair(P_error))
         else:
-            mes = 'Invalid'
+            mes = scope.data["short_invalid_data_message"]
             stdscr.addstr(pos.y, pos.x + len(field) - len(mes), mes, curses.color_pair(P_error_white))
-
 
     # if pasted
     paste_scope = screen_state.scopes['paste']
@@ -450,19 +514,45 @@ def create_text_figlet(scr, pos: UIgraph.Point, figlet_font, text: str, P_text_c
         scr.addstr(pos.y + n, pos.x, line)
 
 
-def create_text_double_space(scr, pos: UIgraph.Point, text: str,
-                             P_text_color, P_background_color,
-                             edge_type: int, bold: bool = False):
+def create_text_double_space(scr, screenState: ScreenState, pos: UIgraph.Point, text: str,
+                             P_text_color, C_background_color, edge_type: int,
+                             bold: bool = False, inv_color: bool = False):
     """What?
     edge_type: 0 first row, 1 middle row, 2 end row, 3 single row"""
-    ### TODO: use only a single color for the background and create the pair here
+    ### TODO: P_background_color, could be a single color, C_backgroung.
     ### the example is in the screen_wallet
 
     col = pos.x
     row = pos.y
     text = f" {text} "  # add the frame
     text_len = len(text)
-    scr.attron(curses.color_pair(P_background_color) | curses.A_BOLD)
+
+    text_color_pair = UIgraph.customColorsPairs_findByValue(
+        screenState.cursesColors,
+        P_text_color)
+    default_background = UIgraph.customColors_findByValue(
+        screenState.cursesColors,
+        C_background_color)
+
+    if inv_color:
+        text_color_background = text_color_pair[0]
+        new_pair = (default_background, text_color_background)
+    else:
+        text_color_background = text_color_pair[1]
+        new_pair = (text_color_background, default_background)
+
+    P_frame = UIgraph.addCustomColorTuple(
+        new_pair,
+        screenState.cursesColors
+    )
+
+
+    scr.attron(curses.color_pair(P_frame))
+    if bold:
+        scr.attron(curses.A_BOLD)
+    if inv_color:
+        scr.attron(curses.A_REVERSE)
+
 
     if edge_type == 3:
         scr.addstr(row, col, u'\u2584' * (text_len))
@@ -481,16 +571,12 @@ def create_text_double_space(scr, pos: UIgraph.Point, text: str,
         #scr.attron(curses.color_pair(P_background_color) | curses.A_BOLD)
         scr.addstr(row + 2, col, u'\u2580' * (text_len))
     row += 1
-    scr.attroff(curses.A_REVERSE)
     scr.attron(curses.color_pair(P_text_color))
     scr.addstr(row, col, ' ' * (text_len))
-    #if multipleSelection:
-    #    scr.addstr(row, col, u' \u25A1 /\u25A0')
-    #else:
-    #    scr.addstr(row, col, ' ')
     scr.addstr(row, col, str(text))
 
     # disable bold
+    scr.attroff(curses.A_REVERSE)
     scr.attroff(curses.A_BOLD)
 
 
@@ -631,8 +717,10 @@ def create_tab(scr,
                multipleSelection=False,
                data_table_legend=None,
                column_widths=None,
-               chunk_loader: WDB.DataChunkLoader=None,
-               chunk_data_parser=None):
+               formatters=None,
+               chunk_loader: WDB.DataChunkLoader = None,
+               chunk_data_parser=None,
+               prepped_scope=None):
 
     """Create a beautiful and shining tab
     dataTable: 2dim data list
@@ -645,7 +733,7 @@ def create_tab(scr,
     tab_name = f"{parent_scope.id}_{tab_name}"
 
     ### init scope and add to parent
-    if tab_name not in screenState.scopes:
+    if tab_name not in screenState.scopes and prepped_scope is None:
         scope = Scope(tab_name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
@@ -659,23 +747,7 @@ def create_tab(scr,
 
     scope: Scope = screenState.scopes[tab_name]
     scope.set_visible()
-
-    #if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None:
-    if True:
-        scope.data['cached_data_table'] = dataTable
-        scope.data['cached_data_table_color'] = data_table_color
-    else:
-        old_data_table = scope.data['cached_data_table']
-        if dataTable == old_data_table:
-            dataTable = old_data_table
-            data_table_color = scope.data['cached_data_table_color']
-        else:
-            scope.data['cached_data_table'] = None
-            scope.data['cached_data_table_color'] = None
-            scope.data['transposed'] = None
-            scope.data['data_table_color'] = None
-            scope.data['casted_data_table'] = None
-            scope.data['column_sizes'] = None
+    scope.base_point = position
 
     ## TODO: check if the list is change, if yes reset the 'column_sizes'
 
@@ -690,7 +762,7 @@ def create_tab(scr,
     # [['DBX', '61.0000', '0.0041477', '-0.601%', '0.10754', '-0.601%', '0.25301', '6.55972'],
     # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
     # [...]]
-    ### TODO: traspose is to costly for large dataset, the data should be right from the beginning
+    ### TODO: traspose is too costly for large dataset, the data should be right from the beginning
     ### or chached it
     #if transpose and dataTable:
     #    if 'transposed' not in scope.data or scope.data['transposed'] is None:
@@ -711,8 +783,8 @@ def create_tab(scr,
     ### TODO: create a different fun the init a loader as a list and then call create_tab
     tab_scope_is_active = False
     scope_exec_args = [screenState]
-    chunk_size = 1
-    chunk_idx = 0
+    chunk_size = None
+    chunk_first_idx = None
     total_item_count = None
     row_count = None
     circular_selection = True
@@ -736,10 +808,58 @@ def create_tab(scr,
         lapper.clocking("parser chunks")
         # update the offset in the loader
         # chunk_loader.update_offset(select)
-    else:
+    elif chunk_loader == []:
+        total_item_count = 0
+        row_count = 0
+        dataTable = []
+    elif dataTable is not None:
         total_item_count = len(dataTable)
         row_count = len(dataTable)
+    else:
+        dataTable = []
+        total_item_count = 0
+        row_count = 0
+
     ### end
+
+    ### FRAME CACHE
+    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None:
+        scope.data['cached_data_table'] = dataTable
+        scope.data['cached_data_table_color'] = data_table_color
+        scope.data['cached_data_table_legend'] = data_table_legend
+        scope.data['cached_column_widths'] = column_widths
+        scope.data['cached_formatters'] = formatters
+        scope.data['chunk_first_idx'] = chunk_first_idx
+    else:
+        old_data_table = scope.data['cached_data_table']
+        old_first_idx = scope.data['chunk_first_idx']
+
+        # compare only the first element and the first chunk idx
+        # TODO: check also size of the windows change
+        if (dataTable and
+            len(dataTable[0]) == len(old_data_table[0]) and
+            dataTable[0] == old_data_table[0] and
+            dataTable[-1] == old_data_table[-1] and
+            chunk_first_idx == old_first_idx and
+            not screenState.screen_resized):
+
+            dataTable = old_data_table
+            data_table_color = scope.data['cached_data_table_color']
+            data_table_legend = scope.data['cached_data_table_legend']
+            column_widths = scope.data['cached_column_widths']
+            formatters = scope.data['cached_formatters']
+            # TODO: load teh cache?
+        else:
+            # TODO: implent cache filling later in the code
+            scope.data['cached_data_table'] = dataTable
+            scope.data['cached_data_table_color'] = data_table_color
+            scope.data['cached_data_table_legend'] = data_table_legend
+            scope.data['cached_column_widths'] = column_widths
+            scope.data['cached_formatters'] = formatters
+            # scope.data['transposed'] = None  # NOT IMPL
+            # scope.data['casted_data_table'] = None  # we do not cast...
+            scope.data['column_sizes'] = None
+
     lapper.clocking("we chunk")
 
     ### update scope
@@ -785,6 +905,12 @@ def create_tab(scr,
         elif data_table_legend:
             column_widths = [None] * len(data_table_legend)
 
+    if formatters is None:
+        if len(dataTable) > 0:
+            formatters = [None] * len(dataTable[0])
+        elif data_table_legend:
+            formatters = [None] * len(data_table_legend)
+
     lapper.clocking("color_ewnd")
 
     ### assert the shape of the data
@@ -794,6 +920,7 @@ def create_tab(scr,
         else:
             assert len(data_table_legend) == len(dataTable[0]), f"legend data length ({len(data_table_legend)}) differ from the data ({len(dataTable[0])})"
             assert len(data_table_legend) == len(column_widths), f"column widths list lenght ({len(column_widths)}) differ from the data ({len(dataTable[0])})"
+            assert len(data_table_legend) == len(formatters), f"formatters list lenght ({len(formatters)}) differ from the data ({len(dataTable[0])})"
 
     lapper.clocking("first")
 
@@ -826,13 +953,6 @@ def create_tab(scr,
     ### TODO: remove
     ### make the data as string before, it is wastefull to cast everything every frame
     lapper.clocking("cast init")
-    #if 'casted_data_table' not in scope.data or scope.data['casted_data_table'] is None:
-    if True:
-        dataTable = cast_table_items_to_string(dataTable)
-        scope.data['casted_data_table'] = dataTable
-    else:
-        dataTable = scope.data['casted_data_table']
-    lapper.clocking("cast tgo string")
 
     ### curse customs colors
     P_soft = screenState.colorPairs["tab_soft"]
@@ -905,7 +1025,7 @@ def create_tab(scr,
     table.bkgd(' ', curses.color_pair(P_win_background))
 
     ### highlight scope if selected
-    if scope.selected:
+    if scope.selected():
         scr.addstr(pos_y + y_tabSize, pos_x, u'\u2580' * x_tabSize,
                    curses.color_pair(P_win_selected))
         scr.addstr(pos_y + y_tabSize, pos_x + x_tabSize, u'\u2598',
@@ -924,12 +1044,13 @@ def create_tab(scr,
     # or
     # make a persisten data so you do not recalc every time
 
-    #if 'column_sizes' not in scope.data or scope.data['column_sizes'] == None:
-    if True:
+    #if True:
+    # TODO: make it None when the block_loader change of one unit, or calculate in a thread
+    if 'column_sizes' not in scope.data or scope.data['column_sizes'] is None:
         x_colSize, x_colStart, max_str_len_columns = calc_size_column(
             dataTable, data_table_color, data_table_legend,
             scope, max_table_width, multipleSelection,
-            x_tabSize, column_widths)
+            x_tabSize, column_widths, formatters)
         scope.data['column_sizes'] = (x_colSize, x_colStart, max_str_len_columns)
     else:
         x_colSize, x_colStart, max_str_len_columns = scope.data['column_sizes']
@@ -955,13 +1076,6 @@ def create_tab(scr,
         else:
             table.addstr(row, 0, ' ')
         for idx, leg_item in enumerate(data_table_legend):
-            print(len(data_table_legend))
-            print(len(dataTable))
-            print(len(dataTable[0]))
-            print(idx)
-            print(leg_item)
-            print(dataTable[0])
-            print(data_table_legend)
             table.addstr(row, x_colStart[idx], str(leg_item))
         table_color_pairs.reverse()  # to begin always with the soft color
         table_bk_colors.reverse()  # to begin always with the soft color
@@ -972,18 +1086,22 @@ def create_tab(scr,
     current_selection_data = None
     ### data loop ###
     row = height_legend
-    sliced_dataTable = dataTable[idx_first_element:idx_last_element]
+    sliced_raw_dataTable = dataTable[idx_first_element:idx_last_element]
     sliced_idx_dataTable = range(idx_first_element, idx_last_element)
 
-    for data_row, data_idx in zip(sliced_dataTable, sliced_idx_dataTable):
+
+    # TODO: test casting only showed data
+    sliced_dataTable = cast_table_items_to_string(sliced_raw_dataTable, formatters)
+
+    for data_row, raw_data_row, data_idx in zip(sliced_dataTable, sliced_raw_dataTable, sliced_idx_dataTable):
         C_custom_bk = table_bk_colors[row % 2]
         P_current_attron = curses.color_pair(table_color_pairs[row % 2])  # calling it P_... is misleading
         if data_idx == select and tab_scope_is_active:
             P_current_attron = curses.color_pair(P_select)
             scope_exec_args.append(data_table_keys[data_idx] if data_table_keys else None)
-            current_selection_data = data_row
+            current_selection_data = raw_data_row
         elif data_idx == select:
-            current_selection_data = data_row
+            current_selection_data = raw_data_row
 
 
         table.attron(P_current_attron)
@@ -1016,7 +1134,7 @@ def create_tab(scr,
                     screenState.cursesColors)
                 table.attron(curses.color_pair(text_c_pair))
 
-            max_str_length = max_str_len_columns[i_col] - 1  # free space for columns
+            max_str_length = max_str_len_columns[i_col] - 2  # free space for columns -> it is the COST column separator in calc_column_width
             if len(col) > max_str_length:
                 if max_str_length > 10:
                     col = col[:max_str_length - 10] + "<...>" + col[len(col) - 5:]
@@ -1069,10 +1187,13 @@ def create_tab(scr,
 
 
     ### end of the window
+    table.attron(curses.color_pair(P_soft_bg) | curses.A_BOLD)
     while row <= (y_tabSize - height_low_bar):
-        table.attron(curses.color_pair(P_soft_bg) | curses.A_BOLD)
         try:
-            table.addstr(row, 0, u'\u2571' * (x_tabSize))
+            # TODO: default terminal of ubuntu struggles doing a whole screen of this char
+            #table.addstr(row, 0, u'\u2571' * (x_tabSize))
+            #table.addstr(row, 0, u'\u002F' * (x_tabSize))
+            table.addstr(row, 0, '/' * (x_tabSize))
         except:
             ### last line curses bug ###
             pass
@@ -1081,7 +1202,7 @@ def create_tab(scr,
 
     # if yanked
     copy_scope = screenState.scopes['copy']
-    if (keyboardState.yank and tab_scope_is_active) or (scope.selected and screenState.activeScope == copy_scope):
+    if (keyboardState.yank and tab_scope_is_active) or (scope.selected() and screenState.activeScope == copy_scope):
         # create a new over scope where you can select the bit of info you want
         def copy_action():
             create_copy_banner(table, screenState, scope, current_selection_data, False)
@@ -1092,6 +1213,186 @@ def create_tab(scr,
     print(lapper)
 
     return scope
+
+
+def create_message_banner(stdscr, screenState: ScreenState, parent_scope: Scope,
+                          address: str):
+    ### name
+    scope_name = f"{parent_scope.id}_the_message"
+
+    ### init scope and add to paren
+    if scope_name not in screenState.scopes:
+        scope = Scope(scope_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope.main_scope
+        scope.exec = ScopeActions.activate_scope
+        #parent_scope.sub_scopes[scope_name] = scope
+
+        scope.exec_esc = ScopeActions.exit_scope
+        screenState.activeScope = scope
+
+    scope: Scope = screenState.scopes[scope_name]
+    scope.set_visible()
+    tab_scope_is_active = False
+    scope_exec_args = [screenState, address]
+
+    if scope is screenState.activeScope:
+        scope.update()
+        screenState.scope_exec_args = scope_exec_args
+        tab_scope_is_active = True
+
+    #### end init
+
+    if screenState.activeScope == scope or screenState.activeScope.name in scope.sub_scopes:
+
+        P_body = screenState.colorPairs["body"]
+        P_banner = screenState.colorPairs["copy_banner"]  # change with a paste bannnnner
+        P_win_sel = screenState.colorPairs["up"]  # change with a paste bannnnner
+        P_win_background = screenState.colorPairs["tab_soft"]
+        temp_vec = stdscr.getmaxyx()
+        win_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
+        width = int(win_dim.x * 0.85)
+        height = 11
+        pos_x = (win_dim.x - width) // 2
+        pos_y = win_dim.y // 2 - height // 2
+
+        banner = stdscr.subwin(height, width, pos_y, pos_x)
+        banner.bkgd(' ', curses.color_pair(P_banner))
+
+        temp_vec = banner.getmaxyx()
+        ban_dim = UIgraph.Point(width, height)
+
+        for i in range(height - 1):
+            create_text(banner, UIgraph.Point(0, i), ' ' * ban_dim.x, P_banner, True)
+
+        margin = UIgraph.Point(0,1)
+        text = f"Address saved..."
+        create_text_aligned(banner, margin, text, P_banner, align_h=1)
+        margin += UIgraph.Point(0,1)
+        create_text_aligned(banner, margin, f"{address}", P_banner, bold=True, align_h=1)
+        pos = UIgraph.Point(1,4)
+
+        button_name = 'ok'
+        button_lenght = len(button_name) + 6
+        bbox = UIgraph.Point(button_lenght, 1)
+        margin += UIgraph.Point(0,2)
+        pos = align_bounding_box(banner, bbox, margin, align_h=1)
+        scope_search_button: Scope = create_button(banner, screenState, scope, button_name, pos,
+                                                   custom_scope_function=ScopeActions.exit_scope_N(2),
+                                                   button_type='execution',
+                                                   C_background=screenState.colors['tab_softer'],      # background
+                                                   C_text=screenState.colors['white'],                    # text
+                                                   C_button=screenState.colors['chia_green'],  # button color
+                                                   #C_button=screenState.colors['orange_btc'],  # button color
+                                                   C_selection=screenState.colors['gray'],           # when selected
+                                                   )
+
+
+def create_save_address_banner(stdscr, screenState: ScreenState, parent_scope: Scope,
+                               address: str):
+    ### name
+    #scope_name = f"{parent_scope.id}_{scope_name}"
+    scope_name = "save_address_banner"
+
+    ### init scope and add to paren
+    if scope_name not in screenState.scopes:
+        scope = Scope(scope_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope.main_scope
+        scope.exec = ScopeActions.activate_scope
+        #parent_scope.sub_scopes[scope_name] = scope
+
+        scope.exec_esc = ScopeActions.exit_scope
+        screenState.activeScope = scope
+
+    scope: Scope = screenState.scopes[scope_name]
+    scope.set_visible()
+    tab_scope_is_active = False
+    scope_exec_args = [screenState, address]
+
+    if scope is screenState.activeScope:
+        scope.update()
+        screenState.scope_exec_args = scope_exec_args
+        tab_scope_is_active = True
+
+    #### init
+
+    P_body = screenState.colorPairs["body"]
+    P_banner = screenState.colorPairs["copy_banner"]  # change with a paste bannnnner
+    P_win_sel = screenState.colorPairs["up"]  # change with a paste bannnnner
+    P_win_background = screenState.colorPairs["tab_soft"]
+    temp_vec = stdscr.getmaxyx()
+    win_dim = UIgraph.Point(temp_vec[1], temp_vec[0])
+    width = int(win_dim.x * 0.85)
+    height = 11
+    pos_x = (win_dim.x - width) // 2
+    pos_y = win_dim.y // 2 - height // 2
+
+    banner = stdscr.subwin(height, width, pos_y, pos_x)
+    banner.bkgd(' ', curses.color_pair(P_body))
+
+    temp_vec = banner.getmaxyx()
+    ban_dim = UIgraph.Point(width, height)
+
+    for i in range(height - 1):
+        create_text(banner, UIgraph.Point(0, i), ' ' * ban_dim.x, P_banner, True)
+
+    margin = UIgraph.Point(0,1)
+    text = f"Do you want to save the following address?"
+    create_text_aligned(banner, margin, text, P_banner, align_h=1)
+    margin += UIgraph.Point(0,1)
+    create_text_aligned(banner, margin, f"{address}", P_banner, bold=True, align_h=1)
+    pos = UIgraph.Point(1,4)
+
+    prompt_name = 'address_name'
+    prompt_scope_name = f"{scope.id}_{prompt_name}"
+
+    if prompt_scope_name not in screenState.scopes:
+        prompt_scope = Scope(prompt_scope_name, parent_scope.screen, screenState)
+        prompt_scope.parent_scope = scope
+        prompt_scope.main_scope = scope.main_scope
+        prompt_scope.exec = ScopeActions.activate_scope
+        scope.sub_scopes[prompt_scope_name] = prompt_scope
+        prompt_scope.visible = True
+
+        prompt_scope.exec_own = ScopeActions.select_next_scope
+
+        prompt_scope.data["prompt"] = ""
+        prompt_scope.data["cursor"] = 0
+        prompt_scope.data["valid_data"] = True
+        prompt_scope.data["invalid_data_message"] = 'INV'
+
+    prompt_scope = screenState.scopes[prompt_scope_name]
+
+    pre_text = "Address name: "
+    prompt_len = 40
+    tot_len = len(pre_text) + prompt_len
+    bbox = UIgraph.Point(tot_len, 1)
+    margin += UIgraph.Point(0,2)
+    pos = align_bounding_box(banner, bbox, margin, align_h=1)
+    create_prompt(banner, screenState, KeyboardState, scope, prompt_name, pos,
+                  pre_text, tot_len, P_banner, prepped_scope=prompt_scope,
+                  ui_error_inside_the_prompt=False,
+                  P_text_field=screenState.colorPairs['text_field_banner'],
+                  C_selected=screenState.colors['chia_green'])
+
+    scope_exec_args.append(prompt_scope.data['prompt'])
+    scope_exec_args.append(prompt_scope)
+
+    button_name = 'save address'
+    button_lenght = len(button_name) + 6
+    bbox = UIgraph.Point(button_lenght, 1)
+    margin += UIgraph.Point(0,2)
+    pos = align_bounding_box(banner, bbox, margin, align_h=1)
+    scope_search_button: Scope = create_button(banner, screenState, scope, button_name, pos,
+                                               custom_scope_function=ScopeActions.save_address,
+                                               button_type='execution',
+                                               C_background=screenState.colors['tab_softer'],      # background
+                                               C_text=screenState.colors['white'],                    # text
+                                               C_button=screenState.colors['chia_green'],  # button color
+                                               #C_button=screenState.colors['orange_btc'],  # button color
+                                               C_selection=screenState.colors['gray'],           # when selected
+                                               )
 
 
 # now we save the banner in screenState.pending_action, so only init should not be neccessary anymore...
@@ -1213,9 +1514,14 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         scope.main_scope = parent_scope.main_scope
         scope.exec = ScopeActions.activate_scope
         ## not added as sub-scope, or when i delete it, i should delete also from there?
-        # parent_scope.sub_scopes[tab_name] = scope 
+        # parent_scope.sub_scopes[tab_name] = scope
 
         #scope.data['copied_data'] = data.insert(0, 'all')  # element to select everything
+        # cast data
+        data = data.copy()
+        for idx, i in enumerate(data):
+            data[idx] = str(i)
+
         data.insert(0, 'all')
         scope.data['copied_data'] = data
 
@@ -1243,6 +1549,7 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
     tab_scope_is_active = False
     scope_exec_args = [screenState]
     data = scope.data['copied_data']  # to keep the data consistent
+
     if scope is screenState.activeScope:
         scope.update_no_sub(len(data))
         screenState.scope_exec_args = scope_exec_args
@@ -1251,7 +1558,8 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
     # TODO
     # update cursor_x
     # temp fix for keyboard execution left/right inverted
-    cursor_x = scope.cursor_x * -1 % len(data)
+    # cursor_x = scope.cursor_x * -1 % len(data)
+    cursor_x = scope.cursor_x  # % len(data)
 
     if only_init:
         return scope
@@ -1348,86 +1656,130 @@ def create_copy_banner(stdscr, screenState: ScreenState, parent_scope: Scope, da
         p += UIgraph.Point(len(text), 0)
 
 
-def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: str,
-                     dataTable, data_table_keys: List[str], data_table_color,
-                     transpose: bool, pos: UIgraph.Point, size: UIgraph.Point,
-                     keyboardState, tabName, row_height, sub_scope_activation, active=False, multipleSelection=False,
-                     data_table_legend=None, graph_data=None, is_singular_item_table=True):
-    """Create a beautiful and shining tab
-    dataTable: 2dim data list
-    data_table_keys: key used when something is selected
-    active: if we can select elements
-    singular: if it is a tab with only one item it is never active"""
+def safe_addstr(win, y: int, x: int, string: str) -> None:
+    """
+    Safely writes a string to a curses window.
+    Prevents crashes caused by curses throwing errors when writing to the 
+    bottom-right character of a window.
+    """
+    try:
+        win.addstr(y, x, string)
+    except curses.error:
+        pass
 
-    ### to rewrite and integrate with the normal create_tab, keep only the graphic part separeted
 
+def create_tab_large(scr,
+                     screenState,
+                     parent_scope,
+                     tab_name: str,
+                     dataTable,
+                     data_table_keys: List[str],
+                     data_table_color,
+                     transpose: bool,
+                     pos,
+                     size,
+                     keyboardState,
+                     sub_scope_activation,
+                     row_height,
+                     active=False,
+                     multipleSelection=False,
+                     data_table_legend=None,
+                     column_widths=None,
+                     formatters=None,
+                     graph_data=None,
+                     is_singular_item_table=True):
+    """
+    Create a beautiful and shining tab for large content blocks with custom row heights.
+    - dataTable: 2-dimensional data list
+    - data_table_keys: keys used when select actions fire
+    - active: selection logic active
+    - is_singular_item_table: if single-item, parent navigation is respected
+    """
+    ### Unique Name Assignment
+    tab_name = f"{parent_scope.id}_{tab_name}"
+
+    ### Scope Initialization & Registration
+    if tab_name not in screenState.scopes:
+        scope = Scope(tab_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope
+        scope.exec = ScopeActions.activate_scope
+        parent_scope.sub_scopes[tab_name] = scope
+        scope.visible = True
+        scope.exec_own = sub_scope_activation
+
+    scope = screenState.scopes[tab_name]
+    scope.set_visible()
+    scope.base_point = pos
+
+    ### Transpose if requested
+    if transpose and dataTable:
+        dataTable = transpose_table(dataTable)
+        if data_table_color:
+            data_table_color = transpose_table(data_table_color)
+
+    ### Update scope status
+    tab_scope_is_active = False
+    scope_exec_args = [screenState]
+    total_item_count = len(dataTable) if dataTable is not None else 0
+    row_count = total_item_count
+
+    if scope is screenState.activeScope:
+        if False:  # Reserved fallback path matching your original logic structures
+            screenState.activeScope = scope.parent_scope
+        else:
+            scope.update_no_sub(total_item_count)
+            screenState.scope_exec_args = scope_exec_args
+            tab_scope_is_active = True
+            screenState.footer_text += "| copy=y "
+
+    selected_idx = scope.cursor
+
+    ### If no data, populate a fallback empty representation
+    if total_item_count == 0:
+        if data_table_legend:
+            new_empty_line = [''] * len(data_table_legend)
+            new_empty_line[0] = "empty table"
+            dataTable = [new_empty_line]
+            total_item_count = 1
+            row_count = 1
+
+    ### Ensure custom data table colors exist
+    if data_table_color is None:
+        row = len(dataTable)
+        col = len(dataTable[0]) if row > 0 else 0
+        data_table_color = [[None] * col for _ in range(row)]
+        scope.data['data_table_color'] = data_table_color
+
+    if column_widths is None:
+        cols_count = len(dataTable[0]) if len(dataTable) > 0 else (len(data_table_legend) if data_table_legend else 0)
+        column_widths = [None] * cols_count
+
+    if formatters is None:
+        cols_count = len(dataTable[0]) if len(dataTable) > 0 else (len(data_table_legend) if data_table_legend else 0)
+        formatters = [None] * cols_count
+
+    ### Assert basic physical shape integrity
+    if data_table_legend and len(dataTable) > 0:
+        assert len(data_table_legend) == len(dataTable[0]), \
+            f"legend data length ({len(data_table_legend)}) differs from the data ({len(dataTable[0])})"
+        assert len(data_table_legend) == len(column_widths), \
+            f"column widths list length ({len(column_widths)}) differs from the data ({len(dataTable[0])})"
+
+    ### Geometry & Window boundaries
     win_width = screenState.screen_size.x
     win_height = screenState.screen_size.y
 
     if row_height != 2:
         row_height = row_height + (not row_height % 2)
 
-    name = f"{parent_scope.id}_{name}"
-
-    if name not in screenState.scopes:
-        scope = Scope(name, parent_scope.screen, screenState)
-        scope.parent_scope = parent_scope
-        scope.main_scope = parent_scope
-        if len(data_table_keys) > 1:
-            scope.exec = ScopeActions.activate_scope
-
-            # create a child to create another window
-            # probably it should be something that we define outside
-            # this function because it change every time
-            child_name = name + "temp_child"
-            child_scope = Scope(child_name, None, screenState)
-
-            child_scope.exec = sub_scope_activation
-            child_scope.parent_scope = scope
-
-            scope.sub_scopes[child_name] = child_scope
-        else:
-            scope.exec = sub_scope_activation
-        parent_scope.sub_scopes[name] = scope
-
-    scope = screenState.scopes[name]
-    tab_scope_is_active = False
-    scope_exec_args = [screenState]
-    if scope is screenState.activeScope:
-        if is_singular_item_table:
-            screenState.activeScope = scope.parent_scope
-        else:
-            scope.update_no_sub(len(dataTable[0]))
-            screenState.scope_exec_args = scope_exec_args
-            tab_scope_is_active = True
-
-    ### end scope stuff ####
-
-    ### tab geometry
     x_tabSize = size.x
     y_tabSize = size.y
 
     height_low_bar = 1
-    height_legend = 3
-    if data_table_legend is None:
-        height_legend = 0
+    height_legend = 3 if data_table_legend is not None else 0
 
-    # make data as stirng
-    data_table_table_str = []
-    for col in dataTable:
-        col_str = []
-        for u in col:
-            if isinstance(u, float):
-                #if u > 1:
-                u = DEX.format_and_round_number(u, 5, 10)
-                col_str.append(str(u))
-            else:
-                col_str.append(str(u))
-        data_table_table_str.append(col_str)
-
-    dataTable = data_table_table_str
-
-    # curse customs colors
+    # Curses color initializations
     P_soft = screenState.colorPairs["tab_soft"]
     P_dark = screenState.colorPairs["tab_dark"]
     P_soft_bg = screenState.colorPairs["tab_soft_bg"]
@@ -1439,346 +1791,302 @@ def create_tab_large(scr, screenState: ScreenState, parent_scope: Scope, name: s
         P_win_selected = screenState.colorPairs["body"]
     P_win_background = screenState.colorPairs["tab_soft"]
 
-    # background for custom colors
     C_default_background = screenState.colors["background"]
     C_soft_background = screenState.colors["tab_soft"]
     C_dark_background = screenState.colors["tab_dark"]
 
-    table_bk_colors = [C_soft_background, C_dark_background]  # these are not pairs
+    table_bk_colors = [C_soft_background, C_dark_background]
     table_color_pairs = [P_soft, P_dark]
     table_alternative_bk_pairs = [P_soft_bg, P_dark_bg]
 
-    if data_table_color is None:
-        row = len(dataTable)
-        col = len(dataTable[0])
-        data_table_color = [[None] * col] * row
 
-    # debug
-    # scr.addstr(3, 3, f"dim {len(dataTable)} and {len(dataTable[0])}")
-    # scr.addstr(4, 3, f"dim {len(data_table_color)} and {len(data_table_color[0])}")
-    # scr.addstr(5, 3, f"dim {str(data_table_color)}")
+    if multipleSelection and "idx_selected" not in scope.data:
+        scope.data["idx_selected"] = []
+    if "idx_first_element" not in scope.data:
+        scope.data["idx_first_element"] = 0
+    idx_first_element = scope.data["idx_first_element"]
 
-    # TODO eliminate one of the two transpositions
-    if transpose:
-        transposed_table = [[row[i] for row in dataTable] for i in range(len(dataTable[0]))]
+    # Calculate actual row space and correct items fitting inside height boundaries
+    col_len = row_count
+    visible_row_count = y_tabSize - height_low_bar - height_legend
+    visible_item_count = max(visible_row_count // row_height, 1)
 
-        dataTable = transposed_table
+    ### Calculate vertical viewport slicing boundaries
+    idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(
+        selected_idx, idx_first_element, visible_item_count
+    )
+    
+    # Adjust scrolling when resized
+    tab_length = idx_last_element - idx_first_element
+    if tab_length < visible_item_count:
+        idx_first_element = max(idx_first_element - (visible_item_count - tab_length), 0)
+        idx_first_element, idx_last_element, select = recalcultate_first_and_last_element(
+            selected_idx, idx_first_element, visible_item_count
+        )
 
-        transposed_table = [[row[i] for row in data_table_color] for i in range(len(data_table_color[0]))]
+    scope.data["idx_first_element"] = idx_first_element
+    original_idx_first_element = idx_first_element
 
-        data_table_color = transposed_table
-
-    ### tab creation
-    # add the scroll logic above
-
-    ## logic for multiple lines
-    ## TODO -> move to scopes
-    ## add logic to reset or check if the elements changes in any wat
-    ## to avoid that the selection change... or find anther way to select it that
-    ## is not the index. Maybe a dic with a unique key could be better
-    # select pair
-    if tabName not in screenState.screen_data:
-        screenState.screen_data[tabName] = {}
-        if multipleSelection:
-            screenState.screen_data[tabName]["idx_selected"] = []
-    if "idx_first_element" not in screenState.screen_data:
-        screenState.screen_data[tabName]["idx_first_element"] = 0
-
-    select = screenState.selection
-    idx_first_element = screenState.screen_data[tabName]["idx_first_element"]
-
-    # here to be clarified if we transpose or not, or how to manage the transposition
-    # ideally a togle to transpose and then make the code without any transposition
-    # afterward
-    col_len = len(dataTable[0])
-    rows_number = (y_tabSize - height_low_bar - height_legend) // row_height
-
-    #select = select % col_len
-    select = scope.cursor % col_len
-    idx_last_element = idx_first_element + rows_number
-    if select >= (idx_last_element):
-        idx_last_element = select + 1
-        idx_first_element = idx_last_element - rows_number
-    elif idx_first_element > select:
-        idx_first_element = select % col_len
-        idx_last_element = (idx_first_element + rows_number) % col_len
-
-    count = 0
-    idx_dataTable = range(col_len)
-
-    screenState.screen_data[tabName]["idx_first_element"] = idx_first_element
-
-    # max dim for the table
-    max_table_width = win_width - pos.x - 3  # maybe add a global for borders
+    # Absolute drawing limits
+    max_table_width = win_width - pos.x - 3
     x_tabSize = max_table_width
 
-    table = scr.subwin(y_tabSize, x_tabSize, pos.y, pos.x)
+    y_copy_win = win_height - pos.y - 2
+    copy_win = scr.subwin(y_copy_win, x_tabSize, pos.y, pos.x)
 
-    # selection
-    if scope.selected:
-        scr.addstr(pos.y + y_tabSize - 1, pos.x, u'\u2580' * x_tabSize,
-                   curses.color_pair(P_win_selected))
-        scr.addstr(pos.y + y_tabSize - 1, pos.x + x_tabSize, u'\u2598',
-                   curses.color_pair(P_win_selected))
+    table = scr.subwin(y_tabSize, x_tabSize, pos.y, pos.x)
+    table.bkgd(' ', curses.color_pair(P_win_background))
+
+    # Highlight active border frame
+    if scope.selected():
+        scr.addstr(pos.y + y_tabSize - 1, pos.x, u'\u2580' * x_tabSize, curses.color_pair(P_win_selected))
+        scr.addstr(pos.y + y_tabSize - 1, pos.x + x_tabSize, u'\u2598', curses.color_pair(P_win_selected))
         for i in range(y_tabSize):
-            scr.addstr(pos.y + i - 1, pos.x + x_tabSize, u'\u258c',
-                       curses.color_pair(P_win_selected))
-    if scope.selected and len(data_table_keys) == 1:
+            scr.addstr(pos.y + i - 1, pos.x + x_tabSize, u'\u258c', curses.color_pair(P_win_selected))
+
+    if scope.selected() and data_table_keys is not None and len(data_table_keys) == 1:
         screenState.scope_exec_args = [screenState, data_table_keys[0]]
     else:
         screenState.scope_exec_args = [screenState]
 
-    # max dim for columns
-    max_dims = []
-    total_dims = 0
-    column_separator = 2
-    for idx in range(len(dataTable)):
-        max_dim = 0
-        for i in dataTable[idx]:
-            if len(str(i)) > max_dim:
-                max_dim = len(i)
-        if data_table_legend is not None:
-            for i in data_table_legend[idx]:
-                if len(i) > max_dim:
-                    max_dim = len(i)
-        max_dim += column_separator
-        total_dims += max_dim
-        max_dims.append(max_dim)
-
-    if total_dims > max_table_width:
-        scope_x = scope.cursor_x
-        scope.cursor_x = 0
-        scr.addstr(25,10, f"the x scope is {scope_x}")
-        idx_fix_item = 2
-        # remove column based on the cursor value
-        while scope_x > 0 and total_dims > max_table_width:
-            dim = max_dims.pop(idx_fix_item)
-            dataTable.pop(idx_fix_item)
-            data_table_color.pop(idx_fix_item)
-            if data_table_legend is not None:
-                data_table_legend.pop(idx_fix_item)
-            total_dims -= dim
-            scope_x -= 1
-            scope.cursor_x += 1
-        # remove last column until there is enough space
-        while total_dims > max_table_width:
-            dim = max_dims.pop(-1)
-            dataTable.pop(-1)
-            data_table_color.pop(-1)
-            if data_table_legend is not None:
-                data_table_legend.pop(-1)
-            total_dims -= dim
-
-    x_remainder = 0
-
-    ###### second transposition... ######
-    transposed_table = [[row[i] for row in dataTable] for i in range(len(dataTable[0]))]
-    dataTable = transposed_table
-    transposed_table = [[row[i] for row in data_table_color] for i in range(len(data_table_color[0]))]
-    data_table_color = transposed_table
-    # example of the shape of the data, per line
-    # [['DBX', '61.0000', '0.0041477', '-0.601%', '0.10754', '-0.601%', '0.25301', '6.55972'],
-    # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
-
-    n_columns = len(dataTable[0])
-    if multipleSelection:
-        n_columns += 1  # add the selection column
-
-    x_remainder = (x_tabSize - total_dims) // n_columns
-
-    x_colDim = []
-    for i in max_dims:
-        x_colDim.append(i + x_remainder)
-        # x_colDim.append(i)
-
-    x_colStart = [0]
-    if multipleSelection:
-        #x_colStart[0] += 4 # add the selection column
-        x_colStart[0] += 7  # add the selection column
-    else:
-        x_colStart[0] += 1  # add the selection column
-    for i in range(len(max_dims) - 1):
-        x_colStart.append(x_colStart[-1] + max_dims[i] + x_remainder)
+    # Precalculate column positions
+    x_colSize, x_colStart, max_str_len_columns = calc_size_column(
+        dataTable, data_table_color, data_table_legend,
+        scope, max_table_width, multipleSelection,
+        x_tabSize, column_widths, formatters
+    )
 
     row = 0
-    ### legend loop ###
     if data_table_legend is not None:
-
         frame_legend = UIgraph.addCustomColorTuple(
             (C_soft_background, C_default_background),
-            screenState.cursesColors)
+            screenState.cursesColors
+        )
         table.attron(curses.color_pair(frame_legend) | curses.A_BOLD)
 
-        table.addstr(row, 0, u'\u2584' * (x_tabSize))
-        table.addstr(row + 2, 0, u'\u2580' * (x_tabSize))
+        table.addstr(row, 0, u'\u2584' * x_tabSize)
+        table.addstr(row + 2, 0, u'\u2580' * x_tabSize)
         row += 1
+
         table.attron(curses.color_pair(P_soft))
-        table.addstr(row, 0, ' ' * (x_tabSize))
+        table.addstr(row, 0, ' ' * x_tabSize)
+
         if multipleSelection:
             table.addstr(row, 0, u' \u25A1 /\u25A0')
         else:
             table.addstr(row, 0, ' ')
+
         for idx, leg_item in enumerate(data_table_legend):
             table.addstr(row, x_colStart[idx], str(leg_item))
-        if row_height == 2:
-            table_color_pairs.reverse()  # to begin always with the soft color
-            table_bk_colors.reverse()  # to begin always with the soft color
-            table_alternative_bk_pairs.reverse()  # to begin always with the soft color
 
-        # disable bold
+        if row_height == 2:
+            table_color_pairs.reverse()
+            table_bk_colors.reverse()
+            table_alternative_bk_pairs.reverse()
+
         table.attroff(curses.A_BOLD)
 
-    ### data loop ###
 
+
+
+
+
+
+
+    #if data_table_legend is not None:
+
+    #    frame_legend = UIgraph.addCustomColorTuple(
+    #        (C_soft_background, C_default_background),
+    #        screenState.cursesColors)
+    #    table.attron(curses.color_pair(frame_legend) | curses.A_BOLD)
+
+    #    table.addstr(row, 0, u'\u2584' * (x_tabSize))
+    #    table.addstr(row + 2, 0, u'\u2580' * (x_tabSize))
+    #    row += 1
+    #    table.attron(curses.color_pair(P_soft))
+    #    table.addstr(row, 0, ' ' * (x_tabSize))
+    #    if multipleSelection:
+    #        table.addstr(row, 0, u' \u25A1 /\u25A0')
+    #    else:
+    #        table.addstr(row, 0, ' ')
+    #    for idx, leg_item in enumerate(data_table_legend):
+    #        table.addstr(row, x_colStart[idx], str(leg_item))
+    #    if row_height == 2:
+    #        table_color_pairs.reverse()  # to begin always with the soft color
+    #        table_bk_colors.reverse()  # to begin always with the soft color
+    #        table_alternative_bk_pairs.reverse()  # to begin always with the soft color
+
+    #    # disable bold
+    #    table.attroff(curses.A_BOLD)
+
+
+
+
+
+
+
+
+
+
+    ### Data drawing lifecycle
+    current_selection_data = None
     row = height_legend
-    if row_height == 2:
-        row = height_legend - 1
 
-    for data_row, data_idx in zip(
-            dataTable[idx_first_element:idx_last_element],
-            idx_dataTable[idx_first_element:idx_last_element]):
+    # Viewport-sliced elements
+    sliced_raw_dataTable = dataTable[idx_first_element:idx_last_element]
+    sliced_idx_dataTable = range(idx_first_element, idx_last_element)
 
+    # Cast visible rows on-the-fly to ensure max scroll velocity
+    sliced_dataTable = cast_table_items_to_string(sliced_raw_dataTable, formatters)
+
+    count = 0
+    for data_row, raw_data_row, data_idx in zip(sliced_dataTable, sliced_raw_dataTable, sliced_idx_dataTable):
         C_custom_bk = table_bk_colors[count % 2]
         P_current_attron = curses.color_pair(table_color_pairs[count % 2])
         P_current_bg = curses.color_pair(table_alternative_bk_pairs[count % 2])
+
         if data_idx == select and tab_scope_is_active:
             P_current_attron = curses.color_pair(P_select)
             scope_exec_args.append(data_table_keys[data_idx] if data_table_keys else None)
-
-            # to highlight the entire row, but not working correctly if the
-            # height is odd...
-            #P_current_bg= curses.color_pair(table_color_pairs[not count % 2])
+            current_selection_data = raw_data_row
+        elif data_idx == select:
+            current_selection_data = raw_data_row
 
         table.attron(P_current_attron)
-        #table.addstr(row, 0, ' ' * (x_tabSize))
 
-        text_double_space(table, UIgraph.Point(0, row), ' ' * (x_tabSize),
-                          P_current_attron, P_current_bg,
-                          0, row_height)
+        # Draw empty spacing background using the custom heights logic
+        text_double_space(
+            table, UIgraph.Point(0, row), ' ' * x_tabSize,
+            P_current_attron, P_current_bg,
+            0, row_height
+        )
 
-        ##################################################
-        #####work around curses bug last char last column
-        ##################################################
-        #try:
-        #    table.addstr(data_idx, 0, ' ' * (x_tabSize))
-        #except:
-        #    pass
-        ###################################################
-
+        # Draw selection indicators if multipleSelection is active
         if multipleSelection:
-            if data_idx in screenState.screen_data[tabName]['idx_selected']:
+            # Safely check selection list context
+            if data_idx in scope.data.get("idx_selected", []):
                 P_current_attron = curses.color_pair(P_selected)
                 C_custom_bk = screenState.colors["chia_green"]
                 table.attron(P_current_attron)
-                #table.addstr(data_idx, 0, ' ' * (x_tabSize))
-                #table.addstr(row, 1, u' \u25A0')
-                P_sel_bg= curses.color_pair(table_color_pairs[not count % 2])
-                text_double_space(table, UIgraph.Point(0, row), ' ' * (x_tabSize),
-                                  P_current_attron, P_sel_bg,
-                                  0, row_height)
-                text_double_space(table, UIgraph.Point(1, row), u' \u25A0',
-                                  P_current_attron, P_current_bg,
-                                  0, row_height)
+                P_sel_bg = curses.color_pair(table_color_pairs[not count % 2])
+                text_double_space(
+                    table, UIgraph.Point(0, row), ' ' * x_tabSize,
+                    P_current_attron, P_sel_bg,
+                    0, row_height
+                )
+                text_double_space(
+                    table, UIgraph.Point(1, row), u' \u25A1',
+                    P_current_attron, P_current_bg,
+                    0, row_height
+                )
             else:
-                #table.addstr(row, 1, u' \u25A1')
-                text_double_space(table, UIgraph.Point(1, row), u' \u25A1',
-                                  P_current_attron, P_current_bg,
-                                  0, row_height)
+                text_double_space(
+                    table, UIgraph.Point(1, row), u' \u25A1',
+                    P_current_attron, P_current_bg,
+                    0, row_height
+                )
 
-        for i_col, col in enumerate(data_row):
-            text_color = data_table_color[data_idx][i_col]
+        # Draw row strings column-by-column
+        for i_col, col_val in enumerate(data_row):
+            text_color = data_table_color[data_idx][i_col] if data_idx < len(data_table_color) else None
             P_mod_attron = P_current_attron
+            
             if text_color is not None and (data_idx != select or not tab_scope_is_active):
                 text_c_pair = UIgraph.addCustomColorTuple(
                     (text_color, C_custom_bk),
-                    screenState.cursesColors)
+                    screenState.cursesColors
+                )
                 P_mod_attron = curses.color_pair(text_c_pair)
                 table.attron(P_mod_attron)
 
-            text_double_space(table, UIgraph.Point(x_colStart[i_col], row), str(col),
-                              P_mod_attron, P_current_bg,
-                              0, row_height)
-            #table.addstr(row, x_colStart[i_col], str(col))
+            # Safeguard text overflow limits
+            max_str_length = max_str_len_columns[i_col] - 2
+            col_str = str(col_val)
+            if len(col_str) > max_str_length:
+                if max_str_length > 10:
+                    col_str = col_str[:max_str_length - 10] + "<...>" + col_str[-5:]
+                elif max_str_length > 4:
+                    col_str = col_str[:max_str_length - 4] + "<...>"
+                else:
+                    col_str = "." * max_str_length
+
+            text_double_space(
+                table, UIgraph.Point(x_colStart[i_col], row), col_str,
+                P_mod_attron, P_current_bg,
+                0, row_height
+            )
             table.attron(P_current_attron)
 
-        ###row += 2
         row += row_height
         count += 1
-        #row = row % height
-    ### end of the window
+
+    ### Draw lateral position scrollbar
+    steps = total_item_count - visible_item_count
+    if steps > 0:
+        bar_dim = max(visible_row_count - steps, 1)
+        bar_pos = (original_idx_first_element * min(steps, visible_row_count - 1)) // steps
+
+        bar_row = height_legend
+        table.attron(curses.color_pair(P_soft))
+        for i in range(visible_row_count):
+            if i == bar_pos:
+                table.attron(curses.color_pair(P_dark))
+            elif i == (bar_pos + bar_dim):
+                table.attron(curses.color_pair(P_soft))
+            table.addstr(bar_row + i, max_table_width - 1, u'\u2588')
+
+    ### Render low margin background filler
     row += 1
+    table.attron(curses.color_pair(P_soft_bg) | curses.A_BOLD)
     while row <= (y_tabSize - height_low_bar):
-        table.attron(curses.color_pair(P_soft_bg) | curses.A_BOLD)
         try:
-            table.addstr(row, 0, u'\u2571' * (x_tabSize))
-        except:
-            # curses bug last line
+            table.addstr(row, 0, u'\u2571' * x_tabSize)
+        except curses.error:
             pass
         row += 1
     table.attroff(curses.A_BOLD)
 
-    # create the graphs
-    pos += UIgraph.Point(10,3)
-    if graph_data is not None:
-        color_up = screenState.colors['azure_up']
-        color_down = screenState.colors['white_down']
-        graph_height = row_height
-        graph_width = 20
-        count = 0
-        for coin_prices in graph_data[idx_first_element:idx_last_element]:
-            try:
-                C_soft_background = screenState.colors["tab_soft"]
-                C_dark_background = screenState.colors["tab_dark"]
-                if count % 2:
-                    P_graph = UIgraph.addCustomColorTuple(
-                        (color_down, C_dark_background),
-                        screenState.cursesColors)
-                else:
-                    P_graph = UIgraph.addCustomColorTuple(
-                        (color_up, C_soft_background),
-                        screenState.cursesColors)
+    ### Manage Clipboard Action Hook if active
+    copy_scope = screenState.scopes.get('copy')
+    if (keyboardState.yank and tab_scope_is_active) or (scope.selected() and screenState.activeScope == copy_scope):
+        def copy_action():
+            create_copy_banner(copy_win, screenState, scope, current_selection_data, False)
+        screenState.pending_action.append([1, copy_action])
 
-                # curses BUG: probably it is not possible making subwin of subwin
-                #graph_win = table.subwin(graph_height, graph_width, pos.y, pos.x)  # y, x
-                graph_win = scr.subwin(graph_height, graph_width, pos.y, pos.x)  # y, x
-                #graph_win.bkgd(' ', curses.color_pair(screenState.colorPairs["tab_dark_bg"]))
-                graph_win.bkgd(' ', curses.color_pair(P_graph))
-                graph_win.erase()
-                prices = list(coin_prices.values())
-                timestamp = list(coin_prices.keys())
-                if len(prices) < 1:
-                    pass
-                count += 1
-                UIgraph.drawPriceGraph(graph_win, screenState, prices, timestamp, 7, P_graph)
-                # create chia graph
-                pos += UIgraph.Point(0,graph_height)
-            except:
-                pos += UIgraph.Point(0,graph_height)
-                print(f"out of GRAPH {graph_height} {graph_width} y:{pos.y} x:{pos.x}")
-                traceback.print_exc()
+    return scope
 
 
-import random
-xx = 25
-yy = 15
-ll = []
-selectable = 25
-for i in range(selectable):
-    x = random.randint(0,xx - 1)
-    y = random.randint(0,yy - 1)
-    ll.append([x,y])
-
-# sort
-from collections import defaultdict
-sorted_Y = defaultdict(list)
-for i in ll:
-    sorted_Y[i[1]].append(i)
-
-for key in sorted_Y.keys():
-    sorted_Y[key] = sorted(sorted_Y[key])
-selector = []
-for key in sorted(sorted_Y.keys()):
-    selector.append(sorted_Y[key])
+###################################33#########################3
+###################################33#########################3
+###################################33#########################3
+###################################33#########################3
+#
+#import random
+#xx = 25
+#yy = 15
+#ll = []
+#selectable = 25
+#for i in range(selectable):
+#    x = random.randint(0,xx - 1)
+#    y = random.randint(0,yy - 1)
+#    ll.append([x,y])
+#
+## sort
+#from collections import defaultdict
+#sorted_Y = defaultdict(list)
+#for i in ll:
+#    sorted_Y[i[1]].append(i)
+#
+#for key in sorted_Y.keys():
+#    sorted_Y[key] = sorted(sorted_Y[key])
+#selector = []
+#for key in sorted(sorted_Y.keys()):
+#    selector.append(sorted_Y[key])
+#
+#############################################################
+#############################################################
+#############################################################
+#############################################################
 
 
 def create_selector(stdscr, screenState: ScreenState, parent_scope: Scope, name: str,
@@ -1792,6 +2100,7 @@ def create_selector(stdscr, screenState: ScreenState, parent_scope: Scope, name:
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
+        scope.base_point = point
         parent_scope.sub_scopes[name] = scope
         scope.exec = ScopeActions.activate_scope
 
@@ -1808,9 +2117,6 @@ def create_selector(stdscr, screenState: ScreenState, parent_scope: Scope, name:
 
     row = selector[sy]
     col = row[sx % len(row)]
-    print("colll ", col)
-    print(selector)
-    print(sorted_Y)
 
     sy = sy % len(ll)
     mm = []
@@ -1829,13 +2135,16 @@ def create_selector(stdscr, screenState: ScreenState, parent_scope: Scope, name:
             stdscr.addstr(pos.y + i[1], pos.x + i[0], u'\u2588', curses.color_pair(P_sel))
         else:
             stdscr.addstr(pos.y + i[1], pos.x + i[0], u'\u2588')
+    if scope.selected():
+        stdscr.addstr(pos.y + yy, pos.x, u'\u2588' * xx, curses.color_pair(P_sel))
 
 
 
 
 
 def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: str,
-                  point: UIgraph.Point):
+                  point: UIgraph.Point, custom_scope_function=None, button_type: str = None,
+                  C_background=None, C_text=None, C_button=None, C_selection=None):
     """A real button... """
 
     name_str = name
@@ -1846,15 +2155,11 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
         parent_scope.sub_scopes[name] = scope
-
-        def change_button_bool(scope: Scope, screenState: ScreenState):
-            scope.bool = not scope.bool
-            return scope.parent_scope
-
-        scope.exec = change_button_bool
+        scope.exec = custom_scope_function
 
     scope: Scope = screenState.scopes[name]
     scope.visible = True
+    scope.base_point = point + UIgraph.Point(0,1)  # move base point to the text
     scope_exec_args = [screenState]
 
     if scope is screenState.activeScope:
@@ -1864,25 +2169,59 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
     pos_x = point.x
     pos_y = point.y
 
+    #button symbol
+    # u'\u25a0 \u25a1 \u25a8' chekcboxes
+    symbol_true = ''
+    symbol_false = symbol_true
+    match button_type:
+        case 'boolean':
+            symbol_true = u' \u25a0 '
+            symbol_false = u' \u25a1 '
+        case 'execution':
+            symbol_true = u' > '  # \u02c3 \u21f0 \u2794 \u279c \u27a0 \u27a1 \u27ad '
+            symbol_false = symbol_true
+
     but = name_str
     space = 2
-    length = len(but) + space * 2
+    length = len(but) + space * 2 + max(len(symbol_true), len(symbol_false))
 
     #### colors setup #####
-    text_color_pair = UIgraph.customColorsPairs_findByValue(
-        screenState.cursesColors,
-        screenState.colorPairs['xch'])
-    text_color_background = text_color_pair[1]
-    text_color = text_color_pair[0]
-    default_background = UIgraph.customColors_findByValue(
-        screenState.cursesColors,
-        screenState.colors["background"])
-    default_selected = UIgraph.customColors_findByValue(
-        screenState.cursesColors,
-        screenState.colors["yellow_bee"])
+    if C_background is not None and C_button is not None and C_text is not None:
+        text_color_background = UIgraph.customColors_findByValue(screenState.cursesColors, C_button)
+        text_color = UIgraph.customColors_findByValue(screenState.cursesColors, C_text)
+        C_default_background = UIgraph.customColors_findByValue(screenState.cursesColors, C_background)
+        C_default_selected = UIgraph.customColors_findByValue(screenState.cursesColors, C_selection)
+    else:
+        text_color_pair = UIgraph.customColorsPairs_findByValue(
+            screenState.cursesColors,
+            screenState.colorPairs['xch'])
+        text_color_background = text_color_pair[1]
+        text_color = text_color_pair[0]
+        if button_type == 'boolean':
+            text_color = text_color_background
+            text_color_background = UIgraph.customColors_findByValue(
+                screenState.cursesColors,
+                # screenState.colors['mini_block'])
+                # screenState.colors['dark_gray'])
+                # screenState.colors['light_green'])
+                screenState.colors['dark_green'])
+
+        C_default_background = UIgraph.customColors_findByValue(
+            screenState.cursesColors,
+            screenState.colors["background"])
+        C_default_selected = UIgraph.customColors_findByValue(
+            screenState.cursesColors,
+            screenState.colors["gray"])
+
+
+
     # make the color calculated here as default colors
-    text_color_background_clear = tuple(int(i * 1.2) for i in text_color_background)
-    text_color_background_dark = tuple(int(i * 0.8) for i in text_color_background)
+    if button_type == 'boolean':
+        text_color_background_clear = tuple(max(1, min(256, int(i * 1.35))) for i in text_color_background)
+        text_color_background_dark = text_color_background
+    else:
+        text_color_background_clear = tuple(max(1, min(256, int(i * 1.2))) for i in text_color_background)
+        text_color_background_dark = tuple(max(1, min(256, int(i * 0.8))) for i in text_color_background)
 
     UIgraph.addCustomColor(
         text_color_background_clear,
@@ -1892,11 +2231,11 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         screenState.cursesColors)
 
     frame_cp_clear = UIgraph.addCustomColorTuple(
-        (text_color_background_clear, default_background),
+        (text_color_background_clear, C_default_background),
         screenState.cursesColors
     )
     frame_cp_dark = UIgraph.addCustomColorTuple(
-        (text_color_background_dark, default_background),
+        (text_color_background_dark, C_default_background),
         screenState.cursesColors
     )
     frame_cp_cl = UIgraph.addCustomColorTuple(
@@ -1904,7 +2243,7 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         screenState.cursesColors
     )
     frame_cp_std = UIgraph.addCustomColorTuple(
-        (text_color_background, default_background),
+        (text_color_background, C_default_background),
         screenState.cursesColors
     )
     text_dark = UIgraph.addCustomColorTuple(
@@ -1916,15 +2255,15 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         screenState.cursesColors
     )
     frame_selected = UIgraph.addCustomColorTuple(
-        (text_color_background_clear, default_selected),
+        (text_color_background_clear, C_default_selected),
         screenState.cursesColors
     )
     frame_selected_2 = UIgraph.addCustomColorTuple(
-        (text_color_background_dark, default_selected),
+        (text_color_background_dark, C_default_selected),
         screenState.cursesColors
     )
     frame_selected_backgroung = UIgraph.addCustomColorTuple(
-        (default_selected, default_background),
+        (C_default_selected, C_default_background),
         screenState.cursesColors
     )
     #### END colors setup #####
@@ -1942,7 +2281,7 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         stdscr.addstr(pos_y + 1, x, u'\u2588' * space,
                       curses.color_pair(frame_cp_dark) | curses.A_BOLD)
         x += space
-        stdscr.addstr(pos_y + 1, x, f"{but}",
+        stdscr.addstr(pos_y + 1, x, f"{but}{symbol_true}",
                       curses.color_pair(text_dark) | curses.A_BOLD)
         x += length - 2 * space
         stdscr.addstr(pos_y + 1, x, u'\u2588' * space,
@@ -1952,7 +2291,7 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         stdscr.addstr(pos_y + 2, pos_x + 0, u'\u2580' * (length + 1),
                       curses.color_pair(frame_cp_dark))
         frame_selected = UIgraph.addCustomColorTuple(
-            (text_color_background_dark, default_selected),
+            (text_color_background_dark, C_default_selected),
             screenState.cursesColors
         )
 
@@ -1968,7 +2307,7 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         stdscr.addstr(pos_y + 1, x, u'\u2588' * space,
                       curses.color_pair(frame_cp_clear) | curses.A_BOLD)
         x += space
-        stdscr.addstr(pos_y + 1, x, f"{but}",
+        stdscr.addstr(pos_y + 1, x, f"{but}{symbol_false}",
                       curses.color_pair(text_clear) | curses.A_BOLD)
         x += length - 2 * space
         stdscr.addstr(pos_y + 1, x, u'\u2588' * space,
@@ -1980,12 +2319,12 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
                       curses.color_pair(frame_cp_clear))
 
         frame_selected = UIgraph.addCustomColorTuple(
-            (text_color_background_clear, default_selected),
+            (text_color_background_clear, C_default_selected),
             screenState.cursesColors
         )
 
     # selection
-    if scope.selected:
+    if scope.selected():
         stdscr.addstr(pos_y + 2, pos_x, u'\u2580',
                       curses.color_pair(frame_selected_2))
         stdscr.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length - 0),
@@ -2041,14 +2380,6 @@ def normalize_menu(menu_list: List, scope: Scope, max_size: int) -> Tuple[List[s
         scope.data['first_idx'] = first_idx
         menu_list = menu_list[first_idx:last_idx]
         selected = selected - first_idx
-
-        #DEBUG_OBJ.text += (f"AFTER f_idx: {first_idx} "
-        #                   f"l_idx: {last_idx} "
-        #                   )
-        #DEBUG_OBJ.text += (f"selected: {selected} "
-        #                   f"menu: {menu_list} "
-        #                   )
-        #DEBUG_OBJ.text += f"date: {datetime.now()} "
 
     return menu_list, selected
 
@@ -2319,7 +2650,7 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
         )
 
     # selection
-    if scope.selected:
+    if scope.selected():
         stdscr.addstr(pos_y + 2, pos_x, u'\u2580',
                       curses.color_pair(frame_selected_2))
         stdscr.addstr(pos_y + 2, pos_x + 1, u'\u2580' * (length + 0),
@@ -2587,11 +2918,11 @@ def create_block_band(stdscr,
     P_selected_block_vertical = P_selected
 
     # now it should never be selected
-    if scope.selected & scope_is_active:
+    if scope.selected() & scope_is_active:
         P_option = P_tab_active
         P_selected_block = P_selected
         P_selected_block_vertical = P_selected
-    elif scope.selected:
+    elif scope.selected():
         P_option = P_selected
 
     stdscr.addstr(position.y + size.y, position.x, u'\u2580' * size.x,

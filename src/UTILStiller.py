@@ -1,12 +1,15 @@
 import json
 import time
+import traceback
 from datetime import datetime, timedelta
 
+from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 from chia_rs.sized_bytes import bytes32
 from chia.util.hash import std_hash
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 from clvm.casts import int_to_bytes
 
+import src.CONFtiller as CONF
 
 ##############################################################################
 ########### varius
@@ -21,11 +24,43 @@ def parseFloatJsonValue(dic, key):
     except:
         return None
 
+
+#############################################################################
+########## debugging
+
+def logging_traceback(prefix=''):
+    t_back = traceback.format_exc().split('\n')
+    for n, i in enumerate(t_back):
+        CONF.logging(CONF.debug_logger, "DEBUG", f"{prefix} - i{n}-{i}")
+
+
 ############################################
 ########### chia utility
+def ensure_bytes32(value):
+    if isinstance(value, bytes32):
+        return value
+    if isinstance(value, bytes):
+        return bytes32(value)
+    if isinstance(value, str):
+        if value.startswith("0x"):
+            value = value[2:]
+        return bytes32.from_hexstr(value)
+    raise f"{value} is not a valid bytes32 or a 64 chars string"
 
-def calc_coin_id(amount: uint64, parent_coin_info: str, puzzle_hash: str):
-    return std_hash(bytes32.from_hexstr(parent_coin_info) + bytes32.from_hexstr(puzzle_hash) + int_to_bytes(amount))
+
+def ensure_int_to_bytes(value):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, int):
+        return int_to_bytes(value)
+    raise f"{value} is not a valid int or int in bytes form"
+
+
+def calc_coin_id(parent_coin_info: str, puzzle_hash: str, amount: uint64):
+    parent_coin_info = ensure_bytes32(parent_coin_info)
+    puzzle_hash = ensure_bytes32(puzzle_hash)
+    amount = ensure_int_to_bytes(amount)
+    return std_hash(parent_coin_info + puzzle_hash + amount)
 
 ##############################################################################
 ########### binary search
@@ -90,6 +125,29 @@ def classify_number(s: str):
     return "invalid"
 
 
+def address_to_bytes32(value):
+    """convert any form of an address to an hex string"""
+    lenght = 32
+    if isinstance(value, bytes) and len(value) == lenght:
+        return bytes32(value)
+    if isinstance(value, bytes32):
+        return value
+    if isinstance(value, str):
+        # hex (with or without 0x)
+        if value.startswith('0x') or value.startswith('0X'):
+            value = value.removeprefix("0x").removeprefix("0X")
+        if value and len(value) == lenght * 2 and all(c in "0123456789abcdefABCDEF" for c in value):
+            return bytes32.fromhex(value)
+        if value.startswith(CONF.ADD_PREFIX):
+            try:
+                value = decode_puzzle_hash(value)
+            except:
+                return None
+            return value
+
+    return None
+
+
 def truncate(n, decimals=0):
     """You can use negative to truncate on the left side"""
     multiplier = 10**decimals
@@ -106,6 +164,34 @@ def humanizer(num: int, suffixes: list[str]) -> str:
 
     # format with 3 significant digits
     return f"{num:.3g}{suffixes[magnitude]}"
+
+
+def human_amount(amount: int) -> str:
+    """show amount in xch or mojo according to the size"""
+    padding = len(f"{10_000_000:_}")
+    value = None
+    digit_precision = 1_000
+    amount_xch = amount / CONF.XCH_MOJO
+    dec_part = amount % CONF.XCH_MOJO
+    int_part = (amount - dec_part) // CONF.XCH_MOJO
+
+    padding = padding - len(f"{round(amount_xch):_}")
+
+    if int_part > 0 and dec_part == 0:
+        value = f"{' ' * padding}{int_part}"
+    elif int_part > 0 or dec_part >= (CONF.XCH_MOJO // digit_precision):
+        value = f"{' ' * padding}{amount_xch:_.3f}".rstrip('0')
+        if dec_part // digit_precision > 0:
+            value += '<>'
+    # mojo case
+    else:
+        #padding = len(f'{100_000_000:_} mojo') - 5
+        padding = len(f'{100_000_000:_} \u03C9') + 1
+        padding = padding - len(f'{amount:_}')
+        value = f"{' ' * padding}{amount:_} \u03C9"
+
+    return value
+    #return f"{value} -- {amount / CONF.XCH_MOJO}"
 
 
 def human_mojo(num: int) -> str:

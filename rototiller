@@ -31,6 +31,7 @@ except Exception as e:
     curses.nocbreak()
     curses.echo()
     curses.endwin()
+
     print("The exception of main is: ", e)
     print(traceback.format_exc())
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import requests
 import time
 import json
@@ -8,14 +9,19 @@ import asyncio
 import threading
 from datetime import datetime, timedelta
 
+import ssl
+import websockets
+
 import src.UTILStiller as UTILS
 import src.DEXtiller as DEX
 import src.WDBtiller as WDB
 import src.RPCtiller as RPC
+import src.CONFtiller as CONF
 from src.CONFtiller import (
     logging, debug_logger, DB_WDB, SQL_TIMEOUT, BTC_FAKETAIL, XCH_FAKETAIL, XCH_MOJO,
     XCH_CUR, CAT_MOJO, USD_CUR)
-from src.TYPEStiller import (CoinPriceData, WalletState, PkState, TransactionRecordRoto)
+import src.TYPEStiller as TYPES
+
 
 
 # dexi api
@@ -31,6 +37,198 @@ def write_prices(name, prices):
         writer = csv.writer(f)
         writer.writerow(['timestamps', 'value'])
         writer.writerows([[UTILS.convert_ts_to_date(key), value] for key, value in prices.items()])
+
+
+class SocketDispatcher:
+    def __init__(self):
+        # A dictionary to store lists of callbacks for different events
+        self._events = {event: [] for event in TYPES.DaemonEvent}
+        self._oneshot_events = {event: [] for event in TYPES.DaemonEvent}
+
+    def subscribe(self, event_name: TYPES.DaemonEvent, callback: callable):
+        if event_name not in self._events:
+            self._events[event_name] = []
+        self._events[event_name].append(callback)
+
+    def subscribe_once(self, sub_name: str, event_name: TYPES.DaemonEvent, callback: callable):
+        if event_name not in self._events:
+            self._events[event_name] = []
+
+        # Already subscribed, do nothing
+        for name, _ in self._oneshot_events[event_name]:
+            if sub_name == name:
+                return
+
+        self._oneshot_events[event_name].append((sub_name, callback))
+
+    def dispatch(self, data):
+        event_name = TYPES.DaemonEvent.from_str(data['command'])
+        if event_name:
+            for callback in self._events[event_name]:
+                callback(data)
+
+            oneshot_callbacks = list(self._oneshot_events[event_name])
+            self._oneshot_events[event_name] = []
+
+            for _, callback in oneshot_callbacks:
+                callback(data)
+
+## --- Define your reactions (Service functions) ---
+#def update_db(data):
+#    print(f"DB Service: Writing block {data['height']} to SQL")
+#
+#def update_ui(data):
+#    print(f"UI Service: Refreshing screen for block {data['height']}")
+#
+#def handle_error(data):
+#    print(f"Alert: Connection lost! Error: {data['msg']}")
+#
+## --- Setup ---
+#dispatcher = SocketDispatcher()
+#
+## Register services to specific events
+#dispatcher.subscribe("new_block", update_db)
+#dispatcher.subscribe("new_block", update_ui)
+#dispatcher.subscribe("socket_error", handle_error)
+#
+## --- When the socket receives data ---
+## If a block arrives:
+#dispatcher.dispatch("new_block", {"height": 1500000, "hash": "abc..."})
+#
+## If the connection drops:
+#dispatcher.dispatch("socket_error", {"msg": "Timeout"})
+#
+
+
+class DaemonWebSocketClient():
+
+    @staticmethod
+    def create_ssl_context(cert_path: str, key_path: str) -> ssl.SSLContext:
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        return ssl_context
+
+    def __init__(self, socket_dispatcher: SocketDispatcher):
+        self.ssl_context = self.create_ssl_context(CONF.DAEMON_CERT, CONF.DAEMON_KEY)
+        self.uri = f"wss://{CONF.DAEMON_HOST}:{CONF.DAEMON_PORT}"
+        self.ws = None
+        self.peak = 0
+        self.socket_dispatcher = socket_dispatcher
+
+    async def __aenter__(self):
+        """Logic for 'async with' entry"""
+        self.ws = await websockets.connect(self.uri, ssl=self.ssl_context)
+        print(f"{datetime.now()}: Connected to Daemon")
+
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Logic for 'async with' exit"""
+        if self.ws:
+            await self.ws.close()
+            print(f"{datetime.now()}: Connection to Daemon closed automatically")
+
+    async def subscribe_metrics(self):
+        """Subscriby to deafault chia feeds"""
+        # wallet_ui:
+        # metrics: {'sync_changed', 'new_signage_point', 'block', 'coin_added', 'farming_info', 'get_blockchain_state', 'register_service', 'new_farming_info', 'add_connection', 'signage_point', 'close_connection'}
+        msg = {
+            "destination": "daemon",
+            "command": "register_service",
+            "request_id": "roto_metrics",
+            "origin": "",
+            "data": {"service": 'metrics'}}
+        await self.ws.send(json.dumps(msg))
+
+    async def receive_messages(self):
+        """Handle incoming messages"""
+
+        async for message in self.ws:
+            data = json.loads(message)
+
+            logging(debug_logger, "DEBUG", f"DAEMON {datetime.now()}: daemon → {data['command']}")
+
+            try:
+                self.socket_dispatcher.dispatch(data)
+
+                if data.get("command") == "get_blockchain_state":
+                    state = data["data"]["blockchain_state"]
+                    if state:
+                        height = state.get("peak", {}).get("height")
+
+                        #if height != LAST_HEIGHT:
+                        #    LAST_HEIGHT = height
+                        logging(debug_logger, "DEBUG", f"{datetime.now()}: COW Peak → {height}")
+            except Exception as e:
+                print(e)
+                logging(debug_logger, "DEBUG", f"UPDAYTE GRACHE TIMO TRHE BIG ONE LOAD OUT exc {e}")
+                logging(debug_logger, "DEBUG", f"UPDATE GRACHE TIMO LOAD edarbello {data}")
+                text = traceback.format_exc()
+                text = text.replace("\n", "")
+                logging(debug_logger, "DEBUG", f"UPDATE GRACHE TIMO LOAD irogram exc {text}")
+                import time
+                time.sleep(2)
+
+    async def poll_blockchain_state(self, poll_interval):
+        """POLL test: Continuously send requests"""
+
+        # REGISTER FIRST ---
+        # ONLY -> only if you poll messages
+        registration_msg = {
+            "command": "register_service",
+            "data": {"service": "rototiller"},
+            "destination": "daemon",
+            "origin": "rototiller",
+            "request_id": "initial_reg"
+        }
+        await self.ws.send(json.dumps(registration_msg))
+
+        # Wait a moment for the daemon to acknowledge
+        response = await self.ws.recv()
+        logging(debug_logger, "DEBUG", f"DAEMON Registration poll chain state. Response: {response}")
+
+        while True:
+
+            msg = {
+                "command": "get_blockchain_state",
+                "data": {},
+                "origin": "botola",
+                "request_id": 'abo11',
+                "ack": False,
+                "destination": "chia_full_node",
+            }
+            await self.ws.send(json.dumps(msg))
+
+            await asyncio.sleep(poll_interval)
+
+    async def poll_services(self, poll_interval):
+        """POLL test: Continuously send requests"""
+        while True:
+
+            msg = {
+                "command": "running_services",
+                "data": {},
+                "request_id": "moon",
+                "origin": "client",
+                "destination": "daemon",
+            }
+            await self.ws.send(json.dumps(msg))
+
+            await asyncio.sleep(poll_interval)
+
+    # only for testing
+    @staticmethod
+    def create_and_run_client(socket_dispatcher: SocketDispatcher):
+        async def bunny_the_daemon():
+            async with DaemonWebSocketClient(socket_dispatcher) as client:
+                await asyncio.gather(
+                    client.subscribe_metrics(),
+                    client.receive_messages(),
+                )
+        asyncio.run(bunny_the_daemon())
+
 
 
 def convert_historic_price_to_currency(historic_timestamp_ref_coin, historic_price_ref_coin,
@@ -158,7 +356,7 @@ def fetch_coin_data(data_lock, coins_data, tail):
 
         with data_lock:
             if tail not in coins_data:
-                coins_data[tail] = CoinPriceData()
+                coins_data[tail] = TYPES.CoinPriceData()
                 coins_data[tail].tail = tail
             current_price_chia = coins_data[XCH_FAKETAIL].current_price_currency
             historic_timestamp_chia = list(coins_data[XCH_FAKETAIL].historic_price_currency.keys())
@@ -229,7 +427,7 @@ def fetch_btc_data(data_lock, coins_data):
         conn.close()
 
         if BTC_FAKETAIL not in coins_data:
-            coins_data[BTC_FAKETAIL] = CoinPriceData()
+            coins_data[BTC_FAKETAIL] = TYPES.CoinPriceData()
             coins_data[BTC_FAKETAIL].tail = BTC_FAKETAIL
 
         coins_data[BTC_FAKETAIL].local_timestamp = datetime.now().timestamp() * 1000
@@ -293,7 +491,7 @@ def fetch_chia_data(data_lock, coins_data):
             conn.close()
 
             if chia_id not in coins_data:
-                coins_data[chia_id] = CoinPriceData()
+                coins_data[chia_id] = TYPES.CoinPriceData()
                 coins_data[chia_id].tail = chia_id
 
             coins_data[chia_id].local_timestamp = datetime.now().timestamp() * 1000
@@ -337,7 +535,7 @@ def load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active):
     pk_states = WDB.retrive_all_pks(conn)
 
     for state in pk_states:
-        new_pk = PkState()
+        new_pk = TYPES.PkState()
         new_pk.fingerprint = state['fingerprint']
         new_pk.pk = state['public_key']
         new_pk.label = state["label"]
@@ -360,7 +558,7 @@ def load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active):
             mojo = CAT_MOJO
             if tail == XCH_FAKETAIL:
                 mojo = XCH_MOJO
-            wallet: WalletState = WalletState()
+            wallet: TYPES.WalletState = TYPES.WalletState()
             wallet.confirmed_wallet_balance = db_w['confirmed_wallet_balance'] / mojo
             wallet.spendable_balance = db_w['spendable_balance'] / mojo
             wallet.unspent_coin_count = db_w['unspent_coin_count']
@@ -373,13 +571,13 @@ def load_WDB_data(conn, fingers_state, fingers_list, coins_data, finger_active):
 
             #### load used tails ####
             if tail not in coins_data:
-                coins_data[tail] = CoinPriceData()
+                coins_data[tail] = TYPES.CoinPriceData()
                 coins_data[tail].tail = tail
 
 
         # load btc prices
         tail = BTC_FAKETAIL
-        coins_data[tail] = CoinPriceData()
+        coins_data[tail] = TYPES.CoinPriceData()
         coins_data[tail].tail = tail
         prices = WDB.retrive_price_tail_currency(conn, tail, USD_CUR)
         if prices:
@@ -520,7 +718,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                 if finger in fingers_list:
                     continue
                 else:
-                    new_pk = PkState()
+                    new_pk = TYPES.PkState()
                     new_pk.fingerprint = finger
                     key = RPC.call_rpc_daemon("get_key", fingerprint=finger)
                     new_pk.pk = key["public_key"]
@@ -575,7 +773,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                 wallets = fingers_state[idx].wallets
 
                 # chia wallet
-                chia_wallet: WalletState = WalletState()
+                chia_wallet: TYPES.WalletState = TYPES.WalletState()
                 chia_wallet_id = 1
                 response = asyncio.run(RPC.call_rpc_wallet('get_wallet_balance', wallet_id=chia_wallet_id))
                 logging(debug_logger, "DEBUG", f"rpc balance {response}")
@@ -617,7 +815,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
 
                 logging(debug_logger, "DEBUG", f"chia cat wallet {cat_chia_wallets}")
                 for e, i in enumerate(cat_chia_wallets):
-                    cat_wallet = WalletState()
+                    cat_wallet = TYPES.WalletState()
                     balance = None
                     coins = []
                     try:
@@ -645,7 +843,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                         traceback.print_exc()
                     transactions_roto = []
                     for t in transactions:
-                        transactions_roto.append(TransactionRecordRoto(
+                        transactions_roto.append(TYPES.TransactionRecordRoto(
                                                  t["confirmed_at_height"],
                                                  t["created_at_time"],
                                                  t["to_puzzle_hash"],
@@ -735,7 +933,7 @@ def fetch_wallet(data_lock, fingers_state, fingers_list, finger_active,
                 #for e, cat_tail in enumerate(cat_test):
                 #    if cat_tail in wallets:
                 #        continue
-                #    cat_wallet = WalletState()
+                #    cat_wallet = TYPES.WalletState()
                 #    balance = 999
                 #    cat_wallet.data = cat_tail
                 #    dexi_name = DEX.fetchDexiNameFromTail(cat_wallet.data)
