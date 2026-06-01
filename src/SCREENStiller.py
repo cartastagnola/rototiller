@@ -2138,7 +2138,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
     except Exception as e:
         logging(debug_logger, "DEBUG", f"LOAD INFO ERROR{e}")
         UTILS.logging_traceback("LOAD INFO")
-    finally;
+    finally:
         cache_conn.close()
 
     # Inbound from cache
