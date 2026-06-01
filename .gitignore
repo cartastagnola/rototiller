@@ -1,7 +1,6 @@
 # from rototiller
 config.yaml
 test.py
-*.json
 *.db
 
 # project settings
