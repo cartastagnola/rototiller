@@ -877,6 +877,7 @@ def create_tab(scr,
 
 
     ### if no data, make an epmty line
+
     if len(dataTable) == 0:
         if data_table_legend is not None or len(data_table_legend) > 0:
             new_empty_line = []
@@ -885,13 +886,11 @@ def create_tab(scr,
             new_empty_line[0] = "empty table"
             dataTable.append(new_empty_line)
 
-
     lapper.clocking("first color init")
 
     ### make empty data_table_color if...
-    if data_table_color is None:
-        #if 'data_table_color' not in scope.data or scope.data['data_table_color'] == None:
-        if True:
+    if data_table_color is None or not data_table_color:
+        if 'data_table_color' not in scope.data or scope.data['data_table_color'] == None:
             row = len(dataTable)
             col = len(dataTable[0])
             data_table_color = [list([None] * col) for _ in range(row)]
@@ -1778,7 +1777,6 @@ def create_tab_large(scr,
 
     height_low_bar = 1
     height_legend = 3 if data_table_legend is not None else 0
-
     # Curses color initializations
     P_soft = screenState.colorPairs["tab_soft"]
     P_dark = screenState.colorPairs["tab_dark"]
@@ -2994,11 +2992,6 @@ def create_block_band(stdscr,
                 a = 1
         except Exception as e:
             print(f"exception: {e}")
-            if block is None:
-                print(f"fisrt block: {idx_first_block} items count {items_count}, n. of blocks {len(block_states)}")
-                print(f"local idx: {local_idx_block}")
-                print(f"calc idx first block: last item {idx_last_item}, first_idx {first_idx}")
-                print(f"lcoal_peak {local_peak} and current peak {current_peak}")
 
 
         if block is None or block.is_transaction_block:
@@ -3151,7 +3144,7 @@ def create_block_band(stdscr,
         ## implement logic to brake the loop and load the data, or skip it and wait for the upodate of the cache
         print(f"current_idx; {current_idx}")
         print(f"len block states: {len(block_states)}")
-        DEBUG_OBJ.text += (f" HAHAHAHAHAHAHA: current idx {current_idx} and n. states {len(block_states)} ")
+        pass
         #raise Exception("The block idx asked is outside the cache. Increase the cache")
 
     while current_idx >= 0:

@@ -2433,6 +2433,8 @@ def screen_address_watchlist(stdscr, keyboardState: KeyboardState, screenState: 
 
     # make the tab active
     screenState.activeScope = tab_scope
+    print('new-addx')
+    print(new_addx)
     tab_scope = ELEMENTS.create_tab(win,
                                     screenState,
                                     main_scope,
@@ -2510,11 +2512,9 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
         def custom_keyboard_execution(screenState: TYPES.ScreenState, keyboardState: TYPES.KeyboardState,
                                       active_scope: TYPES.Scope):
 
-            logging(debug_logger, "DEBUG", f"tab_selected is {tab_sel}")
             inbound_first = True
             if tab_sel== 1:
                 inbound_first = False
-                logging(debug_logger, "DEBUG", f"NO BOUND {tab_sel}")
 
             # TODO: add update order according to inbound outbound
             if 's' in keyboardState.keys:
