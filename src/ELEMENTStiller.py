@@ -707,7 +707,7 @@ def create_tab(scr,
                tab_name: str,
                dataTable,
                data_table_keys: List[str],
-               data_table_color,
+               data_table_color: bool,
                transpose: bool,
                position: UIgraph.Point,
                size: UIgraph.Point,
@@ -890,13 +890,10 @@ def create_tab(scr,
 
     ### make empty data_table_color if...
     if data_table_color is None or not data_table_color:
-        if 'data_table_color' not in scope.data or scope.data['data_table_color'] == None:
-            row = len(dataTable)
-            col = len(dataTable[0])
-            data_table_color = [list([None] * col) for _ in range(row)]
-            scope.data['data_table_color'] = data_table_color
-        else:
-            data_table_color = scope.data['data_table_color']
+        row = len(dataTable)
+        col = len(dataTable[0])
+        data_table_color = [list([None] * col) for _ in range(row)]
+        scope.data['cached_data_table_color'] = data_table_color
 
     if column_widths is None:
         if len(dataTable) > 0:
