@@ -76,6 +76,7 @@ def load_csv(path: Path):
 
 
 def save_csv(path: Path, rows: list[tuple[str, str, str]]):
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
 
     with tmp_path.open("w", newline="", encoding="utf-8") as f:
