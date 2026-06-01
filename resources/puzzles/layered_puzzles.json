@@ -1,0 +1,78 @@
+{
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726|025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "name": "NFT 1.0",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
+            "c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726",
+            "025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--singleton_top_layer_v1_1",
+            "--nft_puzzles-nft_state_layer",
+            "--nft_puzzles-nft_ownership_layer",
+            "--nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "--p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726|025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f|cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
+        "name": "NFT 1.0 - offer???",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
+            "c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726",
+            "025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f",
+            "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
+        ],
+        "sub_puzzle_names": [
+            "--singleton_top_layer_v1_1",
+            "--nft_puzzles-nft_state_layer",
+            "--nft_puzzles-nft_ownership_layer",
+            "--nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "--settlement_payments"
+        ]
+    },
+    "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "name": "STD TRASNSACTION",
+        "sub_puzzle_hashes": [
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "name": "CAT V2",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cat_puzzles-cat_v2",
+            "--p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
+        "name": "CAT V2 - offer???",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
+        ],
+        "sub_puzzle_names": [
+            "--cat_puzzles-cat_v2",
+            "--settlement_payments"
+        ]
+    },
+    "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9": {
+        "name": "VAULT 1.0",
+        "sub_puzzle_hashes": [
+            "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd",
+            "6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9"
+        ],
+        "sub_puzzle_names": [
+            "--mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
+            "--mips_puzzles-member_puzzles-singleton_member"
+        ]
+    }
+}
