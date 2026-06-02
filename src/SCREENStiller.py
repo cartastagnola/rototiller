@@ -2086,14 +2086,8 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
             db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
 
-            def reload_the_loaders():
-
-                logging(debug_logger, "DEBUG", "RELOADING")
-                logging(debug_logger, "DEBUG", "RELOADING")
-                load_the_loaders_cache_mode(screenState, address_loaders, uncurry_puzzle=False)
-
             logging(debug_logger, "DEBUG", f"DB LOAD starting cache fetcher")
-            WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash, callback=reload_the_loaders)
+            WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
             logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
 
             aa_timo.clocking('fetch')
@@ -2110,10 +2104,6 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
             for n, i in enumerate(aa_timo_ss):
                 logging(debug_logger, "DEBUG", f"DB TIMO LOAD i{n}-{i}")
-
-            # reload the laoder
-            load_the_loaders_cache_mode(screenState, address_loaders)
-
             # logica cache DB
             # 1 create classe DB with:
             ## - fun to create the cache DB
@@ -2132,6 +2122,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         #update_cache_db_for_address(search_value)
 
     timo.clocking('cache update')
+    logging(debug_logger, "DEBUG", "LOAD updated the cache")
 
     # coin_info
     cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
@@ -2156,6 +2147,8 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         fetcher_first_last = WDB.FetchMaker.CACHE_puzzle_hash_fetcher(search_value, sorting_column, start_height, end_height,
                                                                       remove_spent_coins, remove_self_transactions, first_last_count=True)
 
+        logging(debug_logger, "DEBUG", "LOAD fetcher DONE")
+
         timo.clocking('fetch_maker')
         try:
             add_loader = WDB.DataChunkLoader(
@@ -2173,6 +2166,8 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             time.sleep(2)
 
         timo.clocking('inbound')
+        logging(debug_logger, "DEBUG", "LOAD the loader INbound")
+        logging(debug_logger, "DEBUG", "LOAD eeeeeeeeeeeeeeeeeenddhe loader INbound")
 
     # Outbound
     def outbound_call():
@@ -2198,6 +2193,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
 
         timo.clocking('outbound')
 
+        logging(debug_logger, "DEBUG", "LOAD the loader OUT OUT OUT")
 
     if inbound:
         inbound_call()
@@ -2206,10 +2202,13 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         outbound_call()
         inbound_call()
 
+    logging(debug_logger, "DEBUG", "LOAD the loader PUTPUTPUTPUTPUTPUTPTU")
 
     # Uncurry puzzle
+    logging(debug_logger, "DEBUG", f"LOAD the bool {uncurry_puzzle}")
     with address_loaders.lock:
         add_loader_out = address_loaders.address_loader_outbound
+    logging(debug_logger, "DEBUG", f"LOAD row count {add_loader_out.total_row_count}")
     if uncurry_puzzle:
         if add_loader_out.total_row_count > 0:
             try:
@@ -2231,25 +2230,42 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                     if cr.spent_block_index != 0:
                         spent_coin = cr
 
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher a check THIS: {spent_coin}")
+                #spent_height = int(spent_coin[1])
                 spent_height = spent_coin.spent_block_index
+                #parent = spent_coin[4]
                 parent = spent_coin.coin.parent_coin_info.hex()
+                #puzzle = decode_puzzle_hash(spent_coin[3]).hex()
                 puzzle = spent_coin.coin.puzzle_hash.hex()
+                #amount = int(spent_coin[5] * XCH_MOJO)
                 amount = spent_coin.coin.amount
 
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher parenty: {parent}")
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher puzz: {puzzle}")
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher amo: {amount}")
                 coin_name = UTILS.calc_coin_id(parent, puzzle, amount)  # we already have the coin_name
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher coin NAME: {coin_name}")
 
+                logging(debug_logger, "DEBUG", f"LOAD i here the COIN NAMEEEEE: {coin_name}")
+                logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name}")
+                logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name.hex()}")
+                logging(debug_logger, "DEBUG", f"LOAD i SPENRT height: {spent_height}")
                 out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=spent_coin.coin_name.hex(), height=spent_height)
                 program = PyProgram.fromhex(out['puzzle_reveal'])
                 puzzle_disassembled = disassemble(program)
+                logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
                 unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
                 puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
                 layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+                logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
                 with address_loaders.lock:
                     address_loaders.puzzle_and_sol_rpc = out
                     address_loaders.puzzle_disassembled = puzzle_disassembled
                     address_loaders.unrolled_puzzles = unroll_puzzles
                     address_loaders.layered_puzzle_name = layered_puzzle_name
+
+                logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
 
             except Exception as e:
                 logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
@@ -2265,7 +2281,12 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         else:
             with address_loaders.lock:
                 address_loaders.unrolled_puzzles = None  # no spent coins
+            logging(debug_logger, "DEBUG", f"LOAD NOOOOO SPENT COIN")
+        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
+        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
+        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
 
+    logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
     timo.clocking('end')
     timo.end()
     timo_s = f"{timo}"
@@ -2275,6 +2296,8 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         logging(debug_logger, "DEBUG", f"DB TIMO LOAD i{n}-{i}")
 
 
+    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
+    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
     logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
 
 
@@ -2474,11 +2497,10 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
                                                         update_address_loaders)
 
     # footer
+    screenState.footer_text += "| save_to_watchlist=w "
     screenState.footer_text += f"| remove_spent_coins=s ({str(address_loaders.remove_spent_coins).upper()}), remove_self_txs=t ({str(address_loaders.remove_self_transactions).upper()})"
     if tab_selected == 1:
         screenState.footer_text += f" | show_sibling_coins ({str(address_loaders.show_phantom_coin_outputs).upper()})"
-    if main_scope == active_scope:
-        screenState.footer_text += "| save_to_watchlist=w "
 
     ### keyboard
     ### create a virtual fun and the add it to this and to the tab scope
@@ -2618,6 +2640,11 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
     pos += UIgraph.Point(0,2)
     max_y = main_win_size.y - pos.y - 2
 
+    def coin_record_key_parser(dataTable):
+        # coin_id is at index 4 in both inbound/outbound formats
+        keys = [row[4] for row in dataTable]
+        return dataTable, keys
+
     match tab_selected:
         ### INBOUND coins ###
         case 0:
@@ -2640,13 +2667,14 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
                                                 pos,
                                                 tab_size,
                                                 keyboardState,
-                                                ScopeActions.exit_scope,
+                                                ScopeActions.open_coin_record,
                                                 False,
                                                 False,
                                                 loader_legend,
                                                 column_widths,
                                                 formatters,
-                                                data_loader)
+                                                data_loader,
+                                                chunk_data_parser=coin_record_key_parser)
 
             if toggle_coin_keys not in inbound_scope.custom_keyboard_exec:
                 inbound_scope.custom_keyboard_exec[toggle_coin_keys] = toggle_coin_keyboard
@@ -2661,23 +2689,24 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
             column_widths = [None, None, 15, None, 15, 15, None]
             formatters = [None, None, None, UTILS.human_amount, None, None, None]
             outbound_scope = ELEMENTS.create_tab(add_viewer,
-                                                 screenState,
-                                                 main_scope,
-                                                 "puzzle_hash_outbound_viewer",
-                                                 None,
-                                                 None,
-                                                 None,
-                                                 False,
-                                                 pos,
-                                                 tab_size,
-                                                 keyboardState,
-                                                 ScopeActions.exit_scope,
-                                                 False,
-                                                 False,
-                                                 loader_legend,
-                                                 column_widths,
-                                                 formatters,
-                                                 data_loader)
+                                                  screenState,
+                                                  main_scope,
+                                                  "puzzle_hash_outbound_viewer",
+                                                  None,
+                                                  None,
+                                                  None,
+                                                  False,
+                                                  pos,
+                                                  tab_size,
+                                                  keyboardState,
+                                                  ScopeActions.open_coin_record,
+                                                  False,
+                                                  False,
+                                                  loader_legend,
+                                                  column_widths,
+                                                  formatters,
+                                                  data_loader,
+                                                  chunk_data_parser=coin_record_key_parser)
 
             if toggle_coin_keys not in outbound_scope.custom_keyboard_exec:
                 outbound_scope.custom_keyboard_exec[toggle_coin_keys] = toggle_coin_keyboard
@@ -2824,12 +2853,105 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
         save_scope = screenState.scopes[banner_name]
     # TODO:
     # change the way the banner is drawn, checking if it is the main scope is not optimal if there are subscope inside
-    if 'w' in keyboardState.keys and main_scope == active_scope:
+    if 'w' in keyboardState.keys:
         screenState.activeScope = save_scope
 
     if screenState.activeScope == save_scope or save_scope is not None and screenState.activeScope.name in save_scope.sub_scopes:
         ELEMENTS.create_save_address_banner(add_viewer, screenState, main_scope, address)
 
+
+
+def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+
+    width = screenState.screen_size.x
+    height = screenState.screen_size.y
+
+    coin_win = createFullSubWin(stdscr, screenState, height, width)
+    coin_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+
+    coin_name_hex = main_scope.data['coin_name']
+    coin_name_bytes = bytes32.fromhex(coin_name_hex[2:])
+
+    conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, timeout=SQL_TIMEOUT)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
+        "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, full_memo "
+        "FROM cached_coin_record WHERE coin_name = ?",
+        (coin_name_bytes,))
+    row = cursor.fetchone()
+    conn.close()
+
+    P_error = screenState.colorPairs["error_white"]
+    pos = UIgraph.Point(1, 1)
+
+    if row is None:
+        ELEMENTS.create_text(coin_win, pos, "Coin record not found", P_error, bold=False)
+        return
+
+    C_background = screenState.colors["background"]
+    P_title_selected = screenState.colorPairs["xch"]
+    text = f"coin: {coin_name_hex}"
+    ELEMENTS.create_text_double_space(coin_win, screenState, pos, text, P_title_selected, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0, 4)
+
+    labels = [
+        "Confirmed Index",
+        "Spent Index",
+        "Coinbase",
+        "Puzzle Hash",
+        "Parent Coin Info",
+        "Amount",
+        "Timestamp",
+        "Record Type",
+        "Parent Puzzle Hash",
+        "Child Count",
+        "Coin Type",
+        "Full Memo",
+    ]
+
+    values = [
+        str(row[1]),
+        str(row[2]),
+        str(bool(row[3])),
+        encode_puzzle_hash(bytes32(row[4]), CONF.ADD_PREFIX),
+        f"0x{bytes32(row[5])}",
+        str(row[6]),
+        str(row[7]),
+        TYPES.CacheCoinRecordType(row[8]).name if row[8] is not None else "None",
+        encode_puzzle_hash(bytes32(row[9]), CONF.ADD_PREFIX) if row[9] else "None",
+        str(row[10]),
+        str(row[11]),
+        f"0x{bytes(row[12]).hex()}" if row[12] else "None",
+    ]
+
+    tab_legend = ['property', 'value']
+    tab_data = [labels, values]
+
+    max_y = height - pos.y - 2
+    tab_size = UIgraph.Point(min(120, width - 4), max_y)
+
+    ELEMENTS.create_tab(coin_win,
+                        screenState,
+                        main_scope,
+                        "coin_data_tab",
+                        tab_data,
+                        None,
+                        None,
+                        True,      # transpose
+                        pos,
+                        tab_size,
+                        keyboardState,
+                        ScopeActions.exit_scope,
+                        False,
+                        False,
+                        tab_legend)
 
 
 def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):

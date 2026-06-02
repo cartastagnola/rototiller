@@ -942,6 +942,18 @@ class ScopeActions():
         return new_scope
 
     @staticmethod
+    def open_coin_record(scope: Scope, screenState: ScreenState, coin_name):
+        # TODO: move this to SCREENStiller?
+        from src.SCREENStiller import screen_coin_record
+        new_name = f"{scope.parent_scope.name}_{coin_name}"
+        new_scope = Scope(new_name, screen_coin_record, screenState)
+        new_scope.parent_scope = scope
+        new_scope.data['coin_name'] = coin_name
+        new_scope.exec = None
+        screenState.activeScope = new_scope
+        return new_scope
+
+    @staticmethod
     def exit_scope_N(how_many_parent_to_exit: int):
         def exit_scope(scope: Scope, screen_state: ScreenState, *args):
             current_scope = scope
