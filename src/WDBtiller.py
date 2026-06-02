@@ -6,6 +6,7 @@ import sqlite3
 import time
 from datetime import datetime
 from dataclasses import dataclass
+from typing import List, Tuple, Dict, Union, Callable
 
 ##### Data chunk loader
 import threading
@@ -1402,7 +1403,9 @@ class FetchMaker:
 
     # rename to cache builder / updater
     @staticmethod
-    def cache_fetcher(db_conn, cache_conn, puzzle_hash, start_height: uint32 = 0, end_height: uint32 = (2**32 - 1)):
+    def cache_fetcher(db_conn, cache_conn, puzzle_hash, start_height: uint32 = 0,
+                      end_height: uint32 = (2**32 - 1), callback: Callable = None):
+        '''the callback load data while the cache is still being created'''
         # take all coin with puzz hash in batches
 
         db_cursor = db_conn.cursor()
@@ -1452,6 +1455,7 @@ class FetchMaker:
             logging(debug_logger, "DEBUG", f"TIMO CACHE LOAD ok")
 
             sub_db_cursor = db_conn.cursor()
+            count = 0
             while True:
                 rows = db_cursor.fetchmany(1000)
                 logging(debug_logger, "DEBUG", f"DB fetchmany {len(rows)}")
@@ -1587,6 +1591,11 @@ class FetchMaker:
 
                 cache_conn.commit()
                 logging(debug_logger, "DEBUG", f"cached COMMIT")
+
+                if callback and count % 10 == 0:
+                    callback()
+                    logging(debug_logger, "DEBUG", f"CALLING BACK")
+                count += 1
 
             ######
             ### rescan upsent children coins that could have been spended

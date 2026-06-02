@@ -762,18 +762,9 @@ def create_tab(scr,
     # [['DBX', '61.0000', '0.0041477', '-0.601%', '0.10754', '-0.601%', '0.25301', '6.55972'],
     # ['MBX', '218853', '8.2087e-07', '-0.226%', '0.000021282', '-0.226%', '0.17965', '4.65769'],
     # [...]]
+
     ### TODO: traspose is too costly for large dataset, the data should be right from the beginning
     ### or chached it
-    #if transpose and dataTable:
-    #    if 'transposed' not in scope.data or scope.data['transposed'] is None:
-    #        if dataTable:
-    #            dataTable = transpose_table(dataTable)
-    #            scope.data['cached_data_table'] = dataTable
-    #            scope.data['transposed'] = True
-    #        if data_table_color:
-    #            data_table_color = transpose_table(data_table_color)
-    #            scope.data['data_table_color'] = data_table_color
-
     if transpose:
         dataTable = transpose_table(dataTable)
         if data_table_color:

@@ -2086,8 +2086,14 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
             db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
 
+            def reload_the_loaders():
+
+                logging(debug_logger, "DEBUG", "RELOADING")
+                logging(debug_logger, "DEBUG", "RELOADING")
+                load_the_loaders_cache_mode(screenState, address_loaders, uncurry_puzzle=False)
+
             logging(debug_logger, "DEBUG", f"DB LOAD starting cache fetcher")
-            WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+            WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash, callback=reload_the_loaders)
             logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
 
             aa_timo.clocking('fetch')
@@ -2104,6 +2110,10 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
             for n, i in enumerate(aa_timo_ss):
                 logging(debug_logger, "DEBUG", f"DB TIMO LOAD i{n}-{i}")
+
+            # reload the laoder
+            load_the_loaders_cache_mode(screenState, address_loaders)
+
             # logica cache DB
             # 1 create classe DB with:
             ## - fun to create the cache DB
@@ -2122,7 +2132,6 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         #update_cache_db_for_address(search_value)
 
     timo.clocking('cache update')
-    logging(debug_logger, "DEBUG", "LOAD updated the cache")
 
     # coin_info
     cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
@@ -2147,8 +2156,6 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         fetcher_first_last = WDB.FetchMaker.CACHE_puzzle_hash_fetcher(search_value, sorting_column, start_height, end_height,
                                                                       remove_spent_coins, remove_self_transactions, first_last_count=True)
 
-        logging(debug_logger, "DEBUG", "LOAD fetcher DONE")
-
         timo.clocking('fetch_maker')
         try:
             add_loader = WDB.DataChunkLoader(
@@ -2166,8 +2173,6 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             time.sleep(2)
 
         timo.clocking('inbound')
-        logging(debug_logger, "DEBUG", "LOAD the loader INbound")
-        logging(debug_logger, "DEBUG", "LOAD eeeeeeeeeeeeeeeeeenddhe loader INbound")
 
     # Outbound
     def outbound_call():
@@ -2193,7 +2198,6 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
 
         timo.clocking('outbound')
 
-        logging(debug_logger, "DEBUG", "LOAD the loader OUT OUT OUT")
 
     if inbound:
         inbound_call()
@@ -2202,13 +2206,10 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         outbound_call()
         inbound_call()
 
-    logging(debug_logger, "DEBUG", "LOAD the loader PUTPUTPUTPUTPUTPUTPTU")
 
     # Uncurry puzzle
-    logging(debug_logger, "DEBUG", f"LOAD the bool {uncurry_puzzle}")
     with address_loaders.lock:
         add_loader_out = address_loaders.address_loader_outbound
-    logging(debug_logger, "DEBUG", f"LOAD row count {add_loader_out.total_row_count}")
     if uncurry_puzzle:
         if add_loader_out.total_row_count > 0:
             try:
@@ -2230,42 +2231,25 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                     if cr.spent_block_index != 0:
                         spent_coin = cr
 
-                logging(debug_logger, "DEBUG", f"LOAD i fetcher a check THIS: {spent_coin}")
-                #spent_height = int(spent_coin[1])
                 spent_height = spent_coin.spent_block_index
-                #parent = spent_coin[4]
                 parent = spent_coin.coin.parent_coin_info.hex()
-                #puzzle = decode_puzzle_hash(spent_coin[3]).hex()
                 puzzle = spent_coin.coin.puzzle_hash.hex()
-                #amount = int(spent_coin[5] * XCH_MOJO)
                 amount = spent_coin.coin.amount
 
-                logging(debug_logger, "DEBUG", f"LOAD i fetcher parenty: {parent}")
-                logging(debug_logger, "DEBUG", f"LOAD i fetcher puzz: {puzzle}")
-                logging(debug_logger, "DEBUG", f"LOAD i fetcher amo: {amount}")
                 coin_name = UTILS.calc_coin_id(parent, puzzle, amount)  # we already have the coin_name
-                logging(debug_logger, "DEBUG", f"LOAD i fetcher coin NAME: {coin_name}")
 
-                logging(debug_logger, "DEBUG", f"LOAD i here the COIN NAMEEEEE: {coin_name}")
-                logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name}")
-                logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {spent_coin.coin_name.hex()}")
-                logging(debug_logger, "DEBUG", f"LOAD i SPENRT height: {spent_height}")
                 out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=spent_coin.coin_name.hex(), height=spent_height)
                 program = PyProgram.fromhex(out['puzzle_reveal'])
                 puzzle_disassembled = disassemble(program)
-                logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
                 unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
                 puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
                 layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
-                logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
                 with address_loaders.lock:
                     address_loaders.puzzle_and_sol_rpc = out
                     address_loaders.puzzle_disassembled = puzzle_disassembled
                     address_loaders.unrolled_puzzles = unroll_puzzles
                     address_loaders.layered_puzzle_name = layered_puzzle_name
-
-                logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
 
             except Exception as e:
                 logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
@@ -2281,12 +2265,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         else:
             with address_loaders.lock:
                 address_loaders.unrolled_puzzles = None  # no spent coins
-            logging(debug_logger, "DEBUG", f"LOAD NOOOOO SPENT COIN")
-        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
-        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
-        logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
 
-    logging(debug_logger, "DEBUG", "DB TIMO LOAD fetch: ")
     timo.clocking('end')
     timo.end()
     timo_s = f"{timo}"
@@ -2296,8 +2275,6 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
         logging(debug_logger, "DEBUG", f"DB TIMO LOAD i{n}-{i}")
 
 
-    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
-    logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
     logging(debug_logger, "DEBUG", "LOAD TIMO the loader ENNNNNNNNNDDDDDDDDDD")
 
 
@@ -2497,10 +2474,11 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
                                                         update_address_loaders)
 
     # footer
-    screenState.footer_text += "| save_to_watchlist=w "
     screenState.footer_text += f"| remove_spent_coins=s ({str(address_loaders.remove_spent_coins).upper()}), remove_self_txs=t ({str(address_loaders.remove_self_transactions).upper()})"
     if tab_selected == 1:
         screenState.footer_text += f" | show_sibling_coins ({str(address_loaders.show_phantom_coin_outputs).upper()})"
+    if main_scope == active_scope:
+        screenState.footer_text += "| save_to_watchlist=w "
 
     ### keyboard
     ### create a virtual fun and the add it to this and to the tab scope
@@ -2846,7 +2824,7 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
         save_scope = screenState.scopes[banner_name]
     # TODO:
     # change the way the banner is drawn, checking if it is the main scope is not optimal if there are subscope inside
-    if 'w' in keyboardState.keys:
+    if 'w' in keyboardState.keys and main_scope == active_scope:
         screenState.activeScope = save_scope
 
     if screenState.activeScope == save_scope or save_scope is not None and screenState.activeScope.name in save_scope.sub_scopes:
