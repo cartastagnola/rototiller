@@ -2877,29 +2877,65 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     coin_name_hex = main_scope.data['coin_name']
     coin_name_bytes = bytes32.fromhex(coin_name_hex[2:])
 
-    conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, timeout=SQL_TIMEOUT)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
-        "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, full_memo "
-        "FROM cached_coin_record WHERE coin_name = ?",
-        (coin_name_bytes,))
-    row = cursor.fetchone()
-    conn.close()
+    # --- load from cache db ---
+    def query_db():
+        try:
+            conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, timeout=SQL_TIMEOUT)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
+                "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, full_memo "
+                "FROM cached_coin_record WHERE coin_name = ?",
+                (coin_name_bytes,))
+            row = cursor.fetchone()
+            with screenState.lock:
+                main_scope.data['coin_cache'] = row
+        except Exception as e:
+            logging(debug_logger, "ERROR", f"coin cache load failed: {e}")
+            with screenState.lock:
+                main_scope.data['coin_cache'] = None
+        finally:
+            conn.close()
+
+    # --- cache logic ---
+    def load_coin_cache():
+        t = threading.Thread(target=query_db, daemon=True)
+        t.start()
+
+    # invalidate cache if coin changed
+    if main_scope.data.get('coin_cache_name') != coin_name_hex:
+        query_db()
+        with screenState.lock:
+            main_scope.data['coin_cache_name'] = coin_name_hex
+
+    # subscribe once to refresh cache on new block
+    def refresh_coin_cache(data):
+        load_coin_cache()
+
+    screenState.daemon_socket_dispatcher.subscribe_once(
+        f'update_coin_{coin_name_hex}',
+        TYPES.DaemonEvent.NEW_BLOCK,
+        refresh_coin_cache
+    )
+    # --- end cache logic ---
 
     P_error = screenState.colorPairs["error_white"]
     pos = UIgraph.Point(1, 1)
 
-    if row is None:
-        ELEMENTS.create_text(coin_win, pos, "Coin record not found", P_error, bold=False)
-        return
-
     C_background = screenState.colors["background"]
     P_title_selected = screenState.colorPairs["xch"]
+
+    with screenState.lock:
+        coin_record = main_scope.data.get('coin_cache')
+
     text = f"coin: {coin_name_hex}"
     ELEMENTS.create_text_double_space(coin_win, screenState, pos, text, P_title_selected, C_background,
                                       3, True, inv_color=False)
     pos += UIgraph.Point(0, 4)
+
+    if coin_record is None:
+        ELEMENTS.create_text(coin_win, pos, "Coin record not found", P_error, bold=False)
+        return
 
     labels = [
         "Confirmed Index",
@@ -2907,7 +2943,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         "Coinbase",
         "Puzzle Hash",
         "Parent Coin Info",
-        "Amount",
+        "Amount XCH",
+        "Amount mojo",
         "Timestamp",
         "Record Type",
         "Parent Puzzle Hash",
@@ -2917,18 +2954,19 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     ]
 
     values = [
-        str(row[1]),
-        str(row[2]),
-        str(bool(row[3])),
-        encode_puzzle_hash(bytes32(row[4]), CONF.ADD_PREFIX),
-        f"0x{bytes32(row[5])}",
-        str(row[6]),
-        str(row[7]),
-        TYPES.CacheCoinRecordType(row[8]).name if row[8] is not None else "None",
-        encode_puzzle_hash(bytes32(row[9]), CONF.ADD_PREFIX) if row[9] else "None",
-        str(row[10]),
-        str(row[11]),
-        f"0x{bytes(row[12]).hex()}" if row[12] else "None",
+        str(coin_record[1]),
+        str(coin_record[2]),
+        str(bool(coin_record[3])),
+        encode_puzzle_hash(bytes32(coin_record[4]), CONF.ADD_PREFIX),
+        f"0x{bytes32(coin_record[5])}",
+        UTILS.xch_amount(int.from_bytes(coin_record[6], 'big') if isinstance(coin_record[6], bytes) else coin_record[6]),
+        int.from_bytes(coin_record[6], 'big') if isinstance(coin_record[6], bytes) else coin_record[6],
+        str(coin_record[7]),
+        TYPES.CacheCoinRecordType(coin_record[8]).name if coin_record[8] is not None else "None",
+        encode_puzzle_hash(bytes32(coin_record[9]), CONF.ADD_PREFIX) if coin_record[9] else "None",
+        str(coin_record[10]),
+        str(coin_record[11]),
+        f"0x{bytes(coin_record[12]).hex()}" if coin_record[12] else "None",
     ]
 
     tab_legend = ['property', 'value']

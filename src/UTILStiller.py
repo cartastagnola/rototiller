@@ -194,6 +194,21 @@ def human_amount(amount: int) -> str:
     #return f"{value} -- {amount / CONF.XCH_MOJO}"
 
 
+def xch_amount(amount: int) -> str:
+    """Show exact XCH amount with all decimal digits, no rounding, no padding."""
+    mojos = int(amount)
+    one_xch = CONF.XCH_MOJO
+
+    xch_whole = mojos // one_xch
+    xch_remainder = mojos % one_xch
+
+    if xch_remainder == 0:
+        return f"{xch_whole}"
+
+    remainder_str = f"{xch_remainder:012d}".rstrip("0")
+    return f"{xch_whole}.{remainder_str}"
+
+
 def human_mojo(num: int) -> str:
     # suffixes
     suffixes = ['', 'K', 'M', 'B', 'XCH']
