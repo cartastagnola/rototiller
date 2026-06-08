@@ -1691,7 +1691,7 @@ class FetchMaker:
         pass
 
     @staticmethod
-    def memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls: float = 1.05):
+    def memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls: float = 0.05):
         """Fetch memos for cached coins by running parent puzzle+solution via RPC.
            Stores all memos as a JSON-encoded list of hex strings in full_memo.
            Retries RPC calls indefinitely on failure. Resumes from last_confirmed_index."""
@@ -1726,15 +1726,18 @@ class FetchMaker:
             logging(debug_logger, "DEBUG", "MEMO FETCHER: nothing to do")
             return
 
-        logging(debug_logger, "DEBUG", f"MEMO FETCHER: {len(coins_by_parent)} parents to process")
+        total_parents = len(coins_by_parent)
+        logging(debug_logger, "DEBUG", f"MEMO FETCHER: {total_parents} parents to process")
 
         # --- 4. process each parent ---
+        processed_count = 0
         for parent, child_coins in coins_by_parent.items():
+            processed_count += 1
             parent_hex = parent.hex()
             spent_height = child_coins[0][1]  # confirmed_index of any child
 
             # retry-loop RPC
-            while True:
+            for i in range(15):
                 try:
                     print('in the loop')
                     tt = threading.current_thread()
@@ -1766,6 +1769,7 @@ class FetchMaker:
                 child_amount = c[6]
                 key = (child_puzzle, child_amount)
                 child_lookup.setdefault(key, []).append(child_name)
+
 
             # scan conditions
             for condition in result.as_iter():
@@ -1811,6 +1815,7 @@ class FetchMaker:
                         (b'[]', child_name)
                     )
 
+
             # update progress
             highest_confirmed = max(c[1] for c in child_coins)
             cache_cursor.execute(
@@ -1821,8 +1826,12 @@ class FetchMaker:
 
             if sleep_between_calls:
                 time.sleep(sleep_between_calls)
+            
+            #if processed_count % 10 == 0 or processed_count == total_parents:
+            address = encode_puzzle_hash(bytes32(puzzle_hash), CONF.ADD_PREFIX)
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER progress: {processed_count}/{total_parents} parents processed for {address}")
 
-        logging(debug_logger, "DEBUG", "MEMO FETCHER: done")
+        logging(debug_logger, "DEBUG", f"MEMO FETCHER: done ({processed_count}/{total_parents} processed)")
 
     @staticmethod
     def CACHE_puzzle_hash_fetcher(puzzle_hash: bytes, sorting_column: str,
