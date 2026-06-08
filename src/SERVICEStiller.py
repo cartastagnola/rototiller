@@ -4,7 +4,7 @@ import time
 import json
 import csv
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
+import queue
 import traceback
 import asyncio
 import threading
@@ -40,13 +40,41 @@ def write_prices(name, prices):
         writer.writerows([[UTILS.convert_ts_to_date(key), value] for key, value in prices.items()])
 
 
+class DaemonThreadPool:
+    def __init__(self, max_workers=2, thread_name_prefix="worker"):
+        self._queue = queue.Queue()
+        self._workers = []
+        for i in range(max_workers):
+            t = threading.Thread(
+                target=self._worker_loop,
+                name=f"{thread_name_prefix}_{i}",
+                daemon=True
+            )
+            t.start()
+            self._workers.append(t)
+
+    def _worker_loop(self):
+        while True:
+            fn, args = self._queue.get()
+            try:
+                fn(args)
+            except Exception:
+                # Silently catch errors in background tasks to prevent crash output
+                pass
+            finally:
+                self._queue.task_done()
+
+    def submit(self, fn, args):
+        self._queue.put((fn, args))
+
+
 class SocketDispatcher:
     def __init__(self):
         # A dictionary to store lists of callbacks for different events
         self._events = {event: [] for event in TYPES.DaemonEvent}
         self._oneshot_events = {event: [] for event in TYPES.DaemonEvent}
-        # Limit to 2 parallel workers to avoid overloading the system or database
-        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dispatcher_worker")
+        # Use our custom pool which doesn't hang on exit
+        self._executor = DaemonThreadPool(max_workers=2, thread_name_prefix="dispatcher_worker")
 
     def subscribe(self, event_name: TYPES.DaemonEvent, callback: callable):
         if event_name not in self._events:
@@ -67,20 +95,16 @@ class SocketDispatcher:
     def dispatch(self, data):
         event_name = TYPES.DaemonEvent.from_str(data['command'])
         if event_name:
-            try:
-                for callback in self._events[event_name]:
-                    #callback(data)
-                    self._executor.submit(callback, data)
+            for callback in self._events[event_name]:
+                #callback(data)
+                self._executor.submit(callback, data)
 
-                oneshot_callbacks = list(self._oneshot_events[event_name])
-                self._oneshot_events[event_name] = []
+            oneshot_callbacks = list(self._oneshot_events[event_name])
+            self._oneshot_events[event_name] = []
 
-                for _, callback in oneshot_callbacks:
-                    #callback(data)
-                    self._executor.submit(callback, data)
-            except RuntimeError:
-                # Ignore "cannot schedule new futures after interpreter shutdown"
-                pass
+            for _, callback in oneshot_callbacks:
+                #callback(data)
+                self._executor.submit(callback, data)
 
 ## --- Define your reactions (Service functions) ---
 #def update_db(data):
