@@ -165,6 +165,8 @@ async def fetch_rpc_node(method_name, *args, **kwargs):
         #response = await rpc_method(*args, **kwargs)
         print("kwatsf")
         print(kwargs)
+        print(traceback.format_exc())
+        print(method_name)
         response = await full_node_client.fetch(method_name, kwargs)
         return response
     except Exception as e:

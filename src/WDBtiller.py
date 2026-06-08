@@ -1691,7 +1691,7 @@ class FetchMaker:
         pass
 
     @staticmethod
-    def memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls: float = 0.05):
+    def memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls: float = 1.05):
         """Fetch memos for cached coins by running parent puzzle+solution via RPC.
            Stores all memos as a JSON-encoded list of hex strings in full_memo.
            Retries RPC calls indefinitely on failure. Resumes from last_confirmed_index."""
@@ -1736,11 +1736,16 @@ class FetchMaker:
             # retry-loop RPC
             while True:
                 try:
+                    print('in the loop')
+                    tt = threading.current_thread()
+                    print(tt.name)
+                    print(tt)
                     out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent_hex, height=spent_height)
                     break
                 except Exception as e:
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER RPC error for parent {parent_hex} at height {spent_height}: {e}, retrying...")
-                    time.sleep(sleep_between_calls or 0.5)
+                    print(traceback.format_exc())
+                    time.sleep(sleep_between_calls)
 
             puzzle_program = PyProgram.fromhex(out['puzzle_reveal'])
             solution_program = PyProgram.fromhex(out['solution'])

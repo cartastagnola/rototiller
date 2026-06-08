@@ -4,6 +4,7 @@ import time
 import json
 import csv
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 import traceback
 import asyncio
 import threading
@@ -44,6 +45,8 @@ class SocketDispatcher:
         # A dictionary to store lists of callbacks for different events
         self._events = {event: [] for event in TYPES.DaemonEvent}
         self._oneshot_events = {event: [] for event in TYPES.DaemonEvent}
+        # Limit to 2 parallel workers to avoid overloading the system or database
+        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dispatcher_worker")
 
     def subscribe(self, event_name: TYPES.DaemonEvent, callback: callable):
         if event_name not in self._events:
@@ -64,14 +67,20 @@ class SocketDispatcher:
     def dispatch(self, data):
         event_name = TYPES.DaemonEvent.from_str(data['command'])
         if event_name:
-            for callback in self._events[event_name]:
-                callback(data)
+            try:
+                for callback in self._events[event_name]:
+                    #callback(data)
+                    self._executor.submit(callback, data)
 
-            oneshot_callbacks = list(self._oneshot_events[event_name])
-            self._oneshot_events[event_name] = []
+                oneshot_callbacks = list(self._oneshot_events[event_name])
+                self._oneshot_events[event_name] = []
 
-            for _, callback in oneshot_callbacks:
-                callback(data)
+                for _, callback in oneshot_callbacks:
+                    #callback(data)
+                    self._executor.submit(callback, data)
+            except RuntimeError:
+                # Ignore "cannot schedule new futures after interpreter shutdown"
+                pass
 
 ## --- Define your reactions (Service functions) ---
 #def update_db(data):
