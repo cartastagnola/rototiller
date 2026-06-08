@@ -156,6 +156,7 @@ def interFace(stdscr):
                         # test if the add is correct
                         encode_puzzle_hash(puzzle_hash, CONF.ADD_PREFIX)
                         WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+                        WDB.FetchMaker.memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls=0.05)
 
                         # bacis info
                         balance, unspent_coin_count, total_coin_count, peak_height = WDB.FetchMaker.get_total_amount_and_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)

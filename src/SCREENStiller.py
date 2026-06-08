@@ -6,6 +6,7 @@ import curses
 from datetime import datetime
 import threading
 import traceback
+import json
 
 #from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 #from chia.rpc.rpc_server import RpcServer
@@ -2090,6 +2091,10 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
             logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
 
+            logging(debug_logger, "DEBUG", f"DB LOAD starting memo fetcher")
+            WDB.FetchMaker.memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls=0.05)
+            logging(debug_logger, "DEBUG", f"DB LOAD ENDED memo fetcher")
+
             aa_timo.clocking('fetch')
 
             cache_conn.close()
@@ -2966,7 +2971,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         encode_puzzle_hash(bytes32(coin_record[9]), CONF.ADD_PREFIX) if coin_record[9] else "None",
         str(coin_record[10]),
         str(coin_record[11]),
-        f"0x{bytes(coin_record[12]).hex()}" if coin_record[12] else "None",
+        (lambda m: ", ".join(json.loads(m.decode())) if m and m.startswith(b'[') else (f"0x{bytes(m).hex()}" if m else "None"))(coin_record[12]),
     ]
 
     tab_legend = ['property', 'value']

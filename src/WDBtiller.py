@@ -159,6 +159,13 @@ def create_cache_blockchain_db(conn):
         )
 
         cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_memo_progress ("
+            "puzzle_hash BLOB PRIMARY KEY, "
+            "last_confirmed_index BIGINT "
+            ");"
+        )
+
+        cursor.execute(
             "CREATE TABLE IF NOT EXISTS ooo ("
             "key TEXT PRIMARY KEY, "
             "value INT "
@@ -1583,9 +1590,26 @@ class FetchMaker:
                     args.append(None)  # full memo
 
 
-                    # cache insert
+                    # cache insert (preserve full_memo if already fetched)
                     cache_cursor.execute(
-                        "INSERT OR REPLACE INTO cached_coin_record VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO cached_coin_record ("
+                        "coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                        "coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
+                        "child_count, coin_type, full_memo) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT(coin_name) DO UPDATE SET "
+                        "confirmed_index = excluded.confirmed_index, "
+                        "spent_index = excluded.spent_index, "
+                        "coinbase = excluded.coinbase, "
+                        "puzzle_hash = excluded.puzzle_hash, "
+                        "coin_parent = excluded.coin_parent, "
+                        "amount = excluded.amount, "
+                        "timestamp = excluded.timestamp, "
+                        "record_type = excluded.record_type, "
+                        "parent_puzzle_hash = excluded.parent_puzzle_hash, "
+                        "child_count = excluded.child_count, "
+                        "coin_type = excluded.coin_type "
+                        f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
                         args
                     )
 
@@ -1665,6 +1689,135 @@ class FetchMaker:
         # secondary
         # find hinted
         pass
+
+    @staticmethod
+    def memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls: float = 0.05):
+        """Fetch memos for cached coins by running parent puzzle+solution via RPC.
+           Stores all memos as a JSON-encoded list of hex strings in full_memo.
+           Retries RPC calls indefinitely on failure. Resumes from last_confirmed_index."""
+        cache_cursor = cache_conn.cursor()
+
+        # --- 1. read progress ---
+        cache_cursor.execute(
+            "SELECT last_confirmed_index FROM cached_memo_progress WHERE puzzle_hash = ?",
+            (puzzle_hash,)
+        )
+        row = cache_cursor.fetchone()
+        last_confirmed_index = row[0] if row else 0
+
+        # --- 2. fetch coins needing memos ---
+        cache_cursor.execute(
+            "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+            "       coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
+            "       child_count, coin_type, full_memo "
+            "FROM cached_coin_record "
+            "WHERE puzzle_hash = ? AND coinbase = 0 AND confirmed_index >= ? AND full_memo IS NULL "
+            "ORDER BY confirmed_index ASC",
+            (puzzle_hash, last_confirmed_index)
+        )
+
+        # --- 3. group by coin_parent ---
+        coins_by_parent = {}
+        for coin_row in cache_cursor.fetchall():
+            parent = coin_row[5]
+            coins_by_parent.setdefault(parent, []).append(coin_row)
+
+        if not coins_by_parent:
+            logging(debug_logger, "DEBUG", "MEMO FETCHER: nothing to do")
+            return
+
+        logging(debug_logger, "DEBUG", f"MEMO FETCHER: {len(coins_by_parent)} parents to process")
+
+        # --- 4. process each parent ---
+        for parent, child_coins in coins_by_parent.items():
+            parent_hex = parent.hex()
+            spent_height = child_coins[0][1]  # confirmed_index of any child
+
+            # retry-loop RPC
+            while True:
+                try:
+                    out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent_hex, height=spent_height)
+                    break
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER RPC error for parent {parent_hex} at height {spent_height}: {e}, retrying...")
+                    time.sleep(sleep_between_calls or 0.5)
+
+            puzzle_program = PyProgram.fromhex(out['puzzle_reveal'])
+            solution_program = PyProgram.fromhex(out['solution'])
+
+            # run puzzle
+            max_cost = CONF.BLOCK_MAX_COST
+            try:
+                cost, result = puzzle_program.run_with_cost(max_cost, solution_program)
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"MEMO FETCHER run_with_cost failed for {parent_hex}: {e}")
+                continue
+
+            # build lookup: (target_puzzle_hash, amount) -> list of coin_names
+            child_lookup = {}
+            for c in child_coins:
+                child_name = c[0]
+                child_puzzle = bytes(c[4])
+                child_amount = c[6]
+                key = (child_puzzle, child_amount)
+                child_lookup.setdefault(key, []).append(child_name)
+
+            # scan conditions
+            for condition in result.as_iter():
+                cond_list = condition.as_python()
+                if cond_list[0] != ConditionOpcode.CREATE_COIN:
+                    continue
+
+                target_puzzle = bytes(cond_list[1])
+                target_amount_raw = cond_list[2]
+                target_amount = int.from_bytes(target_amount_raw, 'big') if isinstance(target_amount_raw, bytes) else int(target_amount_raw)
+                key = (target_puzzle, target_amount)
+
+                if key not in child_lookup:
+                    logging(debug_logger, "DEBUG", f"BIG PROBLEM HERE!!!")
+                    continue
+
+                # extract memos
+                memos = cond_list[3] if len(cond_list) > 3 else []
+                if memos:
+                    logging(debug_logger, "DEBUG", f"W E FIND MEMOS {memos}!!!")
+                    memo_json = json.dumps([m.hex() if isinstance(m, bytes) else str(m) for m in memos]).encode()
+                    logging(debug_logger, "DEBUG", f"W E FIND MEMOS {memo_json}!!!")
+                else:
+                    memo_json = b'[]'
+                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
+
+                # update all matching children
+                for child_name in child_lookup[key]:
+                    cache_cursor.execute(
+                        "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",
+                        (memo_json, child_name)
+                    )
+                del child_lookup[key]
+
+            # mark unmatched children with empty list so we don't re-process them
+            for remaining_names in child_lookup.values():
+                for child_name in remaining_names:
+                    cache_cursor.execute(
+                        "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",
+                        (b'[]', child_name)
+                    )
+
+            # update progress
+            highest_confirmed = max(c[1] for c in child_coins)
+            cache_cursor.execute(
+                "INSERT OR REPLACE INTO cached_memo_progress (puzzle_hash, last_confirmed_index) VALUES (?, ?)",
+                (puzzle_hash, highest_confirmed)
+            )
+            cache_conn.commit()
+
+            if sleep_between_calls:
+                time.sleep(sleep_between_calls)
+
+        logging(debug_logger, "DEBUG", "MEMO FETCHER: done")
 
     @staticmethod
     def CACHE_puzzle_hash_fetcher(puzzle_hash: bytes, sorting_column: str,
