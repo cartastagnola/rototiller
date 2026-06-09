@@ -124,7 +124,7 @@ def interFace(stdscr):
             """data: websocket data from the daemon"""
             # load the watch list
             path = CONF.USER_ADDX_WATCHLIST
-            lines = WDB.load_csv(path)
+            lines = WDB.load_csv_no_comments(path)
 
             logging(debug_logger, "DEBUG", f"DB UPDATING CACHE... ... ... ...")
             logging(debug_logger, "DEBUG", f"DB {data}")

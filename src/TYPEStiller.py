@@ -984,7 +984,8 @@ class ScopeActions():
                      address_name: str, scope_prompt: Scope, *args):
 
         path = CONF.USER_ADDX_WATCHLIST
-        watchlist = WDB.load_csv(path)
+        watchlist_raw = WDB.load_csv(path)
+        watchlist = WDB.load_csv_no_comments(path)
 
         exist = False
         for item in watchlist:
@@ -1001,9 +1002,8 @@ class ScopeActions():
             screen_state.activeScope = scope.parent_scope
             return scope.parent_scope
         else:
-            watchlist.append((address, address_name, ''))
-            watchlist.insert(0, ('#address', ' name', " 'some notes'"))
-            WDB.save_csv(path, watchlist)
+            watchlist_raw.append((address, address_name, ''))
+            WDB.save_csv(path, watchlist_raw)
             scope_prompt.data['prompt'] = ''
             screen_state.activeScope = scope.parent_scope.parent_scope
             screen_state.footer_message = 'address saved...'

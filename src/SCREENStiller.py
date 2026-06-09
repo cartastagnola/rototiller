@@ -2347,7 +2347,7 @@ def screen_address_watchlist(stdscr, keyboardState: KeyboardState, screenState: 
     path = CONF.USER_ADDX_WATCHLIST
 
     if path.exists():
-        addx = WDB.load_csv(path)
+        addx = WDB.load_csv_no_comments(path)
     else:
         # write and empty file
         empty_line = [('#address', ' name', " 'some notes'")]
@@ -2586,7 +2586,7 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
 
     path = CONF.USER_ADDX_WATCHLIST
     if path.exists():
-        addx_list = WDB.load_csv(path)
+        addx_list = WDB.load_csv_no_comments(path)
         only_addx = [[] for _ in range(3)]
         for entry in addx_list:
             if len(entry) > 1:

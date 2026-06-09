@@ -69,10 +69,22 @@ def reconstruct_block_record_from_bytes(block_bytes: bytes):
 
 # Load and save csv
 def load_csv(path: Path):
+    """Load all the row in the CSV file."""
     with open(path, newline="", encoding="utf-8") as f:
         #f = [row for row in f if not row.strip().startswith("#")]
         reader = csv.reader(f, quotechar="'", skipinitialspace=True)
-        next(reader, None)  # jump the first line
+        #next(reader, None)  # jump the first line
+        return list(reader)
+
+
+def load_csv_no_comments(path: Path):
+    """Load a CSV file, skipping any lines that start with #."""
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(
+            (row for row in f if not row.strip().startswith("#")),
+            quotechar="'",
+            skipinitialspace=True
+        )
         return list(reader)
 
 
@@ -1783,21 +1795,21 @@ class FetchMaker:
                 key = (target_puzzle, target_amount)
 
                 if key not in child_lookup:
-                    logging(debug_logger, "DEBUG", f"BIG PROBLEM HERE!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER BIG PROBLEM HERE!!!")
                     continue
 
                 # extract memos
                 memos = cond_list[3] if len(cond_list) > 3 else []
                 if memos:
-                    logging(debug_logger, "DEBUG", f"W E FIND MEMOS {memos}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS {memos}!!!")
                     memo_json = json.dumps([m.hex() if isinstance(m, bytes) else str(m) for m in memos]).encode()
-                    logging(debug_logger, "DEBUG", f"W E FIND MEMOS {memo_json}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS {memo_json}!!!")
                 else:
                     memo_json = b'[]'
-                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
-                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
-                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
-                    logging(debug_logger, "DEBUG", f"W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
 
                 # update all matching children
                 for child_name in child_lookup[key]:
