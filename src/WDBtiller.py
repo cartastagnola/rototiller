@@ -1756,6 +1756,7 @@ class FetchMaker:
                     print(tt.name)
                     print(tt)
                     out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent_hex, height=spent_height)
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER RPC solution out: {out}")
                     break
                 except Exception as e:
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER RPC error for parent {parent_hex} at height {spent_height}: {e}, retrying...")
@@ -1776,12 +1777,22 @@ class FetchMaker:
             # build lookup: (target_puzzle_hash, amount) -> list of coin_names
             child_lookup = {}
             for c in child_coins:
-                child_name = c[0]
+                child_name = bytes(c[0])
                 child_puzzle = bytes(c[4])
-                child_amount = c[6]
+                child_amount_raw = c[6]
+                if isinstance(child_amount_raw, bytes):
+                    child_amount = int.from_bytes(child_amount_raw, 'big')
+                else:
+                    child_amount = int(child_amount_raw)
                 key = (child_puzzle, child_amount)
                 child_lookup.setdefault(key, []).append(child_name)
 
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER child_coins {child_coins}")
+            logging(debug_logger, "DEBUG", f"MEMO FETCHER coin parent {parent_hex}")
 
             # scan conditions
             for condition in result.as_iter():
@@ -1794,22 +1805,26 @@ class FetchMaker:
                 target_amount = int.from_bytes(target_amount_raw, 'big') if isinstance(target_amount_raw, bytes) else int(target_amount_raw)
                 key = (target_puzzle, target_amount)
 
+                logging(debug_logger, "DEBUG", f"MEMO FETCHER key {key}")
                 if key not in child_lookup:
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER BIG PROBLEM HERE!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER NO KEY LOOKUP!!!")
                     continue
 
                 # extract memos
+                logging(debug_logger, "DEBUG", f"MEMO FETCHER cond list {cond_list}")
+                logging(debug_logger, "DEBUG", f"MEMO FETCHER cond list len {len(cond_list)}")
                 memos = cond_list[3] if len(cond_list) > 3 else []
+                memos_me = cond_list[3:]
                 if memos:
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS {memos}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS MEEE {memos_me}!!!")
                     memo_json = json.dumps([m.hex() if isinstance(m, bytes) else str(m) for m in memos]).encode()
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS {memo_json}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
                 else:
                     memo_json = b'[]'
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOOOOOOOOOOOOOOOOOO MEMOS !!!")
 
                 # update all matching children
                 for child_name in child_lookup[key]:
@@ -1817,6 +1832,8 @@ class FetchMaker:
                         "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",
                         (memo_json, child_name)
                     )
+                    if cache_cursor.rowcount == 0:
+                        logging(debug_logger, "DEBUG", f"MEMO FETCHER WARNING: UPDATE affected 0 rows for {child_name.hex()}")
                 del child_lookup[key]
 
             # mark unmatched children with empty list so we don't re-process them
@@ -1826,6 +1843,8 @@ class FetchMaker:
                         "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",
                         (b'[]', child_name)
                     )
+                    if cache_cursor.rowcount == 0:
+                        logging(debug_logger, "DEBUG", f"MEMO FETCHER WARNING: unmatched UPDATE affected 0 rows for {child_name.hex()}")
 
 
             # update progress
@@ -1838,10 +1857,11 @@ class FetchMaker:
 
             if sleep_between_calls:
                 time.sleep(sleep_between_calls)
-            
+
             #if processed_count % 10 == 0 or processed_count == total_parents:
             address = encode_puzzle_hash(bytes32(puzzle_hash), CONF.ADD_PREFIX)
             logging(debug_logger, "DEBUG", f"MEMO FETCHER progress: {processed_count}/{total_parents} parents processed for {address}")
+            time.sleep(1)
 
         logging(debug_logger, "DEBUG", f"MEMO FETCHER: done ({processed_count}/{total_parents} processed)")
 
