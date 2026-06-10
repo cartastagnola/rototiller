@@ -2958,6 +2958,17 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         "Full Memo",
     ]
 
+    _memo = coin_record[12]
+    try:
+        _memo_display = bytes(_memo).decode('utf-8')
+    except UnicodeDecodeError:
+        _memo_display = f"0x{bytes(_memo).hex()}"
+        #if _memo and _memo.startswith(b'['):
+        #    _memo_display = ", ".join(json.loads(_memo.decode()))
+        #elif _memo:
+        #else:
+        #    _memo_display = "None"
+
     values = [
         str(coin_record[1]),
         str(coin_record[2]),
@@ -2971,7 +2982,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         encode_puzzle_hash(bytes32(coin_record[9]), CONF.ADD_PREFIX) if coin_record[9] else "None",
         str(coin_record[10]),
         str(coin_record[11]),
-        (lambda m: ", ".join(json.loads(m.decode())) if m and m.startswith(b'[') else (f"0x{bytes(m).hex()}" if m else "None"))(coin_record[12]),
+        _memo_display,
     ]
 
     tab_legend = ['property', 'value']

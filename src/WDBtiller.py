@@ -1743,6 +1743,8 @@ class FetchMaker:
 
         # --- 4. process each parent ---
         processed_count = 0
+        total_key_matches = 0
+        total_key_mismatches = 0
         for parent, child_coins in coins_by_parent.items():
             processed_count += 1
             parent_hex = parent.hex()
@@ -1818,7 +1820,7 @@ class FetchMaker:
                 if memos:
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS {memos}!!!")
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS MEEE {memos_me}!!!")
-                    memo_json = json.dumps([m.hex() if isinstance(m, bytes) else str(m) for m in memos]).encode()
+                    memo_json = json.dumps([str(m) for m in memos]).encode()
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
