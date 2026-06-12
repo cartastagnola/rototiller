@@ -3169,13 +3169,36 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         scope_search.data['pressed_enter'] = False
         prompt = scope_search.data['prompt']
 
+
+        # check if it an hex value, an check the length
+        ## what could be? coin_id or address
+        # if it is not an hex value it could be an address?
+        ## if it is 
+
         puzz_hash: bytes32 = UTILS.address_to_bytes32(prompt)
         if puzz_hash is not None:
-            invalid_data_err.pop('add', None)
-            address_loaders.puzzle_hash = puzz_hash
-            run_loader = True
-            main_scope.select_sub_scope_2d(scope_search_button)
-
+            # Check if it's a coin_id
+            is_coin_id = False
+            db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+            try:
+                cursor = db_conn.cursor()
+                cursor.execute("SELECT coin_name FROM coin_record WHERE coin_name = ?", (puzz_hash,))
+                if cursor.fetchone():
+                    is_coin_id = True
+            except Exception as e:
+                logging(debug_logger, "ERROR", f"Coin ID check failed: {e}")
+            finally:
+                db_conn.close()
+ 
+            if is_coin_id:
+                invalid_data_err['add'] = "Warning: This is a Coin ID, not a Puzzle Hash | "
+                scope_search.data['valid_data'] = True
+            else:
+                invalid_data_err.pop('add', None)
+                address_loaders.puzzle_hash = puzz_hash
+                run_loader = True
+                main_scope.select_sub_scope_2d(scope_search_button)
+ 
         else:
             invalid_data_err['add'] = "the address or the hex string is not valid | "
             scope_search.data['valid_data'] = False
