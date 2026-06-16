@@ -1421,12 +1421,102 @@ class FetchMaker:
     # TODO: remove filters from fetch
 
     @staticmethod
-    def cache_coin_record_row(cache_cursor, row, parent_puzzle_hash, child_count):
-        """Cache a single coin_record row (8 columns from coin_record table)
-           into cached_coin_record as a NORMAL full record.
-        row: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, amount, timestamp)
+    def cache_coin_record(db_cursor, cache_cursor, coin_record_row, puzzle_hash):
+        """Process a coin_record row (8 columns from coin_record table)
+           and cache it along with its children.
+           Looks up parent_puzzle_hash, retrieves child coins, creates PHANTOM/CHILD
+           records, and caches the main coin as NORMAL.
+        coin_record_row: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
+              coin_parent, amount, timestamp)
         """
-        args = list(row)
+        coin_parent = coin_record_row[5]
+        coinbase = coin_record_row[3]
+
+        if coinbase:
+            parent_puzzle_hash = None
+        else:
+            db_cursor.execute(
+                "SELECT puzzle_hash FROM coin_record WHERE coin_name=? ",
+                (coin_parent,),
+            )
+            items = db_cursor.fetchall()
+            if len(items) > 1:
+                parent_puzzle_hash = items[0][0]
+                raise "one, and only one parent..."
+            elif len(items) == 1:
+                parent_puzzle_hash = items[0][0]
+            else:
+                raise "zero... no way! terminate everything"
+
+        coin_name = coin_record_row[0]
+        spent_index = coin_record_row[2]
+        amount = coin_record_row[6]
+        child_count = 0
+        if spent_index > 0:
+            db_cursor.execute(
+                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                "coin_parent, amount, timestamp FROM coin_record WHERE coin_parent=? ",
+                (coin_name,),
+            )
+            items = db_cursor.fetchall()
+            child_count = len(items)
+
+            if child_count == 0:
+                sub_args = []
+                sub_args.append(UTILS.calc_coin_id(coin_name, puzzle_hash, amount))
+                sub_args.append(spent_index)
+                sub_args.append(spent_index)
+                sub_args.append(0)
+                sub_args.append(bytes(32))
+                sub_args.append(coin_name)
+                sub_args.append(amount)
+
+                db_cursor.execute(
+                    "SELECT block_record FROM full_blocks WHERE height = ?",
+                    (spent_index,)
+                )
+                items = db_cursor.fetchall()
+                block_record = reconstruct_block_record_from_bytes(items[0][0])
+                sub_args.append(block_record['timestamp'])
+
+                sub_args.append(TYPES.CacheCoinRecordType.PHANTOM_SPENT)
+                sub_args.append(puzzle_hash)
+
+                cache_cursor.execute(
+                    "INSERT OR REPLACE INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
+                    "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?) ",
+                    sub_args
+                )
+
+            else:
+                for sub_args in items:
+                    sub_args = list(sub_args)
+                    sub_args.append(TYPES.CacheCoinRecordType.CHILD)
+                    sub_args.append(puzzle_hash)
+
+                    cache_cursor.execute(
+                        "INSERT INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
+                        "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?) "
+
+                        "ON CONFLICT(coin_name) DO UPDATE SET "
+                        "confirmed_index = excluded.confirmed_index, "
+                        "spent_index = excluded.spent_index, "
+                        "coinbase = excluded.coinbase, "
+                        "puzzle_hash = excluded.puzzle_hash, "
+                        "coin_parent = excluded.coin_parent, "
+                        "amount = excluded.amount, "
+                        "timestamp = excluded.timestamp, "
+                        "record_type = excluded.record_type, "
+                        "parent_puzzle_hash = excluded.parent_puzzle_hash "
+
+                        f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
+                        sub_args
+                    )
+
+        # --- cache main coin record ---
+        args = list(coin_record_row)
         args.append(TYPES.CacheCoinRecordType.NORMAL)
         args.append(parent_puzzle_hash)
         args.append(child_count)
@@ -1517,120 +1607,7 @@ class FetchMaker:
                     break
 
                 for row in rows:
-                    coin_parent = row[5]
-                    coinbase = row[3]
-
-                    # find from
-                    if coinbase:
-                        parent_puzzle_hash = None
-                    else:
-                        sub_db_cursor.execute(
-                            "SELECT puzzle_hash FROM coin_record WHERE coin_name=? ",
-                            (coin_parent,),
-                        )
-                        items = sub_db_cursor.fetchall()
-                        if len(items) > 1:
-                            parent_puzzle_hash = items[0][0]
-                            raise "one, and only one parent..."
-                        elif len(items) == 1:
-                            parent_puzzle_hash = items[0][0]
-                        else:
-                            raise "zero... no way! terminate everything"
-
-
-                    # find all the child coin, count them, store them as coin
-                    coin_name = row[0]
-                    spent_index = row[2]
-                    amount = row[6]
-                    child_count = 0
-                    if spent_index > 0:
-                        sub_db_cursor.execute(
-                            "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
-                            "coin_parent, amount, timestamp FROM coin_record WHERE coin_parent=? ",
-                            (coin_name,),
-                        )
-
-                        items = sub_db_cursor.fetchall()
-                        child_count = len(items)
-
-                        if child_count == 0:
-                            ################
-                            # faked coin created to add a trace in outound coin spent without children
-                            ###############
-                            sub_args = []
-                            # coin_name | The Great Unknown
-                            # parent_coin_info, puzzle_hash, amount
-                            sub_args.append(UTILS.calc_coin_id(coin_name, puzzle_hash, amount))
-
-                            # confirmed_index
-                            sub_args.append(spent_index)
-
-                            # spent_index
-                            sub_args.append(spent_index)
-
-                            # coinbase
-                            sub_args.append(0)
-
-                            # puzzle_hash
-                            sub_args.append(bytes(32))  # the zero bytes
-                            #sub_args.append(None)
-
-                            # coin_parent
-                            sub_args.append(coin_name)
-
-                            # amount
-                            sub_args.append(amount)
-
-                            # timestamp
-                            sub_db_cursor.execute(
-                                "SELECT block_record FROM full_blocks WHERE height = ?",
-                                (spent_index,)
-                            )
-                            items = sub_db_cursor.fetchall()
-                            block_record = reconstruct_block_record_from_bytes(items[0][0])
-                            sub_args.append(block_record['timestamp'])  # retrive timestamp block spent
-
-                            #logging(debug_logger, "DEBUG", f"TIMO CACHE timestamp {block_record['timestamp']}")
-                            sub_args.append(TYPES.CacheCoinRecordType.PHANTOM_SPENT)  # spent coin without children (value=2)
-                            sub_args.append(puzzle_hash)  # parent puzzle hash
-
-                            cache_cursor.execute(
-                                "INSERT OR REPLACE INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
-                                "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
-                                "VALUES (?,?,?,?,?,?,?,?,?,?) ",
-                                sub_args
-                            )
-
-                        else:
-                            #logging(debug_logger, "DEBUG", f"TIMO CACHE with child")
-                            for sub_args in items:
-                                # store in the cache without extra data
-                                sub_args = list(sub_args)
-                                sub_args.append(TYPES.CacheCoinRecordType.CHILD)  # partial coin_record (value=1)
-                                sub_args.append(puzzle_hash)
-
-                                # TODO: add the case where the record already exist and it is a full record. (do not modify)
-                                cache_cursor.execute(
-                                    "INSERT INTO cached_coin_record (coin_name, confirmed_index, spent_index, "
-                                    "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
-                                    "VALUES (?,?,?,?,?,?,?,?,?,?) "
-
-                                    "ON CONFLICT(coin_name) DO UPDATE SET "
-                                    "confirmed_index = excluded.confirmed_index, "
-                                    "spent_index = excluded.spent_index, "
-                                    "coinbase = excluded.coinbase, "
-                                    "puzzle_hash = excluded.puzzle_hash, "
-                                    "coin_parent = excluded.coin_parent, "
-                                    "amount = excluded.amount, "
-                                    "timestamp = excluded.timestamp, "
-                                    "record_type = excluded.record_type, "
-                                    "parent_puzzle_hash = excluded.parent_puzzle_hash "
-
-                                    f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
-                                    sub_args
-                                )
-
-                    FetchMaker.cache_coin_record_row(cache_cursor, row, parent_puzzle_hash, child_count)
+                    FetchMaker.cache_coin_record(sub_db_cursor, cache_cursor, row, puzzle_hash)
 
                 cache_conn.commit()
                 logging(debug_logger, "DEBUG", f"cached COMMIT")
