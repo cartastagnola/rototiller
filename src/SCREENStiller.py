@@ -3125,6 +3125,10 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
     #    # search_value, start, end, remove_spent_coins
 
     run_loader = False
+    if 'is_address' not in main_scope.data:
+        main_scope.data['is_address'] = False
+    is_address = main_scope.data['is_address']
+
     if 'invalid_data_err' not in main_scope.data:
         main_scope.data['invalid_data_err'] = {}
     invalid_data_err = main_scope.data['invalid_data_err']
@@ -3136,7 +3140,8 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         if len(prompt) == 0:
             invalid_data_err.pop('start', None)
             address_loaders.start_height = uint32(0)
-            run_loader = True
+            if is_address:
+                run_loader = True
         elif input_type != 'int':
             invalid_data_err['start'] = "start_height must be a valid int | "
             scope_start_height.data['valid_data'] = False
@@ -3144,7 +3149,8 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
             invalid_data_err.pop('start', None)
             height = int(prompt)
             address_loaders.start_height = height
-            run_loader = True
+            if is_address:
+                run_loader = True
 
     if 'pressed_enter' in scope_end_height.data and scope_end_height.data['pressed_enter']:
         scope_end_height.data['pressed_enter'] = False
@@ -3153,7 +3159,8 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         if len(prompt) == 0:
             invalid_data_err.pop('end', None)
             address_loaders.end_height = uint32(2**32 - 1)
-            run_loader = True
+            if is_address:
+                run_loader = True
         elif input_type != 'int':
             invalid_data_err['end'] = "end_height must be a valid int | "
             scope_end_height.data['valid_data'] = False
@@ -3161,7 +3168,8 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
             invalid_data_err.pop('end', None)
             height = int(prompt)
             address_loaders.end_height = height
-            run_loader = True
+            if is_address:
+                run_loader = True
 
     if 'pressed_enter' in scope_search.data and scope_search.data['pressed_enter']:
 
@@ -3183,6 +3191,7 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
                 cursor.execute("SELECT coin_name FROM coin_record WHERE coin_name = ?", (search_value,))
                 if cursor.fetchone():
                     is_coin_id = True
+                    main_scope.data['is_address'] = False
             except Exception as e:
                 logging(debug_logger, "ERROR", f"Coin ID check failed: {e}")
             finally:
@@ -3195,6 +3204,7 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
                 invalid_data_err.pop('add', None)
                 address_loaders.puzzle_hash = search_value
                 run_loader = True
+                main_scope.data['is_address'] = True
                 main_scope.select_sub_scope_2d(scope_search_button)
  
         else:
@@ -3251,9 +3261,15 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         # load the preview
 
         sorting_column = 'confirmed_index'
-        preview_fecher = WDB.FetchMaker.puzzle_hash_fetcher(address_loaders.puzzle_hash,
-                                                            sorting_column,
-                                                            order='DESC')
+        preview_fecher = WDB.FetchMaker.puzzle_hash_fetcher(
+            address_loaders.puzzle_hash,
+            sorting_column,
+            start_height=address_loaders.start_height,
+            end_height=address_loaders.end_height,
+            remove_spent_coins=address_loaders.remove_spent_coins,
+            remove_self_transactions=address_loaders.remove_self_transactions,
+            order='DESC')
+
         db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
         try:
             last_10_entries = preview_fecher(db_conn, 0, 10)
