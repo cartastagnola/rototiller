@@ -1421,6 +1421,19 @@ class FetchMaker:
     # TODO: remove filters from fetch
 
     @staticmethod
+    def get_coin_record_by_name(db_cursor, coin_name):
+        """Fetch a coin_record (8 columns) from the blockchain DB by coin_name.
+           Returns None if not found.
+           Columns: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
+                     coin_parent, amount, timestamp)"""
+        db_cursor.execute(
+            "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+            "coin_parent, amount, timestamp FROM coin_record WHERE coin_name = ?",
+            (coin_name,),
+        )
+        return db_cursor.fetchone()
+
+    @staticmethod
     def cache_coin_record(db_cursor, cache_cursor, coin_record_row, puzzle_hash):
         """Process a coin_record row (8 columns from coin_record table)
            and cache it along with its children.
