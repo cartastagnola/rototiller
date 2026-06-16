@@ -1420,6 +1420,41 @@ class FetchMaker:
     # TODO: merge first_last_count with the main fetcher...
     # TODO: remove filters from fetch
 
+    @staticmethod
+    def cache_coin_record_row(cache_cursor, row, parent_puzzle_hash, child_count):
+        """Cache a single coin_record row (8 columns from coin_record table)
+           into cached_coin_record as a NORMAL full record.
+        row: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, amount, timestamp)
+        """
+        args = list(row)
+        args.append(TYPES.CacheCoinRecordType.NORMAL)
+        args.append(parent_puzzle_hash)
+        args.append(child_count)
+        args.append(None)  # coin_type
+        args.append(None)  # full_memo
+
+        cache_cursor.execute(
+            "INSERT INTO cached_coin_record ("
+            "coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+            "coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
+            "child_count, coin_type, full_memo) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(coin_name) DO UPDATE SET "
+            "confirmed_index = excluded.confirmed_index, "
+            "spent_index = excluded.spent_index, "
+            "coinbase = excluded.coinbase, "
+            "puzzle_hash = excluded.puzzle_hash, "
+            "coin_parent = excluded.coin_parent, "
+            "amount = excluded.amount, "
+            "timestamp = excluded.timestamp, "
+            "record_type = excluded.record_type, "
+            "parent_puzzle_hash = excluded.parent_puzzle_hash, "
+            "child_count = excluded.child_count, "
+            "coin_type = excluded.coin_type "
+            f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
+            args
+        )
+
     # rename to cache builder / updater
     @staticmethod
     def cache_fetcher(db_conn, cache_conn, puzzle_hash, start_height: uint32 = 0,
@@ -1482,14 +1517,12 @@ class FetchMaker:
                     break
 
                 for row in rows:
-                    args = list(row)
-                    args.append(0)  # full coin_record
                     coin_parent = row[5]
                     coinbase = row[3]
 
                     # find from
                     if coinbase:
-                        args.append(None)
+                        parent_puzzle_hash = None
                     else:
                         sub_db_cursor.execute(
                             "SELECT puzzle_hash FROM coin_record WHERE coin_name=? ",
@@ -1497,10 +1530,10 @@ class FetchMaker:
                         )
                         items = sub_db_cursor.fetchall()
                         if len(items) > 1:
-                            args.append(items[0][0])
+                            parent_puzzle_hash = items[0][0]
                             raise "one, and only one parent..."
                         elif len(items) == 1:
-                            args.append(items[0][0])
+                            parent_puzzle_hash = items[0][0]
                         else:
                             raise "zero... no way! terminate everything"
 
@@ -1596,34 +1629,8 @@ class FetchMaker:
                                     f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
                                     sub_args
                                 )
-                    args.append(child_count)
 
-                    args.append(None)  # coin type
-                    args.append(None)  # full memo
-
-
-                    # cache insert (preserve full_memo if already fetched)
-                    cache_cursor.execute(
-                        "INSERT INTO cached_coin_record ("
-                        "coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
-                        "coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
-                        "child_count, coin_type, full_memo) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
-                        "ON CONFLICT(coin_name) DO UPDATE SET "
-                        "confirmed_index = excluded.confirmed_index, "
-                        "spent_index = excluded.spent_index, "
-                        "coinbase = excluded.coinbase, "
-                        "puzzle_hash = excluded.puzzle_hash, "
-                        "coin_parent = excluded.coin_parent, "
-                        "amount = excluded.amount, "
-                        "timestamp = excluded.timestamp, "
-                        "record_type = excluded.record_type, "
-                        "parent_puzzle_hash = excluded.parent_puzzle_hash, "
-                        "child_count = excluded.child_count, "
-                        "coin_type = excluded.coin_type "
-                        f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
-                        args
-                    )
+                    FetchMaker.cache_coin_record_row(cache_cursor, row, parent_puzzle_hash, child_count)
 
                 cache_conn.commit()
                 logging(debug_logger, "DEBUG", f"cached COMMIT")
