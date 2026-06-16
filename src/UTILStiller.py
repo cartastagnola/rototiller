@@ -125,8 +125,8 @@ def classify_number(s: str):
     return "invalid"
 
 
-def address_to_bytes32(value):
-    """convert any form of an address to an hex string"""
+def string_to_bytes32(value):
+    """convert an address or an hex string to a bytes32 """
     lenght = 32
     if isinstance(value, bytes) and len(value) == lenght:
         return bytes32(value)

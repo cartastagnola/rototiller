@@ -2317,7 +2317,7 @@ def scopeAction_address_loader(scope: Scope, screenState: ScreenState, search_va
     new_name = f"{scope.parent_scope.name}_{search_value}"
     new_scope = Scope(new_name, screen_address_viewer, screenState)
     new_scope.parent_scope = scope  # parent_scope
-    search_value = UTILS.address_to_bytes32(search_value)
+    search_value = UTILS.string_to_bytes32(search_value)
 
     logging(debug_logger, "DEBUG", f'LOAD type {type(search_value)}')
     address_loaders: AddressLoaders = AddressLoaders()
@@ -2374,7 +2374,7 @@ def screen_address_watchlist(stdscr, keyboardState: KeyboardState, screenState: 
 
     # parse for watchlist error
     for n, add in enumerate(new_addx[1]):
-        add_value = UTILS.address_to_bytes32(add)
+        add_value = UTILS.string_to_bytes32(add)
         try:
             encode_puzzle_hash(add_value, CONF.ADD_PREFIX)
         except:
@@ -3165,24 +3165,22 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
 
     if 'pressed_enter' in scope_search.data and scope_search.data['pressed_enter']:
 
-        #TODO: go to the search button, but do not execute. Double enter > execute
         scope_search.data['pressed_enter'] = False
         prompt = scope_search.data['prompt']
 
-
         # check if it an hex value, an check the length
-        ## what could be? coin_id or address
+        # what could be? coin_id or address
         # if it is not an hex value it could be an address?
-        ## if it is 
+        # if it is 
 
-        puzz_hash: bytes32 = UTILS.address_to_bytes32(prompt)
-        if puzz_hash is not None:
+        search_value: bytes32 = UTILS.string_to_bytes32(prompt)
+        if search_value is not None:
             # Check if it's a coin_id
             is_coin_id = False
             db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
             try:
                 cursor = db_conn.cursor()
-                cursor.execute("SELECT coin_name FROM coin_record WHERE coin_name = ?", (puzz_hash,))
+                cursor.execute("SELECT coin_name FROM coin_record WHERE coin_name = ?", (search_value,))
                 if cursor.fetchone():
                     is_coin_id = True
             except Exception as e:
@@ -3195,7 +3193,7 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
                 scope_search.data['valid_data'] = True
             else:
                 invalid_data_err.pop('add', None)
-                address_loaders.puzzle_hash = puzz_hash
+                address_loaders.puzzle_hash = search_value
                 run_loader = True
                 main_scope.select_sub_scope_2d(scope_search_button)
  
