@@ -1434,6 +1434,21 @@ class FetchMaker:
         return db_cursor.fetchone()
 
     @staticmethod
+    def get_cached_coin_record(cache_cursor, coin_name):
+        """Fetch a cached coin_record (13 columns) from the cached_coin_record table by coin_name.
+           Returns None if not found.
+           Columns: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
+                     coin_parent, amount, timestamp, record_type, parent_puzzle_hash,
+                     child_count, coin_type, full_memo)"""
+        cache_cursor.execute(
+            "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
+            "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, full_memo "
+            "FROM cached_coin_record WHERE coin_name = ?",
+            (coin_name,),
+        )
+        return cache_cursor.fetchone()
+
+    @staticmethod
     def cache_coin_record(db_cursor, cache_cursor, coin_record_row, puzzle_hash):
         """Process a coin_record row (8 columns from coin_record table)
            and cache it along with its children.

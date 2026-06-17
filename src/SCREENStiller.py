@@ -2885,22 +2885,29 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     # --- load from cache db ---
     def query_db():
         try:
-            conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, timeout=SQL_TIMEOUT)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
-                "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, full_memo "
-                "FROM cached_coin_record WHERE coin_name = ?",
-                (coin_name_bytes,))
-            row = cursor.fetchone()
+            cache_conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, timeout=SQL_TIMEOUT)
+            cache_cursor = cache_conn.cursor()
+            row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
+            if row is None:
+                db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+                try:
+                    db_cursor = db_conn.cursor()
+                    coin_row = WDB.FetchMaker.get_coin_record_by_name(db_cursor, coin_name_bytes)
+                    if coin_row is not None:
+                        WDB.FetchMaker.cache_coin_record(db_cursor, cache_cursor, coin_row, coin_row[4])
+                        cache_conn.commit()
+                        row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
+                finally:
+                    db_conn.close()
             with screenState.lock:
                 main_scope.data['coin_cache'] = row
         except Exception as e:
-            logging(debug_logger, "ERROR", f"coin cache load failed: {e}")
+            logging(debug_logger, "DEBUG", f"coin cache load failed: {e}")
+            UTILS.logging_traceback("COIN_CACHE")
             with screenState.lock:
                 main_scope.data['coin_cache'] = None
         finally:
-            conn.close()
+            cache_conn.close()
 
     # --- cache logic ---
     def load_coin_cache():
@@ -2958,11 +2965,15 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         "Full Memo",
     ]
 
+    # TODO: still not sure how to save the memo, Json?
     _memo = coin_record[12]
-    try:
-        _memo_display = bytes(_memo).decode('utf-8')
-    except UnicodeDecodeError:
-        _memo_display = f"0x{bytes(_memo).hex()}"
+    if _memo is not None:
+        try:
+            _memo_display = bytes(_memo).decode('utf-8')
+        except UnicodeDecodeError:
+            _memo_display = f"0x{bytes(_memo).hex()}"
+    else:
+        _memo_display = "None"
         #if _memo and _memo.startswith(b'['):
         #    _memo_display = ", ".join(json.loads(_memo.decode()))
         #elif _memo:
@@ -3189,7 +3200,9 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
             try:
                 cursor = db_conn.cursor()
                 cursor.execute("SELECT coin_name FROM coin_record WHERE coin_name = ?", (search_value,))
-                if cursor.fetchone():
+                coin_record = cursor.fetchone()
+                logging(debug_logger, "DEBUG", f"COIN RECORDDDDD: {coin_record}")
+                if coin_record:
                     is_coin_id = True
                     main_scope.data['is_address'] = False
             except Exception as e:
@@ -3198,8 +3211,13 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
                 db_conn.close()
  
             if is_coin_id:
-                invalid_data_err['add'] = "Warning: This is a Coin ID, not a Puzzle Hash | "
-                scope_search.data['valid_data'] = True
+                coin_name = f"0x{bytes(search_value).hex()}"
+                new_scope = Scope(f"coin_{coin_name}", screen_coin_record, screenState)
+                new_scope.parent_scope = main_scope
+                new_scope.data['coin_name'] = coin_name
+                new_scope.exec = None
+                screenState.activeScope = new_scope
+                return
             else:
                 invalid_data_err.pop('add', None)
                 address_loaders.puzzle_hash = search_value
