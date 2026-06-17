@@ -278,7 +278,11 @@ class Timer:
             self.count = 0
             self.timestamps = []
         else:
-            raise "timer already initialized"
+            #raise "timer already initialized"
+            # TODO: add logging message. This should happen only when coming back to a running screen
+            # where the timer where not stopped
+            pass
+
 
         self.timestamps.append(time.perf_counter())
         self.init = True
