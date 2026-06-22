@@ -2986,50 +2986,9 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         except UnicodeDecodeError:
             _memo_display = f"0x{bytes(_memo).hex()}"
 
-    # --- Fetch coin record from full node via RPC ---
-    rpc_result = None
-    try:
-        print('coin name')
-        print(coin_name_hex)
-        print(f"type: {type(coin_name_hex)}")
-        rpc_result = RPC.call_rpc_node('get_coin_record_by_name', name=coin_name_hex)
-    except Exception:
-        print('getttt name')
-        traceback.print_exc()
-
-    rpc_spent = None
-    if rpc_result and rpc_result is not False:
-        rpc_spent = rpc_result.get('spent')
-
-    # --- If memo not in cache and coin is spent, fetch via puzzle_and_solution ---
-    coin_memo = ''
-    try:
-        parent_id = rpc_result['coin']['parent_coin_info']
-        spent_idx = rpc_result['confirmed_block_index']
-        if parent_id:
-            sol = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent_id, height=spent_idx)
-
-            if sol and sol is not False:
-                puzzle = PyProgram.fromhex(sol['puzzle_reveal'])
-                solution = PyProgram.fromhex(sol['solution'])
-                cost, result = puzzle.run_with_cost(CONF.BLOCK_MAX_COST, solution)
-                target_puz = coin_record[4]
-                target_amt = int.from_bytes(coin_record[6], 'big')
-                for cond in result.as_iter():
-                    cl = cond.as_python()
-                    if cl[0] == ConditionOpcode.CREATE_COIN:
-                        cp = bytes(cl[1])
-                        car = cl[2]
-                        ca = int.from_bytes(car, 'big')
-                        if cp == target_puz and ca == target_amt:
-                            memos = cl[3]
-                            if memos:
-                                coin_memo = coin_memo + ", ".join(str(m) for m in memos)
-
-                            break
-    except Exception as e:
-        traceback.print_exc()
-        logging(debug_logger, "DEBUG", f"RPC memo fetch failed: {e}")
+    coin_memo = WDB.FetchMaker.fetch_rpc_coin_data(coin_name_hex, coin_record)
+    if _memo is None and coin_memo:
+        _memo_display = coin_memo
 
     values = [
         str(coin_record[1]),
@@ -3047,9 +3006,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         _memo_display,
     ]
 
-    # --- Append RPC data rows below the cache table ---
-    if rpc_spent is not None:
-        labels.append("RPC Spent")
+    if coin_memo is not None:
+        labels.append("RPC Spent debug")
         values.append(str(coin_memo))
 
     tab_legend = ['property', 'value']

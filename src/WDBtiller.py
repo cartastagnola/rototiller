@@ -2506,6 +2506,45 @@ class FetchMaker:
 
         return fetch
 
+    @staticmethod
+    def fetch_rpc_coin_data(coin_name_hex: str, coin_record: tuple):
+        """Fetch coin record from full node via RPC and extract memo from parent's puzzle_and_solution.
+        Returns (rpc_spent, coin_memo)."""
+        rpc_result = None
+        try:
+            rpc_result = RPC.call_rpc_node('get_coin_record_by_name', name=coin_name_hex)
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"fetch_coin_record_by_name failed: {e}")
+
+        coin_memo = ''
+        if rpc_result and rpc_result is not False:
+            try:
+                parent_id = rpc_result['coin']['parent_coin_info']
+                spent_idx = rpc_result['confirmed_block_index']
+                if parent_id:
+                    sol = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent_id, height=spent_idx)
+                    if sol and sol is not False:
+                        puzzle = PyProgram.fromhex(sol['puzzle_reveal'])
+                        solution = PyProgram.fromhex(sol['solution'])
+                        cost, result = puzzle.run_with_cost(CONF.BLOCK_MAX_COST, solution)
+                        target_puz = coin_record[4]
+                        target_amt = int.from_bytes(coin_record[6], 'big')
+                        for cond in result.as_iter():
+                            cl = cond.as_python()
+                            if cl[0] == ConditionOpcode.CREATE_COIN:
+                                cp = bytes(cl[1])
+                                car = cl[2]
+                                ca = int.from_bytes(car, 'big')
+                                if cp == target_puz and ca == target_amt:
+                                    memos = cl[3]
+                                    if memos:
+                                        coin_memo = ", ".join(str(m) for m in memos)
+                                    break
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"RPC memo fetch failed: {e}")
+
+        return coin_memo
+
 
 def make_sql_fetcher(table, sorting_column=None):
     # NB:
