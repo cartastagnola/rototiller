@@ -1765,10 +1765,6 @@ class FetchMaker:
             # retry-loop RPC
             for i in range(15):
                 try:
-                    print('in the loop')
-                    tt = threading.current_thread()
-                    print(tt.name)
-                    print(tt)
                     out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=parent_hex, height=spent_height)
                     logging(debug_logger, "DEBUG", f"MEMO FETCHER RPC solution out: {out}")
                     break
@@ -1802,9 +1798,6 @@ class FetchMaker:
                 child_lookup.setdefault(key, []).append(child_name)
 
             logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
-            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
-            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
-            logging(debug_logger, "DEBUG", f"MEMO FETCHER ___________________________________")
             logging(debug_logger, "DEBUG", f"MEMO FETCHER child_coins {child_coins}")
             logging(debug_logger, "DEBUG", f"MEMO FETCHER coin parent {parent_hex}")
 
@@ -1828,17 +1821,12 @@ class FetchMaker:
                 logging(debug_logger, "DEBUG", f"MEMO FETCHER cond list {cond_list}")
                 logging(debug_logger, "DEBUG", f"MEMO FETCHER cond list len {len(cond_list)}")
                 memos = cond_list[3] if len(cond_list) > 3 else []
-                memos_me = cond_list[3:]
                 if memos:
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS {memos}!!!")
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND MEMOS MEEE {memos_me}!!!")
                     memo_json = json.dumps([str(m) for m in memos]).encode()
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER WE FIND MEMOS JSON {memo_json}!!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER MEMOS JSON {memo_json}!!!")
                 else:
                     memo_json = b'[]'
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER W E FIND NOOOOOOOOOOOOOOOOOOOOOO MEMOS !!!")
+                    logging(debug_logger, "DEBUG", f"MEMO FETCHER NO MEMOS !!!")
 
                 # update all matching children
                 for child_name in child_lookup[key]:
@@ -1850,16 +1838,9 @@ class FetchMaker:
                         logging(debug_logger, "DEBUG", f"MEMO FETCHER WARNING: UPDATE affected 0 rows for {child_name.hex()}")
                 del child_lookup[key]
 
-            # mark unmatched children with empty list so we don't re-process them
-            for remaining_names in child_lookup.values():
-                for child_name in remaining_names:
-                    cache_cursor.execute(
-                        "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",
-                        (b'[]', child_name)
-                    )
-                    if cache_cursor.rowcount == 0:
-                        logging(debug_logger, "DEBUG", f"MEMO FETCHER WARNING: unmatched UPDATE affected 0 rows for {child_name.hex()}")
-
+            # raise if unmatched children 
+            if len(child_lookup) > 0:
+                raise "memo fetching: child with no parent?"
 
             # update progress
             highest_confirmed = max(c[1] for c in child_coins)
@@ -1872,10 +1853,9 @@ class FetchMaker:
             if sleep_between_calls:
                 time.sleep(sleep_between_calls)
 
-            #if processed_count % 10 == 0 or processed_count == total_parents:
-            address = encode_puzzle_hash(bytes32(puzzle_hash), CONF.ADD_PREFIX)
-            logging(debug_logger, "DEBUG", f"MEMO FETCHER progress: {processed_count}/{total_parents} parents processed for {address}")
-            time.sleep(1)
+            if processed_count % 10 == 0 or processed_count == total_parents:
+                address = encode_puzzle_hash(bytes32(puzzle_hash), CONF.ADD_PREFIX)
+                logging(debug_logger, "DEBUG", f"MEMO FETCHER progress: {processed_count}/{total_parents} parents processed for {address}")
 
         logging(debug_logger, "DEBUG", f"MEMO FETCHER: done ({processed_count}/{total_parents} processed)")
 
