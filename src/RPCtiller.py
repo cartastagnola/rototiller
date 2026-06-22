@@ -1,6 +1,8 @@
 import asyncio
 import traceback
 
+import src.UTILStiller as UTILS
+
 from src.CONFtiller import (
     debug_logger, logging, DEBUGGING, config, self_hostname,
     full_node_rpc_port, wallet_rpc_port, DEFAULT_ROOT_PATH)
@@ -163,17 +165,13 @@ async def fetch_rpc_node(method_name, *args, **kwargs):
         )
         #rpc_method = getattr(full_node_client, method_name)
         #response = await rpc_method(*args, **kwargs)
-        print("kwatsf")
-        print(kwargs)
-        print(traceback.format_exc())
-        print(method_name)
         response = await full_node_client.fetch(method_name, kwargs)
         return response
     except Exception as e:
         print(e)
         logging(debug_logger, "DEBUG", "sometime wrong with a node rpc call using the fetch method")
         logging(debug_logger, "DEBUG", f"the rpc call was {str(kwargs)} and {str(args)}")
-        logging(debug_logger, "DEBUG", f"traceback: {traceback.format_exc()}")
+        UTILS.logging_traceback('fetch_rpc_node')
         return False
 
     finally:
@@ -221,7 +219,7 @@ rpc_calls_full_node = {
     "get_block_records": ["block_records"],
     "get_coin_records_by_puzzle_hash": ["coin_records"],
     "get_coin_records_by_hint": ["coin_records"],
-    "get_coin_records_by_name": ["coin_record"],
+    "get_coin_record_by_name": ["coin_record"],
     "get_all_mempool_items": ["mempool_items"],
     "get_all_mempool_tx_ids": ["tx_ids"],
     "get_routes": ["routes"],
@@ -276,7 +274,10 @@ def call_rpc_node(method_name, *args, **kwargs):
         try:
             return rpc_result[output_filter[0]]
         except:
+            print(f"rpc_result: {rpc_result}")
+            traceback.print_exc()
             raise Exception(f"casim: output_filter: {output_filter}")
+
     else:
         return rpc_result
 
