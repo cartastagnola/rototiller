@@ -167,7 +167,8 @@ def create_cache_blockchain_db(conn):
             #"hinted_parent_puzzle_hash BLOB, "
             #"tail BLOB, "
             "coin_type INT, "
-            "full_memo BLOB);"
+            "full_memo BLOB, "
+            "hint BLOB);"
         )
 
         cursor.execute(
@@ -1446,14 +1447,15 @@ class FetchMaker:
 
     @staticmethod
     def get_cached_coin_record(cache_cursor, coin_name):
-        """Fetch a cached coin_record (13 columns) from the cached_coin_record table by coin_name.
+        """Fetch a cached coin_record (14 columns) from the cached_coin_record table by coin_name.
            Returns None if not found.
            Columns: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
                      coin_parent, amount, timestamp, record_type, parent_puzzle_hash,
-                     child_count, coin_type, full_memo)"""
+                     child_count, coin_type, full_memo, hint)"""
         cache_cursor.execute(
             "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
-            "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, full_memo "
+            "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, "
+            "full_memo, hint "
             "FROM cached_coin_record WHERE coin_name = ?",
             (coin_name,),
         )
@@ -1562,12 +1564,20 @@ class FetchMaker:
         args.append(None)  # coin_type
         args.append(None)  # full_memo
 
+        # query hint from blockchain hints table
+        db_cursor.execute(
+            "SELECT hint FROM hints WHERE coin_id = ?",
+            (coin_name,),
+        )
+        hint_row = db_cursor.fetchone()
+        args.append(bytes(hint_row[0]) if hint_row else None)  # hint
+
         cache_cursor.execute(
             "INSERT INTO cached_coin_record ("
             "coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
             "coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
-            "child_count, coin_type, full_memo) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "child_count, coin_type, full_memo, hint) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(coin_name) DO UPDATE SET "
             "confirmed_index = excluded.confirmed_index, "
             "spent_index = excluded.spent_index, "
@@ -1579,7 +1589,8 @@ class FetchMaker:
             "record_type = excluded.record_type, "
             "parent_puzzle_hash = excluded.parent_puzzle_hash, "
             "child_count = excluded.child_count, "
-            "coin_type = excluded.coin_type "
+            "coin_type = excluded.coin_type, "
+            "hint = excluded.hint "
             f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
             args
         )
@@ -1825,12 +1836,9 @@ class FetchMaker:
 
                 logging(debug_logger, "DEBUG", f"MEMO FETCHER key {key}")
                 if key not in child_lookup:
-                    logging(debug_logger, "DEBUG", f"MEMO FETCHER NO KEY LOOKUP!!!")
                     continue
 
                 # extract memos
-                logging(debug_logger, "DEBUG", f"MEMO FETCHER cond list {cond_list}")
-                logging(debug_logger, "DEBUG", f"MEMO FETCHER cond list len {len(cond_list)}")
                 memos = cond_list[3] if len(cond_list) > 3 else []
                 if memos:
                     memo_json = json.dumps([str(m) for m in memos]).encode()
@@ -2549,10 +2557,10 @@ class FetchMaker:
                                 if cp == target_puz and ca == target_amt and len(cl) > 3:
                                     memos = cl[3]
                                     if memos:
-                                        coin_memo = ", ".join(str(m) for m in memos)
+                                        coin_memo = json.dumps([str(m) for m in memos]).encode()
                                     break
                                 else:
-                                    coin_memo = []
+                                    coin_memo = b'[]'
 
             except Exception as e:
                 logging(debug_logger, "DEBUG", f"cl is {cl}")
@@ -2569,7 +2577,8 @@ class FetchMaker:
         coin_name_hex should include the 0x prefix."""
         coin_memo = FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
         if coin_memo:
-            memo_json = json.dumps([coin_memo]).encode()
+            #memo_json = json.dumps(coin_memo).encode()
+            memo_json = coin_memo
             coin_name_bytes = bytes32.fromhex(coin_name_hex[2:] if coin_name_hex.startswith('0x') else coin_name_hex)
             cache_conn.execute(
                 "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",

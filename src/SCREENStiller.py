@@ -3018,16 +3018,15 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         except UnicodeDecodeError:
             _memo_display = f"0x{bytes(_memo).hex()}"
 
-    coin_memo = WDB.FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
+    ## DEBUG
+    #coin_memo = WDB.FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
+    #coin_memo = ', '.join(json.loads(coin_memo))
+    coin_memo = None
 
-    # --- Hint from blockchain DB ---
+    # --- Hint from cache (coin_record[13]) ---
     _hint = "None"
-    _hint_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
-    _hint_cursor = _hint_conn.cursor()
-    _hint_row = WDB.FetchMaker.get_coin_hint(_hint_cursor, coin_name_bytes)
-    _hint_conn.close()
-    if _hint_row is not None:
-        _hint = encode_puzzle_hash(_hint_row, CONF.ADD_PREFIX)
+    if coin_record[13] is not None:
+        _hint = encode_puzzle_hash(bytes32(coin_record[13]), CONF.ADD_PREFIX)
 
     values = [
         str(coin_record[1]),
