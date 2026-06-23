@@ -2885,6 +2885,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
 
     # --- load from cache db ---
     def query_db():
+        logging(debug_logger, "DEBUG", f"THREAD IS RUNNIUNG!!!!!!!!!!!!")
         with screenState.lock:
             main_scope.data['coin_loading'] = True
         try:
@@ -2898,7 +2899,9 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
                 if coin_row is not None:
                     WDB.FetchMaker.cache_coin_record(db_cursor, cache_cursor, coin_row, coin_row[4])
                     cache_conn.commit()
+                    row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
 
+            logging(debug_logger, "DEBUG", f"COIN RECORD !!!!!!!!!!!!")
             with screenState.lock:
                 main_scope.data['coin_cache'] = row
 
@@ -2911,24 +2914,14 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
                     logging(debug_logger, "DEBUG", f"memo cache fetch failed: {e}")
                     UTILS.logging_traceback("fetching coin memo")
 
-                new_row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
-                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
 
                 with screenState.lock:
-                    main_scope.data['coin_cache'] = new_row
+                    main_scope.data['coin_cache'] = row
+
+            with screenState.lock:
+                main_scope.data['coin_loading'] = False
+            logging(debug_logger, "DEBUG", f"THREAD FINISHED!!!!!!!!!!!!")
 
         except Exception as e:
             logging(debug_logger, "DEBUG", f"coin cache load failed: {e}")
@@ -2936,30 +2929,25 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
             with screenState.lock:
                 main_scope.data['coin_cache'] = None
         finally:
-            with screenState.lock:
-                main_scope.data['coin_loading'] = False
             cache_conn.close()
             db_conn.close()
 
     # --- cache logic ---
     def load_coin_cache():
         t = threading.Thread(target=query_db, daemon=True)
+        logging(debug_logger, "DEBUG", f"THREAD START !!!!!!!!!!!!")
         t.start()
 
     # invalidate cache if coin changed
     if main_scope.data.get('coin_cache_name') != coin_name_hex:
-        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
-        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
-        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
-        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
-        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
-        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
         with screenState.lock:
             main_scope.data['coin_loading'] = True
-        query_db()
-        with screenState.lock:
             main_scope.data['coin_cache_name'] = coin_name_hex
-
+        load_coin_cache()
+        cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+        cache_cursor = cache_conn.cursor()
+        coin_record = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
+        main_scope.data['coin_cache'] = coin_record
 
     # subscribe once to refresh cache on new block
     def refresh_coin_cache(data):
@@ -2970,8 +2958,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         TYPES.DaemonEvent.NEW_BLOCK,
         refresh_coin_cache
     )
-    # --- end cache logic ---
 
+    # --- end cache logic ---
     P_error = screenState.colorPairs["error_white"]
     pos = UIgraph.Point(1, 1)
 
