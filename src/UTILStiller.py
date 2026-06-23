@@ -52,6 +52,11 @@ def is_bytes32(value):
         return True
     if isinstance(value, bytes) and len(value) == 32:
         return True
+    if isinstance(value, str):
+        if value.startswith('0x'):
+            value = value[2:]
+        if len(value) == 64:
+            return all(c in '0123456789abcdefABCDEF' for c in value)
     return False
 
 
