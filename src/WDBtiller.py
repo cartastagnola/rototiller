@@ -1434,6 +1434,17 @@ class FetchMaker:
         return db_cursor.fetchone()
 
     @staticmethod
+    def get_coin_hint(db_cursor, coin_name):
+        """Fetch the hint for a coin from the hints table.
+           Returns the hint bytes32 or None."""
+        db_cursor.execute(
+            "SELECT hint FROM hints WHERE coin_id = ?",
+            (coin_name,),
+        )
+        row = db_cursor.fetchone()
+        return bytes32(row[0]) if row else None
+
+    @staticmethod
     def get_cached_coin_record(cache_cursor, coin_name):
         """Fetch a cached coin_record (13 columns) from the cached_coin_record table by coin_name.
            Returns None if not found.
