@@ -2535,11 +2535,14 @@ class FetchMaker:
                                 cp = bytes(cl[1])
                                 car = cl[2]
                                 ca = int.from_bytes(car, 'big')
-                                if cp == target_puz and ca == target_amt:
+                                if cp == target_puz and ca == target_amt and len(cl) > 3:
                                     memos = cl[3]
                                     if memos:
                                         coin_memo = ", ".join(str(m) for m in memos)
                                     break
+                                else:
+                                    coin_memo = []
+
             except Exception as e:
                 logging(debug_logger, "DEBUG", f"cl is {cl}")
                 logging(debug_logger, "DEBUG", f"coin id {bytes32(cp).hex()} amount: {ca} and target puz {target_puz}")
@@ -2562,11 +2565,7 @@ class FetchMaker:
                 (memo_json, bytes(coin_name_bytes))
             )
             cache_conn.commit()
-        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
-        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
-        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
-        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
-        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
+
         return coin_memo
 
 
