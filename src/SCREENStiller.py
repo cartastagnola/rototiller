@@ -1,4 +1,5 @@
 import sys
+import ast
 import sqlite3  # remove it
 from typing import List, Tuple, Dict, Union, Callable
 from types import SimpleNamespace
@@ -3024,7 +3025,19 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
 
     ## only for DEBUG
     coin_memo = WDB.FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
-    coin_memo = ', '.join(json.loads(coin_memo))
+    coin_memo_de = ''
+    if coin_memo:
+        for i in json.loads(coin_memo):
+            try:
+                parsed = ast.literal_eval(i)
+                if isinstance(parsed, bytes) and len(parsed) == 32:
+                    item = encode_puzzle_hash(bytes32(parsed), CONF.ADD_PREFIX)
+                else:
+                    item = str(parsed)
+            except Exception:
+                item = i
+            coin_memo_de = coin_memo_de + item + ', '
+    coin_memo = coin_memo_de
 
     # --- Hint from cache (coin_record[13]) ---
     raw_hint = coin_record[13]
