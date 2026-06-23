@@ -47,6 +47,13 @@ def ensure_bytes32(value):
         return bytes32.from_hexstr(value)
     raise f"{value} is not a valid bytes32 or a 64 chars string"
 
+def is_bytes32(value):
+    if isinstance(value, bytes32):
+        return True
+    if isinstance(value, bytes) and len(value) == 32:
+        return True
+    return False
+
 
 def ensure_int_to_bytes(value):
     if isinstance(value, bytes):

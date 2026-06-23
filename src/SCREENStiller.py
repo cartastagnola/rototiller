@@ -2982,19 +2982,23 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         return
 
     labels = [
+        "Coin_id / coin_name",
         "Confirmed Index",
         "Spent Index",
         "Coinbase",
         "Puzzle Hash",
-        "Parent Coin Info",
+        "Address",
+        "Parent Coin Info / Coin_id",
+        "Parent Puzzle Hash",
+        "Parent Address",
         "Amount XCH",
         "Amount mojo",
         "Timestamp",
         "Record Type",
-        "Parent Puzzle Hash",
         "Child Count",
         "Coin Type",
         "Full Memo",
+        "Raw Hint",
         "Hint",
     ]
 
@@ -3018,31 +3022,33 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         except UnicodeDecodeError:
             _memo_display = f"0x{bytes(_memo).hex()}"
 
-    ## DEBUG
-    #coin_memo = WDB.FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
-    #coin_memo = ', '.join(json.loads(coin_memo))
-    coin_memo = None
+    ## only for DEBUG
+    coin_memo = WDB.FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
+    coin_memo = ', '.join(json.loads(coin_memo))
 
     # --- Hint from cache (coin_record[13]) ---
-    _hint = "None"
-    if coin_record[13] is not None:
-        _hint = encode_puzzle_hash(bytes32(coin_record[13]), CONF.ADD_PREFIX)
+    raw_hint = coin_record[13]
+    hint = encode_puzzle_hash(bytes32(raw_hint), CONF.ADD_PREFIX) if UTILS.is_bytes32(raw_hint) else None
 
     values = [
+        str(coin_record[0]),
         str(coin_record[1]),
         str(coin_record[2]),
         str(bool(coin_record[3])),
+        f"0x{bytes32(coin_record[4])}",
         encode_puzzle_hash(bytes32(coin_record[4]), CONF.ADD_PREFIX),
-        f"0x{bytes32(coin_record[5])}",
+        f"0x{bytes32(coin_record[5])}", # parent coin_id
+        f"0x{bytes32(coin_record[9])}",
+        encode_puzzle_hash(bytes32(coin_record[9]), CONF.ADD_PREFIX) if coin_record[9] else "None",
         UTILS.xch_amount(int.from_bytes(coin_record[6], 'big') if isinstance(coin_record[6], bytes) else coin_record[6]),
         int.from_bytes(coin_record[6], 'big') if isinstance(coin_record[6], bytes) else coin_record[6],
         str(coin_record[7]),
         TYPES.CacheCoinRecordType(coin_record[8]).name if coin_record[8] is not None else "None",
-        encode_puzzle_hash(bytes32(coin_record[9]), CONF.ADD_PREFIX) if coin_record[9] else "None",
         str(coin_record[10]),
         str(coin_record[11]),
         _memo_display,
-        _hint,
+        raw_hint,
+        hint,
     ]
 
     if coin_memo is not None:
@@ -3052,7 +3058,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     tab_legend = ['property', 'value']
     tab_data = [labels, values]
 
-    max_y = height - pos.y - 2
+    max_y = height - pos.y - 3
     tab_size = UIgraph.Point(min(120, width - 4), max_y)
 
     ELEMENTS.create_tab(coin_win,
