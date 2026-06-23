@@ -2507,7 +2507,7 @@ class FetchMaker:
         return fetch
 
     @staticmethod
-    def fetch_rpc_coin_data(coin_name_hex: str, coin_record: tuple):
+    def fetch_rpc_coin_memo(coin_name_hex: str, coin_record: tuple):
         """Fetch coin record from full node via RPC and extract memo from parent's puzzle_and_solution.
         Returns (rpc_spent, coin_memo)."""
         rpc_result = None
@@ -2541,8 +2541,32 @@ class FetchMaker:
                                         coin_memo = ", ".join(str(m) for m in memos)
                                     break
             except Exception as e:
-                logging(debug_logger, "DEBUG", f"RPC memo fetch failed: {e}")
+                logging(debug_logger, "DEBUG", f"cl is {cl}")
+                logging(debug_logger, "DEBUG", f"coin id {bytes32(cp).hex()} amount: {ca} and target puz {target_puz}")
 
+                logging(debug_logger, "DEBUG", f"RPC memo fetch failed: {e}")
+                UTILS.logging_traceback("RPC MEMO FETCH")
+
+        return coin_memo
+
+    @staticmethod
+    def fetch_and_cache_coin_memo(cache_conn, coin_name_hex: str, coin_record: tuple):
+        """Fetch memo via RPC using fetch_rpc_coin_memo and save it into the cache DB.
+        coin_name_hex should include the 0x prefix."""
+        coin_memo = FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
+        if coin_memo:
+            memo_json = json.dumps([coin_memo]).encode()
+            coin_name_bytes = bytes32.fromhex(coin_name_hex[2:] if coin_name_hex.startswith('0x') else coin_name_hex)
+            cache_conn.execute(
+                "UPDATE cached_coin_record SET full_memo = ? WHERE coin_name = ?",
+                (memo_json, bytes(coin_name_bytes))
+            )
+            cache_conn.commit()
+        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
+        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
+        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
+        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
+        logging(debug_logger, "DEBUG", f"CACHED COIN MEMO")
         return coin_memo
 
 

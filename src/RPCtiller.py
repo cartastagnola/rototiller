@@ -264,10 +264,6 @@ def call_rpc_node(method_name, *args, **kwargs):
 
     rpc_result = asyncio.run(fetch_rpc_node(method_name, **kwargs))
     output_filter = rpc_calls_full_node[method_name]
-    if method_name == 'get_puzzle_and_solution':
-        logging(debug_logger, "DEBUG", f"LOAD i rpc method name: {method_name}")
-        logging(debug_logger, "DEBUG", f"LOAD i rpc res: {rpc_result}")
-        logging(debug_logger, "DEBUG", f"LOAD i rpc method name: {output_filter}")
 
     # TODO: add case rpc result == False
     if len(output_filter) == 1:

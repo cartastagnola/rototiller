@@ -2885,30 +2885,61 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
 
     # --- load from cache db ---
     def query_db():
+        with screenState.lock:
+            main_scope.data['coin_loading'] = True
         try:
-            cache_conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, timeout=SQL_TIMEOUT)
+            cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
             cache_cursor = cache_conn.cursor()
             row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
             if row is None:
-                db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
-                try:
-                    db_cursor = db_conn.cursor()
-                    coin_row = WDB.FetchMaker.get_coin_record_by_name(db_cursor, coin_name_bytes)
-                    if coin_row is not None:
-                        WDB.FetchMaker.cache_coin_record(db_cursor, cache_cursor, coin_row, coin_row[4])
-                        cache_conn.commit()
-                        row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
-                finally:
-                    db_conn.close()
+                db_cursor = db_conn.cursor()
+                coin_row = WDB.FetchMaker.get_coin_record_by_name(db_cursor, coin_name_bytes)
+                if coin_row is not None:
+                    WDB.FetchMaker.cache_coin_record(db_cursor, cache_cursor, coin_row, coin_row[4])
+                    cache_conn.commit()
+
             with screenState.lock:
                 main_scope.data['coin_cache'] = row
+
+            # --- check memo in cache, fetch if missing ---
+            # row[12]=full_memo
+            if row and row[12] is None:
+                try:
+                    WDB.FetchMaker.fetch_and_cache_coin_memo(cache_conn, coin_name_hex, row)
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"memo cache fetch failed: {e}")
+                    UTILS.logging_traceback("fetching coin memo")
+
+                new_row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+                logging(debug_logger, "DEBUG", f"MEMO MEMO MEMO MEMO MEMO")
+
+                with screenState.lock:
+                    main_scope.data['coin_cache'] = new_row
+
         except Exception as e:
             logging(debug_logger, "DEBUG", f"coin cache load failed: {e}")
             UTILS.logging_traceback("COIN_CACHE")
             with screenState.lock:
                 main_scope.data['coin_cache'] = None
         finally:
+            with screenState.lock:
+                main_scope.data['coin_loading'] = False
             cache_conn.close()
+            db_conn.close()
 
     # --- cache logic ---
     def load_coin_cache():
@@ -2917,9 +2948,18 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
 
     # invalidate cache if coin changed
     if main_scope.data.get('coin_cache_name') != coin_name_hex:
+        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
+        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
+        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
+        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
+        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
+        logging(debug_logger, "DEBUG", f"BROOOOOOOOOOOOOOMEMO MEMO MEMO MEMO MEMOMEMO MEMO MEMO MEMO MEMO")
+        with screenState.lock:
+            main_scope.data['coin_loading'] = True
         query_db()
         with screenState.lock:
             main_scope.data['coin_cache_name'] = coin_name_hex
+
 
     # subscribe once to refresh cache on new block
     def refresh_coin_cache(data):
@@ -2947,7 +2987,10 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     pos += UIgraph.Point(0, 4)
 
     if coin_record is None:
-        ELEMENTS.create_text(coin_win, pos, "Coin record not found", P_error, bold=False)
+        if main_scope.data.get('coin_loading', False):
+            ELEMENTS.create_text(coin_win, pos, f"Loading coin data... {main_scope.data['coin_loading']}", P_error, bold=False)
+        else:
+            ELEMENTS.create_text(coin_win, pos, f"Coin record not found {main_scope.data['coin_loading']}", P_error, bold=False)
         return
 
     labels = [
@@ -2986,9 +3029,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         except UnicodeDecodeError:
             _memo_display = f"0x{bytes(_memo).hex()}"
 
-    coin_memo = WDB.FetchMaker.fetch_rpc_coin_data(coin_name_hex, coin_record)
-    if _memo is None and coin_memo:
-        _memo_display = coin_memo
+    coin_memo = WDB.FetchMaker.fetch_rpc_coin_memo(coin_name_hex, coin_record)
 
     values = [
         str(coin_record[1]),
@@ -3030,7 +3071,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
                         ScopeActions.exit_scope,
                         False,
                         False,
-                        tab_legend)
+                        tab_legend,
+                        no_cache=True)
 
 
 def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
