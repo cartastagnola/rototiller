@@ -720,7 +720,8 @@ def create_tab(scr,
                formatters=None,
                chunk_loader: WDB.DataChunkLoader = None,
                chunk_data_parser=None,
-               prepped_scope=None):
+               prepped_scope=None,
+               no_cache=False):
 
     """Create a beautiful and shining tab
     dataTable: 2dim data list
@@ -823,7 +824,7 @@ def create_tab(scr,
     ### end
 
     ### FRAME CACHE
-    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None:
+    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None or no_cache:
         scope.data['cached_data_table'] = dataTable
         scope.data['cached_data_table_color'] = data_table_color
         scope.data['cached_data_table_legend'] = data_table_legend
