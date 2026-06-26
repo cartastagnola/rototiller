@@ -3068,8 +3068,11 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
 
     # --- Unrolled Puzzle ---
     # Construct a temporary CoinRecordRoto from the cached row so we can reuse the new helper.
+    # The raw cached table already returns columns in the expected order:
+    # coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
+    # coin_parent, amount, timestamp, record_type, parent_puzzle_hash
     try:
-        coin_record_roto = TYPES.CoinRecordRoto.init_from_cache_record(coin_record)
+        coin_record_roto = TYPES.CoinRecordRoto(coin_record[:10])
         puzzle_record = PUZ.unroll_puzzle_from_coin_id(coin_record_roto)
     except Exception as e:
         logging(debug_logger, "DEBUG", f"unroll puzzle failed: {e}")

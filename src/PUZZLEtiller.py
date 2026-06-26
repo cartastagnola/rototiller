@@ -34,6 +34,7 @@ from src.CONFtiller import UNKNOWN_PUZZLE, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES,
 from src.RPCtiller import call_rpc_node, call_rpc_daemon
 import src.UTILStiller as UTILS
 import src.TYPEStiller as TYPES
+import src.RPCtiller as RPC
 
 # puzzle repo: https://github.com/Chia-Network/chia-blockchain/tree/fad414132e6950e79e805629427af76bf9ddcbc5/chia/wallet/puzzles
 
