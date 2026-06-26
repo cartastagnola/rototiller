@@ -2886,7 +2886,6 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
 
     # --- load from cache db ---
     def query_db():
-        logging(debug_logger, "DEBUG", f"THREAD IS RUNNIUNG!!!!!!!!!!!!")
         with screenState.lock:
             main_scope.data['coin_loading'] = True
         try:
@@ -2902,7 +2901,6 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
                     cache_conn.commit()
                     row = WDB.FetchMaker.get_cached_coin_record(cache_cursor, coin_name_bytes)
 
-            logging(debug_logger, "DEBUG", f"COIN RECORD !!!!!!!!!!!!")
             with screenState.lock:
                 main_scope.data['coin_cache'] = row
 
@@ -3044,7 +3042,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     hint = encode_puzzle_hash(bytes32(raw_hint), CONF.ADD_PREFIX) if UTILS.is_bytes32(raw_hint) else None
 
     values = [
-        str(coin_record[0]),
+        str(bytes32(coin_record[0]).hex()),
         str(coin_record[1]),
         str(coin_record[2]),
         str(bool(coin_record[3])),

@@ -103,6 +103,14 @@ class CacheCoinRecordType(IntEnum):
 
 
 @dataclass
+class PuzzleRecord:
+    puzzle_and_sol_rpc: str
+    puzzle_disassembled: str
+    unrolled_puzzles: str
+    layered_puzzle_name: str
+
+
+@dataclass
 class CoinRoto:
     parent_coin_info: bytes32
     puzzle_hash: bytes32

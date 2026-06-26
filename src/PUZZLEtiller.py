@@ -32,6 +32,7 @@ except ImportError:
 from src.CONFtiller import UNKNOWN_PUZZLE, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES, logging, debug_logger
 from src.RPCtiller import call_rpc_node, call_rpc_daemon
 import src.UTILStiller as UTILS
+import src.TYPEStiller as TYPES
 
 # puzzle repo: https://github.com/Chia-Network/chia-blockchain/tree/fad414132e6950e79e805629427af76bf9ddcbc5/chia/wallet/puzzles
 
@@ -273,6 +274,48 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
         array[1].append(puzzle_hash)
 
     return array[0], array[1]
+
+
+def unroll_puzzle_from_coin_id(coin_record: TYPES.CoinRecordRoto):
+
+    puz = None
+    if coin_record.spent_block_index > 0:
+        try:
+            spent_height = coin_record.spent_block_index
+            parent = coin_record.coin.parent_coin_info.hex()
+            puzzle = coin_record.coin.puzzle_hash.hex()
+            amount = coin_record.coin.amount
+
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher parenty: {parent}")
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher puzz: {puzzle}")
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher amo: {amount}")
+            coin_name = UTILS.calc_coin_id(parent, puzzle, amount)  # we already have the coin_name
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher coin NAME: {coin_name}")
+
+            logging(debug_logger, "DEBUG", f"LOAD i here the COIN NAMEEEEE: {coin_name}")
+            logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {coin_record.coin_name}")
+            logging(debug_logger, "DEBUG", f"LOAD i SPENRT NAMEEEEE: {coin_record.coin_name.hex()}")
+            logging(debug_logger, "DEBUG", f"LOAD i SPENRT height: {spent_height}")
+            out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=coin_record.coin_name.hex(), height=spent_height)
+            program = PyProgram.fromhex(out['puzzle_reveal'])
+            puzzle_disassembled = disassemble(program)
+            logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
+            unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
+            puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
+            layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
+
+            puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_name)
+
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
+            UTILS.logging_traceback("decode puzzle")
+
+    else:
+        # check teh coin parent
+        pass
+
+    return puz
 
 
 def format_chia_lisp_level(lisp_code, max_depth_level):
