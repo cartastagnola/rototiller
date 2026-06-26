@@ -3066,6 +3066,72 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         labels.append("RPC Spent debug")
         values.append(str(coin_memo))
 
+    # --- Unrolled Puzzle ---
+    # Construct a temporary CoinRecordRoto from the cached row so we can reuse the new helper.
+    try:
+        coin_record_roto = TYPES.CoinRecordRoto.init_from_cache_record(coin_record)
+        puzzle_record = PUZ.unroll_puzzle_from_coin_id(coin_record_roto)
+    except Exception as e:
+        logging(debug_logger, "DEBUG", f"unroll puzzle failed: {e}")
+        UTILS.logging_traceback("unroll puzzle")
+        puzzle_record = None
+
+    if puzzle_record is not None and puzzle_record.unrolled_puzzles is not None:
+        labels.append('')
+        values.append('')
+        labels.append('LAYERED_PUZZLE')
+        values.append('')
+
+        labels.append('-puzzle_name')
+        values.append(puzzle_record.layered_puzzle_name)
+
+        labels.append('-sub_puzzle_list')
+        values.append('')
+        for n, puz in enumerate(puzzle_record.unrolled_puzzles):
+            value = f"({n}) {puz['puzz_name']}"
+            if n == 0:
+                data[-1] = value
+            else:
+                labels.append('')
+                values.append(value)
+
+        labels.append('-clvm')
+        if puzzle_record.puzzle_and_sol_rpc:
+            values.append(puzzle_record.puzzle_and_sol_rpc['puzzle_reveal'])
+        else:
+            values.append(None)
+        labels.append('-disassembled_clvm')
+        values.append(puzzle_record.puzzle_disassembled)
+
+        labels.append('')
+        values.append('')
+        labels.append('UNCURRIED_PUZZLEs')
+        values.append('')
+
+        for puz in puzzle_record.unrolled_puzzles:
+            labels.append('-sub_puzzle_name')
+            values.append(puz['puzz_name'])
+
+            labels.append('--path:')
+            values.append(puz['path'])
+
+            labels.append('--puzzle_disassembled')
+            values.append(puz['disassembly'])
+
+            labels.append('--args:')
+            values.append('')
+            for n, arg in enumerate(puz['args']):
+                value = f"<...>(R, {n}) | {arg} "
+                if n == 0:
+                    values[-1] = value
+                else:
+                    labels.append('')
+                    values.append(value)
+
+            labels.append('')
+            values.append('')
+    # --- end unrolled puzzle ---
+
     tab_legend = ['property', 'value']
     tab_data = [labels, values]
 

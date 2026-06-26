@@ -130,7 +130,12 @@ class CoinRecordRoto:
 
     def __init__(self, raw_record):
         """ raw record list see->FetchMaker.puzzle_hash_fetcher """
-        self.coin_name = bytes32(raw_record[2])
+        # TODO:
+        # input puzzle_hash_fetcher, both cache and no cache, changed to respect the chia sql order
+        # or decide to keep this order
+        #f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+        #f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
+        self.coin_name = bytes32(raw_record[0])
         self.cache_record_type = raw_record[8]
         coin = CoinRoto(bytes32(raw_record[5]),  # coin parent
                         bytes32(raw_record[4]),  # puzzle hash
@@ -144,8 +149,36 @@ class CoinRecordRoto:
 
         self.coin = coin
         self.coinbase = raw_record[3]
-        self.confirmed_block_index = raw_record[0]
-        self.spent_block_index = raw_record[1]
+        self.confirmed_block_index = raw_record[1]
+        self.spent_block_index = raw_record[2]
+        self.timestamp = raw_record[7]
+        self.parent_coin_puzzle_hash = parent_puz_hash
+
+    @staticmethod
+    def init_from_cache_record(raw_cache_record):
+        """ cache raw record list see->FetchMaker.get_coin_record"""
+        # raw data structure
+        #   Columns: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
+        #             coin_parent, amount, timestamp, record_type, parent_puzzle_hash,
+        #             child_count, coin_type, full_memo, hint)"""
+
+
+        self.coin_name = bytes32(raw_record[0])
+        self.cache_record_type = raw_record[8]
+        coin = CoinRoto(bytes32(raw_record[5]),  # coin parent
+                        bytes32(raw_record[4]),  # puzzle hash
+                        int.from_bytes(raw_record[6], byteorder='big'))  # amount
+
+        parent_puz_hash = None
+        try:
+            parent_puz_hash = bytes32(raw_record[9])
+        except:
+            parent_puz_hash = None  # "no man land"
+
+        self.coin = coin
+        self.coinbase = raw_record[3]
+        self.confirmed_block_index = raw_record[1]
+        self.spent_block_index = raw_record[2]
         self.timestamp = raw_record[7]
         self.parent_coin_puzzle_hash = parent_puz_hash
 

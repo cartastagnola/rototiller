@@ -1889,8 +1889,9 @@ class FetchMaker:
         """ inbound cached fetcher"""
 
         base_query = (
+
             f" WITH main_coins AS ( "
-            f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"     SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
             f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
             f"     FROM cached_coin_record INDEXED BY idx_puzzle_hash "
             f"     WHERE puzzle_hash = ? "
@@ -1902,7 +1903,7 @@ class FetchMaker:
         )
 
         selection_query = (
-            f"SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
             f"       coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
             f"FROM main_coins "
             f"ORDER BY {sorting_column} {order} "
@@ -1997,7 +1998,7 @@ class FetchMaker:
 
         base_query = (
             f" WITH main_coins AS ( "
-            f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"     SELECT coin_name, spent_index, confirmed_index, coinbase, puzzle_hash, "
             f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
             f"     FROM cached_coin_record INDEXED BY idx_parent_puzzle_hash "
             f"     WHERE parent_puzzle_hash = ? "
@@ -2010,7 +2011,7 @@ class FetchMaker:
         )
 
         selection_query = (
-            f"SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"SELECT coin_name, spent_index, confirmed_index, coinbase, puzzle_hash, "
             f"       coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
             f"FROM main_coins "
             f"ORDER BY {sorting_column} {order} "
@@ -2095,7 +2096,7 @@ class FetchMaker:
 
         main_coins = (
             f" WITH main_coins AS ( "
-            f"     SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+            f"     SELECT coin_name, spent_index, confirmed_index, coinbase, puzzle_hash, "
             f"            coin_parent, amount, timestamp "
             f"     FROM coin_record INDEXED BY coin_puzzle_hash "
             f"     WHERE puzzle_hash = ? "
@@ -2134,7 +2135,7 @@ class FetchMaker:
             base_query = FetchMaker.puzzle_hash_base_cte(remove_spent_coins, remove_self_transactions)
 
             selection_query = (
-                f"SELECT confirmed_index, spent_index, coin_name, coinbase, puzzle_hash, "
+                f"SELECT coin_name, spent_index, confirmed_index, coinbase, puzzle_hash, "
                 f"       coin_parent, amount, timestamp, parent_puzzle_hash "
                 f"FROM filtered "
                 f"ORDER BY {sorting_column} {order} "
@@ -2359,7 +2360,7 @@ class FetchMaker:
             values.append(count)
             values.append(start)
             out_bound_query = (
-                f"SELECT child.confirmed_index, child.spent_index, child.coin_name, child.coinbase, child.puzzle_hash, "
+                f"SELECT child.coin_name, child.spent_index, child.confirmed_index, child.coinbase, child.puzzle_hash, "
                 f"       child.coin_parent, child.amount, child.timestamp "
                 f"FROM coin_record AS child "
                 f"JOIN coin_record AS parent ON child.coin_parent = parent.coin_name "
