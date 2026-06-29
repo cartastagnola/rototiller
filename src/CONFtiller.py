@@ -2,6 +2,7 @@ import src.LOGtiller as LOG
 from enum import Enum
 from pathlib import Path
 import json
+import threading
 import src.TEXTtiller as TEXT
 
 
@@ -60,6 +61,7 @@ SQL_TIMEOUT = 10
 ## CLMV
 # load the known puzzles
 UNKNOWN_PUZZLE = 'unknown_puzzle'
+UNKNOWN_PUZZLES_PATH = './resources/puzzles/unknown_puzzle.json'
 KNOWN_PUZZLES_PATH = './resources/puzzles/puzzles.json'
 KNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/layered_puzzles.json'
 KNOWN_PUZZLES = None
@@ -68,6 +70,12 @@ with open(KNOWN_PUZZLES_PATH, 'r') as f:
     KNOWN_PUZZLES = json.load(f)
 with open(KNOWN_LAYERED_PUZZLES_PATH, 'r') as f:
     KNOWN_LAYERED_PUZZLES = json.load(f)
+
+UNKNOWN_PUZZLES = {}
+if Path(UNKNOWN_PUZZLES_PATH).exists():
+    with open(UNKNOWN_PUZZLES_PATH, 'r') as f:
+        UNKNOWN_PUZZLES = json.load(f)
+UNKNOWN_PUZZLES_LOCK = threading.Lock()
 
 ## memepool
 TXS_MEMPOOL_DELAY = 1000  # ms

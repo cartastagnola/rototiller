@@ -30,7 +30,7 @@ except ImportError:
 
 
 
-from src.CONFtiller import UNKNOWN_PUZZLE, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES, logging, debug_logger
+from src.CONFtiller import UNKNOWN_PUZZLE, UNKNOWN_PUZZLES, UNKNOWN_PUZZLES_LOCK, UNKNOWN_PUZZLES_PATH, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES, logging, debug_logger
 from src.RPCtiller import call_rpc_node, call_rpc_daemon
 import src.UTILStiller as UTILS
 import src.TYPEStiller as TYPES
@@ -65,64 +65,19 @@ def get_puzzle_reveals_and_solutions(spend_bundle: str):
     return reveals, solutions
 
 
-#def unroll_coin_puzzle_to_puzzle_hashes(program: PyProgram, puzzle_hashes=None, lev=0):
-#    """Uncurry recursively the puzzle and gives the puzzles used"""
-#
-#    if puzzle_hashes is None:
-#        puzzle_hashes = []
-#        print()
-#        print()
-#        print("LEVELLO ZERO")
-#        lev += 1
-#    else:
-#        print()
-#        print(f"LEVELLO {lev}")
-#        lev += 1
-#
-#    uncurried_program, args = program.uncurry()
-#    puzzle_hash = uncurried_program.get_tree_hash()
-#    puzzle_hashes.append(puzzle_hash)
-#    print(f"tree hash: {puzzle_hash}")
-#    print(f"puzz: {disassemble(uncurried_program)}")
-#    #print(f"args: {disassemble(args)}")
-#
-#    print("args")
-#    args = list(args.as_iter())
-#    for n, i in enumerate(args):
-#        print(f"{n}n - {disassemble(i)}")
-#
-#    #print(f"last:{args[-1]}")
-#    if len(args) > 1:  # recurse if arguments exist
-#        unroll_coin_puzzle_to_puzzle_hashes(args[-1], puzzle_hashes, lev)
-#
-#    return puzzle_hashes
-#
-
-#### DELETE
-#def unroll_coin_puzzle_to_puzzles_and_args(program: PyProgram, puzzles=None, args_list=None):
-#    """Uncurry recursively the puzzle and gives the puzzles used"""
-#
-#    if puzzles is None:
-#        puzzles = []
-#        args_list = []
-#
-#    uncurried_program, args = program.uncurry()
-#    puzzles.append(uncurried_program)
-#    args_list.append(args)
-#
-#    args = list(args.as_iter())
-#    if len(args) > 1:  # recurse if arguments exist
-#        unroll_coin_puzzle_to_puzzles_and_args(args[-1], puzzles, args_list)
-#
-#    return puzzles, args_list
-
-
 def compare_to_known_puzzles(puzzle_hash):
+    """Look up a puzzle hash in known puzzles, then in saved unknown puzzles. """
+    # Check against known puzzles first
     puzzle = KNOWN_PUZZLES.get(str(puzzle_hash), None)
-    if puzzle is None:
-        return UNKNOWN_PUZZLE
-    else:
+    if puzzle is not None:
         return puzzle['name']
+
+    # Check against previously saved unknown puzzles
+    puzzle = UNKNOWN_PUZZLES.get(str(puzzle_hash), None)
+    if puzzle is not None:
+        return puzzle['name']
+
+    return UNKNOWN_PUZZLE
 
 
 def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
@@ -146,6 +101,43 @@ def print_tree_path(path: list, level):
         else:
             text += f"({i[0]}_{i[1]}), "
     return text
+
+
+def save_unknown_puzzle(puzzle_hash: str, puzzle: PyProgram, example: str = None):
+    """Save an unknown puzzle to unknown_puzzle.json if not already present."""
+    with UNKNOWN_PUZZLES_LOCK:
+        if puzzle_hash in KNOWN_PUZZLES or puzzle_hash in UNKNOWN_PUZZLES:
+            return
+
+        max_num = 0
+        for entry in UNKNOWN_PUZZLES.values():
+            name = entry.get('name', '')
+            if name.startswith('unknown_puzz_'):
+                try:
+                    num = int(name.split('_')[-1])
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    pass
+
+        new_num = max_num + 1
+        unique_name = f"unknown_puzz_{new_num:02d}"
+
+        entry = {
+            "file_name": None,
+            "name": unique_name,
+            "puzzle_hash": puzzle_hash,
+            "clvm": None,
+            "bytecode": "0x" + bytes(puzzle).hex(),
+            "bytecode_disassembled": rs_disassemble(bytes(puzzle))
+        }
+        if example is not None:
+            entry["example_curried_instance"] = example
+
+        UNKNOWN_PUZZLES[puzzle_hash] = entry
+
+        with open(UNKNOWN_PUZZLES_PATH, 'w') as f:
+            json.dump(UNKNOWN_PUZZLES, f, indent=4)
 
 
 def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None, path: list = None):
@@ -181,6 +173,14 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         node['hash'] = mod_hash
         node['puzz_name'] = mod_name
         node['disassembly'] = rs_disassemble(bytes(mod))  # should we put the disassembly of the mod?
+
+        # Save unknown template with an example curried instance
+        if mod_name == UNKNOWN_PUZZLE:
+            save_unknown_puzzle(
+                mod_hash,
+                mod,
+                example=rs_disassemble(bytes(puzzle))
+            )
 
         # Recursively capture arguments and store in the node
         count = 0
@@ -228,13 +228,23 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
                     new_path = current_path + [('R',n)] + [('L', 0)]
                 unroll_puzzle_to_nodes(arg, level, array=array, path=new_path)
 
-    elif puzzle_name != 'unknow puzzle':
+    elif puzzle_name != UNKNOWN_PUZZLE:
         node['is_curried'] = False
         node['hash'] = puzzle_hash
         node['puzz_name'] = puzzle_name
         node['disassembly'] = rs_disassemble(bytes(puzzle))
 
         array.append(node)
+
+    else:
+        # Non-curried unknown puzzle
+        node['is_curried'] = False
+        node['hash'] = puzzle_hash
+        node['puzz_name'] = puzzle_name
+        node['disassembly'] = rs_disassemble(bytes(puzzle))
+
+        array.append(node)
+        save_unknown_puzzle(puzzle_hash, puzzle)
 
     return array
 
