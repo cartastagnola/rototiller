@@ -77,6 +77,15 @@ if Path(UNKNOWN_PUZZLES_PATH).exists():
         UNKNOWN_PUZZLES = json.load(f)
 UNKNOWN_PUZZLES_LOCK = threading.Lock()
 
+UNKNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/unknown_layered_puzzles.json'
+UNKNOWN_LAYERED_PUZZLES = {}
+if Path(UNKNOWN_LAYERED_PUZZLES_PATH).exists():
+    with open(UNKNOWN_LAYERED_PUZZLES_PATH, 'r') as f:
+        UNKNOWN_LAYERED_PUZZLES = json.load(f)
+UNKNOWN_LAYERED_PUZZLES_LOCK = threading.Lock()
+
+LAYERED_PUZZLES_LOCK = threading.Lock()
+
 ## memepool
 TXS_MEMPOOL_DELAY = 1000  # ms
 

@@ -30,7 +30,7 @@ except ImportError:
 
 
 
-from src.CONFtiller import UNKNOWN_PUZZLE, UNKNOWN_PUZZLES, UNKNOWN_PUZZLES_LOCK, UNKNOWN_PUZZLES_PATH, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES, logging, debug_logger
+from src.CONFtiller import (UNKNOWN_PUZZLE, UNKNOWN_PUZZLES, UNKNOWN_PUZZLES_LOCK, UNKNOWN_PUZZLES_PATH, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES, KNOWN_LAYERED_PUZZLES_PATH, UNKNOWN_LAYERED_PUZZLES, UNKNOWN_LAYERED_PUZZLES_PATH, UNKNOWN_LAYERED_PUZZLES_LOCK, LAYERED_PUZZLES_LOCK, logging, debug_logger)
 from src.RPCtiller import call_rpc_node, call_rpc_daemon
 import src.UTILStiller as UTILS
 import src.TYPEStiller as TYPES
@@ -80,17 +80,87 @@ def compare_to_known_puzzles(puzzle_hash):
     return UNKNOWN_PUZZLE
 
 
-def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
-    """Compare a list of sub puzzle with known combination of puzzles"""
-    puzzle_key = '|'.join(sub_puzzle_hashes)
-    puzzle = KNOWN_LAYERED_PUZZLES.get(str(puzzle_key), None)
-    for i in KNOWN_LAYERED_PUZZLES.keys():
-        print(i)
-    print(f"puzzle key: {puzzle_key}")
-    if puzzle is None:
-        return "unknown puzzle"
+def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
+    """Save a layered puzzle combination to the appropriate JSON file.
+
+    If any sub-puzzle is unknown, the combination goes to unknown_layered_puzzles.json.
+    If all sub-puzzles are known, it goes to layered_puzzles.json.
+
+    Args:
+        puzzle_key: The pipe-separated hash string used as key.
+        sub_hashes: List of sub-puzzle hashes.
+        sub_names: List of resolved sub-puzzle names.
+
+    Returns:
+        The generated name for the layered combination.
+    """
+    has_unknown = any(hash not in KNOWN_PUZZLES for hash in sub_hashes)
+
+    if has_unknown:
+        target_dict = UNKNOWN_LAYERED_PUZZLES
+        target_path = UNKNOWN_LAYERED_PUZZLES_PATH
+        lock = UNKNOWN_LAYERED_PUZZLES_LOCK
+        prefix = "unknown_layered"
     else:
+        target_dict = KNOWN_LAYERED_PUZZLES
+        target_path = KNOWN_LAYERED_PUZZLES_PATH
+        lock = LAYERED_PUZZLES_LOCK
+        prefix = "auto_layered"
+
+    with lock:
+        if puzzle_key in target_dict:
+            return target_dict[puzzle_key]['name']
+
+        max_num = 0
+        for entry in target_dict.values():
+            name = entry.get('name', '')
+            if name.startswith(prefix + '_'):
+                try:
+                    num = int(name.split('_')[-1])
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    pass
+
+        new_name = f"{prefix}_{max_num + 1:02d}"
+
+        entry = {
+            "name": new_name,
+            "sub_puzzle_hashes": sub_hashes,
+            "sub_puzzle_names": sub_names
+        }
+        target_dict[puzzle_key] = entry
+
+        with open(target_path, 'w') as f:
+            json.dump(target_dict, f, indent=4)
+
+        return new_name
+
+
+def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
+    """Compare a list of sub-puzzle hashes against known layered puzzles.
+
+    If the combination is not found, save it to the appropriate catalog
+    (known or unknown layered puzzles) and return the generated name.
+
+    Args:
+        sub_puzzle_hashes: List of sub-puzzle hash strings.
+
+    Returns:
+        The puzzle name if found, or a generated name if newly saved.
+    """
+    puzzle_key = '|'.join(sub_puzzle_hashes)
+
+    puzzle = KNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
+    if puzzle is not None:
         return puzzle['name']
+
+    puzzle = UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
+    if puzzle is not None:
+        return puzzle['name']
+
+    sub_names = [compare_to_known_puzzles(h) for h in sub_puzzle_hashes]
+    return save_layered_puzzle(puzzle_key, sub_puzzle_hashes, sub_names)
 
 
 def print_tree_path(path: list, level):
