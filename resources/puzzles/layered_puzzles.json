@@ -74,5 +74,18 @@
             "--mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
             "--mips_puzzles-member_puzzles-singleton_member"
         ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d|aa334c2cd5a112871498357aec327922aabd3a08f49b06e3193652c614742925": {
+        "name": "TIBET SINGLETON LIQUIDITY PAIR",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d",
+            "aa334c2cd5a112871498357aec327922aabd3a08f49b06e3193652c614742925"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--tibet-p2_merkle_tree_modified",
+            "--tibet-pair_inner_puzzle"
+        ]
     }
 }

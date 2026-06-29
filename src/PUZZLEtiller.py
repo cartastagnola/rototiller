@@ -30,7 +30,8 @@ except ImportError:
 
 
 
-from src.CONFtiller import (UNKNOWN_PUZZLE, UNKNOWN_PUZZLES, UNKNOWN_PUZZLES_LOCK, UNKNOWN_PUZZLES_PATH, KNOWN_PUZZLES, KNOWN_LAYERED_PUZZLES, KNOWN_LAYERED_PUZZLES_PATH, UNKNOWN_LAYERED_PUZZLES, UNKNOWN_LAYERED_PUZZLES_PATH, UNKNOWN_LAYERED_PUZZLES_LOCK, LAYERED_PUZZLES_LOCK, logging, debug_logger)
+from src.CONFtiller import logging, debug_logger
+import src.CONFtiller as CONF
 from src.RPCtiller import call_rpc_node, call_rpc_daemon
 import src.UTILStiller as UTILS
 import src.TYPEStiller as TYPES
@@ -68,16 +69,16 @@ def get_puzzle_reveals_and_solutions(spend_bundle: str):
 def compare_to_known_puzzles(puzzle_hash):
     """Look up a puzzle hash in known puzzles, then in saved unknown puzzles. """
     # Check against known puzzles first
-    puzzle = KNOWN_PUZZLES.get(str(puzzle_hash), None)
+    puzzle = CONF.KNOWN_PUZZLES.get(str(puzzle_hash), None)
     if puzzle is not None:
         return puzzle['name']
 
     # Check against previously saved unknown puzzles
-    puzzle = UNKNOWN_PUZZLES.get(str(puzzle_hash), None)
+    puzzle = CONF.UNKNOWN_PUZZLES.get(str(puzzle_hash), None)
     if puzzle is not None:
         return puzzle['name']
 
-    return UNKNOWN_PUZZLE
+    return CONF.UNKNOWN_PUZZLE
 
 
 def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
@@ -94,17 +95,17 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
     Returns:
         The generated name for the layered combination.
     """
-    has_unknown = any(hash not in KNOWN_PUZZLES for hash in sub_hashes)
+    has_unknown = any(hash not in CONF.KNOWN_PUZZLES for hash in sub_hashes)
 
     if has_unknown:
-        target_dict = UNKNOWN_LAYERED_PUZZLES
-        target_path = UNKNOWN_LAYERED_PUZZLES_PATH
-        lock = UNKNOWN_LAYERED_PUZZLES_LOCK
+        target_dict = CONF.UNKNOWN_LAYERED_PUZZLES
+        target_path = CONF.UNKNOWN_LAYERED_PUZZLES_PATH
+        lock = CONF.UNKNOWN_LAYERED_PUZZLES_LOCK
         prefix = "unknown_layered"
     else:
-        target_dict = KNOWN_LAYERED_PUZZLES
-        target_path = KNOWN_LAYERED_PUZZLES_PATH
-        lock = LAYERED_PUZZLES_LOCK
+        target_dict = CONF.KNOWN_LAYERED_PUZZLES
+        target_path = CONF.KNOWN_LAYERED_PUZZLES_PATH
+        lock = CONF.LAYERED_PUZZLES_LOCK
         prefix = "auto_layered"
 
     with lock:
@@ -151,11 +152,11 @@ def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
     """
     puzzle_key = '|'.join(sub_puzzle_hashes)
 
-    puzzle = KNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
+    puzzle = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
     if puzzle is not None:
         return puzzle['name']
 
-    puzzle = UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
+    puzzle = CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
     if puzzle is not None:
         return puzzle['name']
 
@@ -175,12 +176,12 @@ def print_tree_path(path: list, level):
 
 def save_unknown_puzzle(puzzle_hash: str, puzzle: PyProgram, example: str = None):
     """Save an unknown puzzle to unknown_puzzle.json if not already present."""
-    with UNKNOWN_PUZZLES_LOCK:
-        if puzzle_hash in KNOWN_PUZZLES or puzzle_hash in UNKNOWN_PUZZLES:
+    with CONF.UNKNOWN_PUZZLES_LOCK:
+        if puzzle_hash in CONF.KNOWN_PUZZLES or puzzle_hash in CONF.UNKNOWN_PUZZLES:
             return
 
         max_num = 0
-        for entry in UNKNOWN_PUZZLES.values():
+        for entry in CONF.UNKNOWN_PUZZLES.values():
             name = entry.get('name', '')
             if name.startswith('unknown_puzz_'):
                 try:
@@ -204,10 +205,10 @@ def save_unknown_puzzle(puzzle_hash: str, puzzle: PyProgram, example: str = None
         if example is not None:
             entry["example_curried_instance"] = example
 
-        UNKNOWN_PUZZLES[puzzle_hash] = entry
+        CONF.UNKNOWN_PUZZLES[puzzle_hash] = entry
 
-        with open(UNKNOWN_PUZZLES_PATH, 'w') as f:
-            json.dump(UNKNOWN_PUZZLES, f, indent=4)
+        with open(CONF.UNKNOWN_PUZZLES_PATH, 'w') as f:
+            json.dump(CONF.UNKNOWN_PUZZLES, f, indent=4)
 
 
 def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None, path: list = None):
@@ -238,14 +239,14 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         "args": []
     }
 
-    if mod != puzzle and puzzle_name == UNKNOWN_PUZZLE:
+    if mod != puzzle and puzzle_name == CONF.UNKNOWN_PUZZLE:
         node['is_curried'] = True
         node['hash'] = mod_hash
         node['puzz_name'] = mod_name
         node['disassembly'] = rs_disassemble(bytes(mod))  # should we put the disassembly of the mod?
 
         # Save unknown template with an example curried instance
-        if mod_name == UNKNOWN_PUZZLE:
+        if mod_name == CONF.UNKNOWN_PUZZLE:
             save_unknown_puzzle(
                 mod_hash,
                 mod,
@@ -257,7 +258,7 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         for arg in curried_args.as_iter():
             arg_hash = arg.get_tree_hash().hex()
             arg_name = compare_to_known_puzzles(arg_hash)
-            if arg_name != UNKNOWN_PUZZLE:
+            if arg_name != CONF.UNKNOWN_PUZZLE:
                 node["args"].append(arg_name)
             else:
                 sub_mod, sub_curried_args = arg.uncurry()
@@ -274,7 +275,7 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         # Check if the mod itself can be uncurried further
         # here add the number
         mod2, curried_args2 = mod.uncurry()
-        if mod2 != mod and node['puzz_name'] == UNKNOWN_PUZZLE:
+        if mod2 != mod and node['puzz_name'] == CONF.UNKNOWN_PUZZLE:
             new_path = path + [('LL', 0)]
             unroll_puzzle_to_nodes(mod, level, array=array, path=new_path)
 
@@ -292,13 +293,13 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
                 current_path.pop(-1)
                 ## TODO move this if at the beginning of unroll_puzzle_to_nodes by
                 ## passing the path without [(L, 0)]
-                if arg_name != UNKNOWN_PUZZLE:
+                if arg_name != CONF.UNKNOWN_PUZZLE:
                     new_path = current_path + [('R',n)] + [()]
                 else:
                     new_path = current_path + [('R',n)] + [('L', 0)]
                 unroll_puzzle_to_nodes(arg, level, array=array, path=new_path)
 
-    elif puzzle_name != UNKNOWN_PUZZLE:
+    elif puzzle_name != CONF.UNKNOWN_PUZZLE:
         node['is_curried'] = False
         node['hash'] = puzzle_hash
         node['puzz_name'] = puzzle_name
@@ -333,14 +334,14 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
     mod_hash = mod.get_tree_hash().hex()
     mod_name = compare_to_known_puzzles(mod_hash)
 
-    if mod != puzzle and puzzle_name == UNKNOWN_PUZZLE:
+    if mod != puzzle and puzzle_name == CONF.UNKNOWN_PUZZLE:
 
         array[0].append(mod_name)
         array[1].append(mod_hash)
 
         # Check if the mod itself can be uncurried further
         mod2, curried_args2 = mod.uncurry()
-        if mod2 != mod and mod_name == UNKNOWN_PUZZLE:
+        if mod2 != mod and mod_name == CONF.UNKNOWN_PUZZLE:
             # here we should check if there are multiple
             unroll_puzzle_to_names(mod, level, array=array)
 
@@ -350,7 +351,7 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
             if sub_mod != arg:
                 # remove last level and fo to the right
                 unroll_puzzle_to_names(arg, level, array=array)
-    elif puzzle_name != UNKNOWN_PUZZLE:
+    elif puzzle_name != CONF.UNKNOWN_PUZZLE:
         # case where a puzzle is use as argument without any curried args
         array[0].append(puzzle_name)
         array[1].append(puzzle_hash)
