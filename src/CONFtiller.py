@@ -61,7 +61,7 @@ SQL_TIMEOUT = 10
 ## CLMV
 # load the known puzzles
 UNKNOWN_PUZZLE = 'unknown_puzzle'
-UNKNOWN_PUZZLES_PATH = './resources/puzzles/unknown_puzzle.json'
+UNKNOWN_PUZZLES_PATH = './resources/puzzles/unknown_puzzles.json'
 KNOWN_PUZZLES_PATH = './resources/puzzles/puzzles.json'
 KNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/layered_puzzles.json'
 KNOWN_PUZZLES = None
