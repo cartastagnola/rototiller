@@ -3093,7 +3093,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         for n, puz in enumerate(puzzle_record.unrolled_puzzles):
             value = f"({n}) {puz['puzz_name']}"
             if n == 0:
-                data[-1] = value
+                values[-1] = value
             else:
                 labels.append('')
                 values.append(value)
