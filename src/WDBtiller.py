@@ -2745,10 +2745,21 @@ def _check_cat_type(coin, puzzle_program, hint):
     # Fallback: try reconstructing with hint as inner puzzle (for cases where
     # we got the full inner puzzle program rather than just the hash)
     try:
+        tail_program = tail_program.get_tree_hash()
+        print(f"[CAT DEBUG] mod type: {type(mod)}")
+        print(f"[CAT DEBUG] tail_program type: {type(tail_program)}")
+        print(f"[CAT DEBUG] tail_program value: {tail_program}")
+        print(f"[CAT DEBUG] hint type: {type(hint)}")
+        print(f"[CAT DEBUG] hint value: {hint}")
+
         reconstructed = mod.curry(mod, tail_program, hint)
         if reconstructed is None:
             return None
 
+        print('reconstructed')
+        print(reconstructed.get_tree_hash())
+        print('puzzle hash')
+        print(coin.coin.puzzle_hash)
         if reconstructed.get_tree_hash() != coin.coin.puzzle_hash:
             return None  # hint does not match this CAT
 
