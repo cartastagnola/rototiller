@@ -3062,6 +3062,26 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         hint,
     ]
 
+    # --- Type verification (CAT / NFT / XCH) ---
+    try:
+        coin_record_roto = TYPES.CoinRecordRoto(coin_record[:10])
+        type_result = WDB.FetchMaker.verify_coin_type(coin_record_roto, hint=raw_hint if UTILS.is_bytes32(raw_hint) else None)
+        labels.append("Verified Type")
+        values.append(type_result.get('type', 'UNKNOWN'))
+        labels.append("Verified")
+        values.append(str(type_result.get('verified', False)))
+        labels.append("Type Detail")
+        values.append(str(type_result.get('detail', {})))
+    except Exception as e:
+        logging(debug_logger, "DEBUG", f"verify_coin_type failed: {e}")
+        traceback.print_exc()
+        labels.append("Verified Type")
+        values.append("ERROR")
+        labels.append("Verified")
+        values.append("False")
+        labels.append("Type Detail")
+        values.append(str(e))
+
     if coin_memo is not None:
         labels.append("RPC Spent debug")
         values.append(str(coin_memo))

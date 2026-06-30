@@ -28,8 +28,6 @@ except ImportError:
     except ImportError:
         print('probably a full_node verison not supporter')
 
-
-
 from src.CONFtiller import logging, debug_logger
 import src.CONFtiller as CONF
 from src.RPCtiller import call_rpc_node, call_rpc_daemon
