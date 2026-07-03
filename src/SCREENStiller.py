@@ -3155,6 +3155,85 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
             values.append('')
     # --- end unrolled puzzle ---
 
+
+
+
+
+
+
+
+    # --- unrolled solution ---
+
+
+    puzzle, solution = WDB.FetchMaker._fetch_puzzle_and_solution(coin_record_roto)
+
+    unrolled = PUZ.unroll_puzzle_to_nodes(solution)
+
+
+    if puzzle_record is not None and unrolled is not None:
+        labels.append('')
+        values.append('')
+        labels.append('SOLUTION')
+        values.append('')
+
+
+        labels.append('-sub_puzzle_list')
+        values.append('')
+        for n, puz in enumerate(unrolled):
+            value = f"({n}) {puz['puzz_name']}"
+            if n == 0:
+                values[-1] = value
+            else:
+                labels.append('')
+                values.append(value)
+
+
+        labels.append('')
+        values.append('')
+        labels.append('UNCURRIED_PUZZLEs')
+        values.append('')
+
+        for puz in unrolled:
+            labels.append('-sub_puzzle_name')
+            values.append(puz['puzz_name'])
+
+            labels.append('--path:')
+            values.append(puz['path'])
+
+            labels.append('--puzzle_disassembled')
+            values.append(puz['disassembly'])
+
+            labels.append('--args:')
+            values.append('')
+            for n, arg in enumerate(puz['args']):
+                value = f"<...>(R, {n}) | {arg} "
+                if n == 0:
+                    values[-1] = value
+                else:
+                    labels.append('')
+                    values.append(value)
+
+            labels.append('')
+            values.append('')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # --- end unrolled solution ---
+
+
+
     tab_legend = ['property', 'value']
     tab_data = [labels, values]
 
