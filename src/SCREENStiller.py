@@ -1877,6 +1877,7 @@ class AddressLoaders():
         self.total_coin_count = -1
         self.unspent_hinted_coin_count = -1
         self.total_hinted_coin_count = -1
+        self.layered_puzzle_type = 'No data'
         self.layered_puzzle_name = 'No data'
 
 
@@ -1982,13 +1983,14 @@ def load_the_loaders(address_loaders: AddressLoaders):
             logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
             unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
             puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
-            layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
             logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
             with address_loaders.lock:
                 address_loaders.puzzle_and_sol_rpc = out
                 address_loaders.puzzle_disassembled = puzzle_disassembled
                 address_loaders.unrolled_puzzles = unroll_puzzles
+                address_loaders.layered_puzzle_type = layered_puzzle_type
                 address_loaders.layered_puzzle_name = layered_puzzle_name
 
             logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
@@ -2263,13 +2265,14 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                 logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
                 unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
                 puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
-                layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+                layered_puzzle_name, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
                 logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
                 with address_loaders.lock:
                     address_loaders.puzzle_and_sol_rpc = out
                     address_loaders.puzzle_disassembled = puzzle_disassembled
                     address_loaders.unrolled_puzzles = unroll_puzzles
+                    address_loaders.layered_puzzle_type = layered_puzzle_type
                     address_loaders.layered_puzzle_name = layered_puzzle_name
 
                 logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
@@ -2731,6 +2734,7 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
                 puz_and_sol = address_loaders.puzzle_and_sol_rpc
                 puzzle_disassembled = address_loaders.puzzle_disassembled
                 unrolled_puzzles = address_loaders.unrolled_puzzles
+                layered_puzzle_type = address_loaders.layered_puzzle_type
                 layered_puzzle_name = address_loaders.layered_puzzle_name
 
             if unrolled_puzzles is None:
@@ -2746,6 +2750,8 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
                 labels.append('LAYERED_PUZZLE')
                 data.append('')
 
+                labels.append('-puzzle_type')
+                data.append(layered_puzzle_type)
                 labels.append('-puzzle_name')
                 data.append(layered_puzzle_name)
 
@@ -2842,9 +2848,9 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
 
     pos = pos_tab_title
     with address_loaders.lock:
-        layered_puzzle_name = address_loaders.layered_puzzle_name
+        layered_puzzle_type = address_loaders.layered_puzzle_type
 
-    title_list = [" INBOUND coins ", " OUTBOUND coins ", f" PUZZLE [{layered_puzzle_name}]"]
+    title_list = [" INBOUND coins ", " OUTBOUND coins ", f" PUZZLE [{layered_puzzle_type}]"]
     for n, text in enumerate(title_list):
         P_used, blend = (P_title_selected, True) if tab_selected == n else (P_title, False)
         ELEMENTS.create_text_double_space(add_viewer, screenState, pos, text, P_used, C_background, 3, True)
@@ -3105,6 +3111,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         labels.append('LAYERED_PUZZLE')
         values.append('')
 
+        labels.append('-puzzle_type')
+        values.append(puzzle_record.layered_puzzle_type)
         labels.append('-puzzle_name')
         values.append(puzzle_record.layered_puzzle_name)
 

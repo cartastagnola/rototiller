@@ -107,6 +107,7 @@ class PuzzleRecord:
     puzzle_and_sol_rpc: str
     puzzle_disassembled: str
     unrolled_puzzles: str
+    layered_puzzle_type: str
     layered_puzzle_name: str
 
 

@@ -110,6 +110,7 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
         if puzzle_key in target_dict:
             return target_dict[puzzle_key]['name']
 
+        #find max unkonw puzzle
         max_num = 0
         for entry in target_dict.values():
             name = entry.get('name', '')
@@ -122,6 +123,7 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
                     pass
 
         new_name = f"{prefix}_{max_num + 1:02d}"
+        new_type = f"type_{new_name}"
 
         entry = {
             "name": new_name,
@@ -133,7 +135,7 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
         with open(target_path, 'w') as f:
             json.dump(target_dict, f, indent=4)
 
-        return new_name
+        return new_type, new_name
 
 
 def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
@@ -152,11 +154,11 @@ def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
 
     puzzle = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
     if puzzle is not None:
-        return puzzle['name']
+        return puzzle['puzzle_type'], puzzle['name']
 
     puzzle = CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
     if puzzle is not None:
-        return puzzle['name']
+        return puzzle['puzzle_type'], puzzle['name']
 
     sub_names = [compare_to_known_puzzles(h) for h in sub_puzzle_hashes]
     return save_layered_puzzle(puzzle_key, sub_puzzle_hashes, sub_names)
@@ -383,10 +385,10 @@ def unroll_puzzle_from_coin_id(coin_record: TYPES.CoinRecordRoto):
             logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
             unroll_puzzles = unroll_puzzle_to_nodes(program)
             puz_names, puz_hashes = unroll_puzzle_to_names(program)
-            layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            layered_puzzle_type, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
             logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
-            puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_name)
+            puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_type, layered_puzzle_name)
 
         except Exception as e:
             logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
