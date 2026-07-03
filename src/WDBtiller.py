@@ -161,12 +161,10 @@ def create_cache_blockchain_db(conn):
             "amount BIGINT, "
             "timestamp BIGINT, "
             "record_type INT, "  # 0-full, 1-partial (for children) # lets see, i could not be needed
-            "parent_puzzle_hash BLOB, "  # at the moment we will keep it. We will see it to store the full coin data later
+            "parent_puzzle_hash BLOB, "  # at the moment we will keep it. We will see if to store the full coin data later
             "child_count INT, "
-            #"hinted_puzzle_hash BLOB, "
-            #"hinted_parent_puzzle_hash BLOB, "
-            #"tail BLOB, "
             "coin_type INT, "
+            "coin_type_metadata BLOB, " # like tail
             "full_memo BLOB, "
             "hint BLOB);"
         )
@@ -175,13 +173,6 @@ def create_cache_blockchain_db(conn):
             "CREATE TABLE IF NOT EXISTS cached_memo_progress ("
             "puzzle_hash BLOB PRIMARY KEY, "
             "last_confirmed_index BIGINT "
-            ");"
-        )
-
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS ooo ("
-            "key TEXT PRIMARY KEY, "
-            "value INT "
             ");"
         )
 
