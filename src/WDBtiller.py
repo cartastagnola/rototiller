@@ -164,7 +164,7 @@ def create_cache_blockchain_db(conn):
             "parent_puzzle_hash BLOB, "  # at the moment we will keep it. We will see if to store the full coin data later
             "child_count INT, "
             "coin_type INT, "
-            "coin_type_metadata BLOB, " # like tail
+            "coin_type_metadata BLOB, "  # like tail
             "full_memo BLOB, "
             "hint BLOB);"
         )
@@ -183,9 +183,8 @@ def create_cache_blockchain_db(conn):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_parent_puzzle_hash ON cached_coin_record(parent_puzzle_hash);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_confirmed_index ON cached_coin_record(confirmed_index);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_spent_index ON cached_coin_record(spent_index);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_coin_type_metadata ON cached_coin_record(coin_type_metadata);")
         #cursor.execute("CREATE INDEX IF NOT EXISTS idx_cache_fetch ON cached_coin_record (puzzle_hash, confirmed_index, spent_index")  # new to check
-        ## tail
-        #cursor.execute("CREATE INDEX IF NOT EXISTS idx_tail ON cached_coin_record(tail);")
         ## coin type
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_coin_type ON cached_coin_record(coin_type);")
         ## parent coin id
@@ -1438,15 +1437,15 @@ class FetchMaker:
 
     @staticmethod
     def get_cached_coin_record(cache_cursor, coin_name):
-        """Fetch a cached coin_record (14 columns) from the cached_coin_record table by coin_name.
+        """Fetch a cached coin_record (15 columns) from the cached_coin_record table by coin_name.
            Returns None if not found.
            Columns: (coin_name, confirmed_index, spent_index, coinbase, puzzle_hash,
                      coin_parent, amount, timestamp, record_type, parent_puzzle_hash,
-                     child_count, coin_type, full_memo, hint)"""
+                     child_count, coin_type, coin_type_metadata, full_memo, hint)"""
         cache_cursor.execute(
             "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, coin_parent, "
             "amount, timestamp, record_type, parent_puzzle_hash, child_count, coin_type, "
-            "full_memo, hint "
+            "coin_type_metadata, full_memo, hint "
             "FROM cached_coin_record WHERE coin_name = ?",
             (coin_name,),
         )
@@ -1553,6 +1552,7 @@ class FetchMaker:
         args.append(parent_puzzle_hash)
         args.append(child_count)
         args.append(None)  # coin_type
+        args.append(None)  # coin_type_metadata
         args.append(None)  # full_memo
 
         # query hint from blockchain hints table
@@ -1567,8 +1567,8 @@ class FetchMaker:
             "INSERT INTO cached_coin_record ("
             "coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
             "coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
-            "child_count, coin_type, full_memo, hint) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "child_count, coin_type, coin_type_metadata, full_memo, hint) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(coin_name) DO UPDATE SET "
             "confirmed_index = excluded.confirmed_index, "
             "spent_index = excluded.spent_index, "
@@ -1581,6 +1581,7 @@ class FetchMaker:
             "parent_puzzle_hash = excluded.parent_puzzle_hash, "
             "child_count = excluded.child_count, "
             "coin_type = excluded.coin_type, "
+            "coin_type_metadata = excluded.coin_type_metadata, "
             "hint = excluded.hint "
             f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
             args

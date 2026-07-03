@@ -2905,8 +2905,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
                 main_scope.data['coin_cache'] = row
 
             # --- check memo in cache, fetch if missing ---
-            # row[12]=full_memo
-            if row and row[12] is None:
+            # row[13]=full_memo
+            if row and row[13] is None:
                 try:
                     WDB.FetchMaker.fetch_and_cache_coin_memo(cache_conn, coin_name_hex, row)
                 except Exception as e:
@@ -3002,7 +3002,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     ]
 
     # --- Memo from cache ---
-    _memo = coin_record[12]
+    _memo = coin_record[13]
     _memo_display = "None"
     if _memo is not None:
         try:
@@ -3037,8 +3037,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
             coin_memo_de = coin_memo_de + item + ', '
     coin_memo = coin_memo_de
 
-    # --- Hint from cache (coin_record[13]) ---
-    raw_hint = coin_record[13]
+    # --- Hint from cache (coin_record[14]) ---
+    raw_hint = coin_record[14]
     hint = encode_puzzle_hash(bytes32(raw_hint), CONF.ADD_PREFIX) if UTILS.is_bytes32(raw_hint) else None
 
     values = [
