@@ -103,32 +103,30 @@ class CacheCoinRecordType(IntEnum):
     PHANTOM_SPENT = 2  # coin spent with no child
 
 
-# Dynamically build CoinType StrEnum from layered_puzzles.json puzzle_type values.
-# Examples of types found inside: NFT_1.0, STD_TRANSACTION, CAT_V2, VAULT_1.0,
-# TIBET_SINGLETON_LIQUIDITY_PAIR.
-_layered_puzzles_path = CONF.KNOWN_LAYERED_PUZZLES_PATH
-_known_types = set()
-try:
-    with open(_layered_puzzles_path, 'r') as f:
-        layered_data = json.load(f)
-    for entry in layered_data.values():
-        pt = entry.get('puzzle_type')
-        if pt:
-            _known_types.add(pt)
-except Exception:
-    _known_types = set()
+# class CoinType
+# Dynamically build CoinType StrEnum from puzzle_types.json.
+_puzzle_types = CONF.PUZZLE_TYPES or {}
 
+# Validate every puzzle_type referenced in layered_puzzles.json exists in puzzle_types.json
+_layered_types = set()
+for entry in (CONF.KNOWN_LAYERED_PUZZLES or {}).values():
+    pt = entry.get('puzzle_type')
+    if pt:
+        _layered_types.add(pt)
 
-def _sanitize_enum_name(s: str) -> str:
-    if '-' in s:
-        raise ValueError(f"CoinType value must not contain '-': {s!r}")
-    return s.replace('.', '_').upper()
+for pt in _layered_types:
+    if pt not in _puzzle_types:
+        raise ValueError(
+            f"layered_puzzles.json references puzzle_type {pt!r} which is missing from puzzle_types.json"
+        )
 
-
-CoinType = StrEnum(
-    'CoinType',
-    {_sanitize_enum_name(pt): pt for pt in sorted(_known_types)}
-)
+_coin_type_members = {key.upper(): data['name'] for key, data in sorted(_puzzle_types.items())}
+_coin_type_members['UNKNOWN'] = 'UNKNOWN'
+CoinType = StrEnum('CoinType', _coin_type_members)
+# eg:
+# CoinType.STD
+# CoinType.CAT_V2
+# CoinType.NFT_V1
 
 
 @dataclass
@@ -136,7 +134,7 @@ class PuzzleRecord:
     puzzle_and_sol_rpc: str
     puzzle_disassembled: str
     unrolled_puzzles: str
-    layered_puzzle_type: str
+    layered_puzzle_type: CoinType
     layered_puzzle_name: str
 
 

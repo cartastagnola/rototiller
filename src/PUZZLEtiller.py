@@ -387,8 +387,13 @@ def unroll_puzzle_from_coin_id(coin_record: TYPES.CoinRecordRoto):
             logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
             unroll_puzzles = unroll_puzzle_to_nodes(program)
             puz_names, puz_hashes = unroll_puzzle_to_names(program)
-            layered_puzzle_type, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            layered_puzzle_type_str, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
             logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
+
+            try:
+                layered_puzzle_type = TYPES.CoinType(layered_puzzle_type_str)
+            except (ValueError, KeyError):
+                layered_puzzle_type = TYPES.CoinType.UNKNOWN
 
             puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_type, layered_puzzle_name)
 

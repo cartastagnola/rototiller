@@ -64,12 +64,16 @@ UNKNOWN_PUZZLE = 'unknown_puzzle'
 UNKNOWN_PUZZLES_PATH = './resources/puzzles/unknown_puzzles.json'
 KNOWN_PUZZLES_PATH = './resources/puzzles/puzzles.json'
 KNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/layered_puzzles.json'
+PUZZLE_TYPES_PATH = './resources/puzzles/puzzle_types.json'
 KNOWN_PUZZLES = None
-KNOWN_LAYERED_PUZZLES = './resources/puzzles/layered_puzzles.json'
+KNOWN_LAYERED_PUZZLES = None
+PUZZLE_TYPES = None
 with open(KNOWN_PUZZLES_PATH, 'r') as f:
     KNOWN_PUZZLES = json.load(f)
 with open(KNOWN_LAYERED_PUZZLES_PATH, 'r') as f:
     KNOWN_LAYERED_PUZZLES = json.load(f)
+with open(PUZZLE_TYPES_PATH, 'r') as f:
+    PUZZLE_TYPES = json.load(f)
 
 UNKNOWN_PUZZLES = {}
 if Path(UNKNOWN_PUZZLES_PATH).exists():
