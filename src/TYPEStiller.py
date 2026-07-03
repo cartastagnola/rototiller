@@ -4,6 +4,7 @@ import copy
 import threading
 import traceback
 import sqlite3  # TODO: remove it
+import json
 
 from enum import IntEnum, StrEnum
 from dataclasses import dataclass, field
@@ -100,6 +101,34 @@ class CacheCoinRecordType(IntEnum):
     NORMAL = 0
     CHILD = 1  # limited data
     PHANTOM_SPENT = 2  # coin spent with no child
+
+
+# Dynamically build CoinType StrEnum from layered_puzzles.json puzzle_type values.
+# Examples of types found inside: NFT_1.0, STD_TRANSACTION, CAT_V2, VAULT_1.0,
+# TIBET_SINGLETON_LIQUIDITY_PAIR.
+_layered_puzzles_path = CONF.KNOWN_LAYERED_PUZZLES_PATH
+_known_types = set()
+try:
+    with open(_layered_puzzles_path, 'r') as f:
+        layered_data = json.load(f)
+    for entry in layered_data.values():
+        pt = entry.get('puzzle_type')
+        if pt:
+            _known_types.add(pt)
+except Exception:
+    _known_types = set()
+
+
+def _sanitize_enum_name(s: str) -> str:
+    if '-' in s:
+        raise ValueError(f"CoinType value must not contain '-': {s!r}")
+    return s.replace('.', '_').upper()
+
+
+CoinType = StrEnum(
+    'CoinType',
+    {_sanitize_enum_name(pt): pt for pt in sorted(_known_types)}
+)
 
 
 @dataclass

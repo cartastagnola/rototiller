@@ -108,7 +108,8 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
 
     with lock:
         if puzzle_key in target_dict:
-            return target_dict[puzzle_key]['name']
+            entry = target_dict[puzzle_key]
+            return entry['puzzle_type'], entry['name']
 
         #find max unkonw puzzle
         max_num = 0
@@ -126,6 +127,7 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
         new_type = f"type_{new_name}"
 
         entry = {
+            "puzzle_type": new_type,
             "name": new_name,
             "sub_puzzle_hashes": sub_hashes,
             "sub_puzzle_names": sub_names
