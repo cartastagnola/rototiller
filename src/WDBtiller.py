@@ -2308,7 +2308,7 @@ class FetchMaker:
             for n, h in zip(names, hashes):
                 print(f"{n.upper()} with hash; {h}")
 
-            name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
+            puzzle_type, name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
 
             # Run the puzzle with the solution (returns cost and conditions)
             max_cost = 11_000_000_000
@@ -3369,7 +3369,7 @@ if __name__ == "__main__":
         for n, h in zip(names, hashes):
             print(f"{n.upper()} with hash; {h}")
 
-        name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
+        puzzle_type, name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
         print(f"THE NAME: {name}")
         for i in unroll_puzzles:
             print(i)
@@ -3547,7 +3547,7 @@ if __name__ == "__main__":
             for n, h in zip(names, hashes):
                 print(f"{n.upper()} with hash; {h}")
 
-            name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
+            puzzle_type, name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes)
 
 
             # Run the puzzle with the solution (returns cost and conditions)
