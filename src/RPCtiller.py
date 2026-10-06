@@ -225,6 +225,7 @@ rpc_calls_full_node = {
     "get_routes": ["routes"],
     "get_additions_and_removals": [],
     "get_puzzle_and_solution": ["coin_solution"],
+    "get_block_spends": ["block_spends"],
     "healthz": [],
 }
 

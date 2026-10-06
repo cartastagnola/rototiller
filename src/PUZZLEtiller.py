@@ -34,6 +34,7 @@ from src.RPCtiller import call_rpc_node, call_rpc_daemon
 import src.UTILStiller as UTILS
 import src.TYPEStiller as TYPES
 import src.RPCtiller as RPC
+import src.WDBtiller as WDB
 
 # puzzle repo: https://github.com/Chia-Network/chia-blockchain/tree/fad414132e6950e79e805629427af76bf9ddcbc5/chia/wallet/puzzles
 
@@ -406,6 +407,295 @@ def unroll_puzzle_from_coin_id(coin_record: TYPES.CoinRecordRoto):
         pass
 
     return puz
+
+
+def get_coin_parent(coin_parent_id: bytes32):
+    """if now coin are found return the record, if not look into the block for ephemeral coins"""
+    pass
+
+
+def get_coin_type_from_parent(parent_coin_id, confirmed_height):
+    out = RPC.call_rpc_node(
+        'get_puzzle_and_solution',
+        coin_id=parent_coin_id,
+        height=confirmed_height
+    )
+    program = PyProgram.fromhex(out['puzzle_reveal'])
+    puz_names, puz_hashes = unroll_puzzle_to_names(program)
+    layered_puzzle_type_str, _ = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+
+#    match puzzle_family:
+#        case STD:
+#            pass
+#        case SINGLETON:
+#            pass
+#        case CAT:
+#            pass
+#        case _:
+#            pass
+#
+#
+
+
+def get_type_unspent_coin(coin_record: TYPES.CoinRecordRoto):
+    """For an unspent coin, fetch the parent's puzzle reveal and deduce the coin type.
+
+    Args:
+        coin_record: A CoinRecordRoto representing an unspent coin.
+
+    Returns:
+        CoinType enum member, or CoinType.UNKNOWN if type cannot be determined.
+    """
+
+
+    # check if there are spent coins with the same puzzle
+    fetcher = WDB.FetchMaker.puzzle_hash_fetcher(coin_record.coin.puzzle_hash, 'confirmed_index', 0, max_height, False)
+    db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+    all_coins = fetcher(db_conn, 0, 1000)
+    spent_coins = [c for c in all_coins if c.spent_block_index > 0]
+
+    if spent_coins:
+        pass
+        # do on a spent coin
+    else:
+        pass
+        # do on the parent
+
+
+        confirmed_height = coin_record.confirmed_block_index
+        parent_coin_id = coin_record.coin.parent_coin_info.hex()
+
+        try:
+            out = RPC.call_rpc_node(
+                'get_puzzle_and_solution',
+                coin_id=parent_coin_id,
+                height=confirmed_height
+            )
+            program = PyProgram.fromhex(out['puzzle_reveal'])
+            puz_names, puz_hashes = unroll_puzzle_to_names(program)
+            layered_puzzle_type_str, _ = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+
+            is_parent_same_type_child(layered_puzzle_type_str, out)
+
+            # what kind of puzzle id?
+            # cat do this
+            # nft / singleton do this
+            # unknown do this
+            try:
+                return TYPES.CoinType(layered_puzzle_type_str)
+            except (ValueError, KeyError):
+                return TYPES.CoinType.UNKNOWN
+
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"get_type_unspent_coin failed: {e}")
+            return TYPES.CoinType.UNKNOWN
+
+
+# --- Type checker registry ----------------------------------------------------
+_TYPE_CHECKERS = []
+
+
+def _register_type_checker(func):
+    """Decorator to register a coin-type checker."""
+    _TYPE_CHECKERS.append(func)
+    return func
+
+
+def _puzzle_name_from_hash(puzzle_hash_hex: str) -> str:
+    """Look up a puzzle name from its hash using CONF.KNOWN_PUZZLES."""
+    entry = CONF.KNOWN_PUZZLES.get(puzzle_hash_hex)
+    if entry is not None:
+        return entry.get('name', CONF.UNKNOWN_PUZZLE)
+    return CONF.UNKNOWN_PUZZLE
+
+
+# ------------------------------------------------------------------------------
+# CAT checker
+# ------------------------------------------------------------------------------
+@_register_type_checker
+def _check_cat_type(coin, puzzle_program, hint):
+    """Identify a CAT coin and verify ownership via *hint*.
+
+    *puzzle_program* is either the coin's own puzzle (spent) or the parent
+    puzzle (unspent).  In both cases we can extract the tail and reconstruct
+    ``CAT_MOD.curry(CAT_MOD_HASH, tail, hint)``.  If the reconstructed tree
+    hash equals ``coin.coin.puzzle_hash`` the coin is verified as ours."""
+    mod, curried_args = puzzle_program.uncurry()
+    mod_hash_hex = mod.get_tree_hash().hex()
+    mod_name = _puzzle_name_from_hash(mod_hash_hex)
+
+    if not mod_name.endswith('cat_v2'):
+        return None
+
+    # curried_args = (cat_mod_hash, tail_program, inner_puzzle)
+    args = list(curried_args.as_iter())
+    if len(args) < 3:
+        return None
+    tail_program = args[1]
+    inner_puzzle = args[2]
+
+    # For a spent coin, puzzle_program IS the coin's own puzzle reveal.
+    # Verify ownership by checking if the inner puzzle hash matches the hint.
+    if hint is not None and inner_puzzle.get_tree_hash() == hint:
+        return {
+            'type': 'CAT',
+            'verified': True,
+            'detail': {
+                'asset_id': tail_program.get_tree_hash().hex(),
+                'inner_puzzle_hash': hint.hex()
+            }
+        }
+
+    # Fallback: try reconstructing with hint as inner puzzle (for cases where
+    # we got the full inner puzzle program rather than just the hash)
+    try:
+        tail_program = tail_program.get_tree_hash()
+        print(f"[CAT DEBUG] mod type: {type(mod)}")
+        print(f"[CAT DEBUG] tail_program type: {type(tail_program)}")
+        print(f"[CAT DEBUG] tail_program value: {tail_program}")
+        print(f"[CAT DEBUG] hint type: {type(hint)}")
+        print(f"[CAT DEBUG] hint value: {hint}")
+
+        reconstructed = mod.curry(mod, tail_program, hint)
+        if reconstructed is None:
+            return None
+
+        print('reconstructed')
+        print(reconstructed.get_tree_hash())
+        print('puzzle hash')
+        print(coin.coin.puzzle_hash)
+        if reconstructed.get_tree_hash() != coin.coin.puzzle_hash:
+            return None  # hint does not match this CAT
+
+        return {
+            'type': 'CAT',
+            'verified': True,
+            'detail': {
+                'asset_id': tail_program.get_tree_hash().hex(),
+                'inner_puzzle_hash': hint.hex() if hint else None
+            }
+        }
+    except Exception:
+        return None
+
+
+# ------------------------------------------------------------------------------
+# NFT checker
+# ------------------------------------------------------------------------------
+@_register_type_checker
+def _check_nft_type(coin, puzzle_program, hint):
+    """Check if *puzzle_program* is a singleton NFT and the hint owns it."""
+    # --- step 1: outer layer must be singleton top-layer ---
+    mod, curried_args = puzzle_program.uncurry()
+    mod_hash = mod.get_tree_hash().hex()
+    mod_name = _puzzle_name_from_hash(mod_hash)
+    if not mod_name.endswith('singleton_top_layer_v1_1'):
+        return None
+
+    # --- step 2: inner layer must be NFT state layer ---
+    singleton_args = list(curried_args.as_iter())
+    if len(singleton_args) < 2:
+        return None
+    inner_puzzle = singleton_args[1]
+    inner_mod, inner_args = inner_puzzle.uncurry()
+    inner_mod_hash = inner_mod.get_tree_hash().hex()
+    inner_mod_name = _puzzle_name_from_hash(inner_mod_hash)
+    if not inner_mod_name.endswith('nft_state_layer'):
+        return None
+
+    # --- step 3: amount must be odd (1-mojo NFT) ---
+    if coin.coin.amount % 2 == 0:
+        return None
+
+    # --- step 4: extract the p2 puzzle hash from the innermost layer ---
+    # inner_args of NFT state layer tends to be:
+    #   (nft_mod_hash, metadata, updater, innermost_puzzle)
+    # innermost_puzzle might itself be wrapped by NFT_OWNERSHIP_LAYER for DID-linked NFTs.
+    state_args = list(inner_args.as_iter())
+    if len(state_args) < 4:
+        return None
+    innermost_puzzle = state_args[3]
+    im_mod, im_args = innermost_puzzle.uncurry()
+    im_mod_hash = im_mod.get_tree_hash().hex()
+    im_mod_name = _puzzle_name_from_hash(im_mod_hash)
+    if im_mod_name.endswith('nft_ownership_layer'):
+        # DID-linked NFT – unwrap once more
+        ownership_args = list(im_args.as_iter())
+        if len(ownership_args) < 1:
+            return None
+        p2_puzzle = ownership_args[0]
+    else:
+        p2_puzzle = innermost_puzzle
+
+    p2_puzzle_hash = p2_puzzle.get_tree_hash()
+
+    # --- step 5: verify the hint matches the p2 puzzle hash ---
+    verified = (hint is not None and p2_puzzle_hash == hint)
+
+    return {
+        'type': 'NFT',
+        'verified': verified,
+        'detail': {'p2_puzzle_hash': p2_puzzle_hash.hex()}
+    }
+
+
+# ------------------------------------------------------------------------------
+# Standard transaction (XCH / P2) checker
+# ------------------------------------------------------------------------------
+@_register_type_checker
+def _check_standard_type(coin, puzzle_program, hint):
+    """Identify a standard (XCH) P2 transaction and verify via *hint*."""
+    mod, curried_args = puzzle_program.uncurry()
+    mod_hash = mod.get_tree_hash().hex()
+    mod_name = _puzzle_name_from_hash(mod_hash)
+    if not mod_name.endswith('p2_delegated_puzzle_or_hidden_puzzle'):
+        return None
+
+    # For standard P2 the hint should equal the coin puzzle hash.
+    verified = (hint is not None and coin.coin.puzzle_hash == hint)
+
+    return {
+        'type': 'XCH',
+        'verified': verified,
+        'detail': {
+            'puzzle_hash': coin.coin.puzzle_hash.hex(),
+            'checker': 'standard_p2'
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def format_chia_lisp_level(lisp_code, max_depth_level):

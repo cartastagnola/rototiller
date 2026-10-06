@@ -94,5 +94,15 @@
             "--tibet-p2_merkle_tree_modified",
             "--tibet-pair_inner_puzzle"
         ]
+    },
+    "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
+        "puzzle_type": "type_auto_layered_01",
+        "name": "auto_layered_01",
+        "sub_puzzle_hashes": [
+            "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
+        ],
+        "sub_puzzle_names": [
+            "--cni-settlement_payments"
+        ]
     }
 }

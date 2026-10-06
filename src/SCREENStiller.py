@@ -2265,20 +2265,20 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                 logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
                 unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
                 puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
-            layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
-            logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
+                layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+                logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
-            with address_loaders.lock:
-                address_loaders.puzzle_and_sol_rpc = out
-                address_loaders.puzzle_disassembled = puzzle_disassembled
-                address_loaders.unrolled_puzzles = unroll_puzzles
-                address_loaders.layered_puzzle_type = layered_puzzle_type
-                address_loaders.layered_puzzle_name = layered_puzzle_name
+                with address_loaders.lock:
+                    address_loaders.puzzle_and_sol_rpc = out
+                    address_loaders.puzzle_disassembled = puzzle_disassembled
+                    address_loaders.unrolled_puzzles = unroll_puzzles
+                    address_loaders.layered_puzzle_type = layered_puzzle_type
+                    address_loaders.layered_puzzle_name = layered_puzzle_name
 
-            logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
+                logging(debug_logger, "DEBUG", f"LOAD loaders ENDED")
 
-        except Exception as e:
-            logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
                 logging(debug_logger, "DEBUG", f"LOAD program exc erbello")
                 text = traceback.format_exc()
                 s_text = text.split('\n')
@@ -2292,6 +2292,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             with address_loaders.lock:
                 address_loaders.unrolled_puzzles = None  # no spent coins
             logging(debug_logger, "DEBUG", f"LOAD NOOOOO SPENT COIN")
+
         logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
         logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")
         logging(debug_logger, "DEBUG", f"LOAD NOOOOO UNVURRY")

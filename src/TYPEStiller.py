@@ -97,36 +97,60 @@ class DaemonEvent(StrEnum):
         return None
 
 
-class CacheCoinRecordType(IntEnum):
-    NORMAL = 0
-    CHILD = 1  # limited data
-    PHANTOM_SPENT = 2  # coin spent with no child
-
-
-# class CoinType
-# Dynamically build CoinType StrEnum from puzzle_types.json.
-_puzzle_types = CONF.PUZZLE_TYPES or {}
-
-# Validate every puzzle_type referenced in layered_puzzles.json exists in puzzle_types.json
-_layered_types = set()
-for entry in (CONF.KNOWN_LAYERED_PUZZLES or {}).values():
-    pt = entry.get('puzzle_type')
-    if pt:
-        _layered_types.add(pt)
-
-for pt in _layered_types:
-    if pt not in _puzzle_types:
-        raise ValueError(
-            f"layered_puzzles.json references puzzle_type {pt!r} which is missing from puzzle_types.json"
-        )
-
-_coin_type_members = {key.upper(): data['name'] for key, data in sorted(_puzzle_types.items())}
-_coin_type_members['UNKNOWN'] = 'UNKNOWN'
-CoinType = StrEnum('CoinType', _coin_type_members)
+    #class CacheCoinRecordType(IntEnum):
+    #    NORMAL = 0
+    #    CHILD = 1  # limited data
+    #    PHANTOM_SPENT = 2  # coin spent with no child
+    #
+    #
+    ## class CoinType
+    ## Dynamically build CoinType StrEnum from puzzle_types.json.
+    #_puzzle_types = CONF.PUZZLE_TYPES or {}
+    #
+    ## Validate every puzzle_type referenced in layered_puzzles.json exists in puzzle_types.json
+    #_layered_types = set()
+    #for entry in (CONF.KNOWN_LAYERED_PUZZLES or {}).values():
+    #    pt = entry.get('puzzle_type')
+    #    if pt:
+    #        _layered_types.add(pt)
+    #
+    #for pt in _layered_types:
+    #    if pt not in _puzzle_types:
+    #        raise ValueError(
+    #            f"layered_puzzles.json references puzzle_type {pt!r} which is missing from puzzle_types.json"
+    #        )
+    #
+    #_coin_type_members = {key.upper(): data['name'] for key, data in sorted(_puzzle_types.items())}
+    #_coin_type_members['UNKNOWN'] = 'UNKNOWN'
+    #CoinType = StrEnum('CoinType', _coin_type_members)
 # eg:
 # CoinType.STD
 # CoinType.CAT_V2
 # CoinType.NFT_V1
+
+
+_puzzle_types = CONF.PUZZLE_TYPES or {}
+
+# Build CoinType from puzzle_types.json keys (upper-cased)
+CoinType = StrEnum(
+    'CoinType',
+    {key.upper(): data['name'] for key, data in sorted(_puzzle_types.items())}
+)
+
+# Build CoinFamily from unique family values in puzzle_types.json
+_families = sorted({data['family'] for data in _puzzle_types.values()})
+CoinFamily = StrEnum('CoinFamily', {fam: fam for fam in _families})
+
+# Build CoinType -> CoinFamily mapping
+_COIN_TYPE_TO_FAMILY = {
+    getattr(CoinType, key.upper()): CoinFamily(data['family'])
+    for key, data in _puzzle_types.items()
+    if hasattr(CoinType, key.upper())
+}
+
+# Add UNKNOWN -> UNKNOWN mapping if not present
+if CoinType.UKNOWN not in _COIN_TYPE_TO_FAMILY:
+    _COIN_TYPE_TO_FAMILY[CoinType.UKNOWN] = CoinFamily.UNKNOWN
 
 
 @dataclass
