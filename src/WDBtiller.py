@@ -102,7 +102,7 @@ def save_csv(path: Path, rows: list[tuple[str, str, str]]):
 
 
 def get_connection(db_path):
-    conn = sqlite3.connect(db_path, timeout=CONF.SQL_TIMEOUT)
+    conn = sqlite3.connect(db_path, uri=True, timeout=CONF.SQL_TIMEOUT)
     conn.execute("PRAGMA journal_mode=WAL;")  # allow writing and reading concurrently
     conn.execute("PRAGMA synchronous=NORMAL;")  # Recommended for WAL mode
     return conn
