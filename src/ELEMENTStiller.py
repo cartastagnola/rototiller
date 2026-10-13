@@ -1410,7 +1410,7 @@ def create_paste_banner(stdscr, screenState: ScreenState, parent_scope: Scope, o
         #parent_scope.sub_scopes[tab_name] = scope
 
         # retrive text from the clipboard
-        os_clip = PLAT.read_clipboard()
+        os_clip = PLAT.read_clipboard() or ""
         data = [os_clip] + list(screenState.roto_clipboard)
         scope.data['clipboard'] = data
 

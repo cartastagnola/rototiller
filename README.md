@@ -38,8 +38,7 @@ Currently, only the **block explorer** is working. There is some code for wallet
 - Python Dependencies
 
 ```
-bash
-pip install requests
+pip install -r requirements.txt
 ```
 
 - ncurses
@@ -47,9 +46,10 @@ pip install requests
 Ubuntu:
 sudo apt-get install libncurses5-dev libncursesw5-dev
 ```
-- copy/paste in linux
+- copy/paste in linux: one of `wl-clipboard` (Wayland), `xclip` or `xsel` (X11)
 ```
-sudo apt install xclip
+sudo apt install wl-clipboard   # Wayland
+sudo apt install xclip          # X11
 ```
 
 ## Usage
