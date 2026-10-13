@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
+import os
 import sys
 import traceback
 import curses
 from src.UItiller import curses_main_loop
+
+# The UI redefines palette colors with init_color, which needs the ccc/initc
+# terminfo capabilities. tmux-256color lacks them, xterm-256color has them and
+# tmux forwards the palette changes to the outer terminal.
+if os.environ.get("TMUX") and os.environ.get("TERM", "").startswith("tmux"):
+    os.environ["TERM"] = "xterm-256color"
 
 
 class StdOutWrapper:
