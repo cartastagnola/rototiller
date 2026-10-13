@@ -52,6 +52,8 @@ DB_CACHED_BLOCKCHAIN = DB_FOLDER / 'DBiller_cached_blockchain.db'
 DB_SB = 'db/DBiller_spend_bundles.db'
 
 blockchain_db_path = config["full_node"]["database_path"].replace("CHALLENGE", chain_network)
+# database_path in config.yaml is relative to the chia root (e.g. db/blockchain_v2_CHALLENGE.sqlite)
+blockchain_db_path = str(Path(DEFAULT_ROOT_PATH) / blockchain_db_path)
 DB_BLOCKCHAIN_RO = f"file:{blockchain_db_path}?mode=ro"
 
 SQL_TIMEOUT = 10

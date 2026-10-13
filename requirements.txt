@@ -1,0 +1,9 @@
+# Rototiller dependencies (tested with Chia 2.5.7 / 2.5.4, Python 3.12)
+# chia-blockchain pulls in chia_rs, clvm, clvm_tools, clvm_tools_rs, chia_puzzles_py,
+# aiohttp, websockets, pyyaml, click, psutil, zstd, etc.
+chia-blockchain==2.5.7
+requests
+websockets
+sshkeyboard
+pympler
+numpy
