@@ -1,0 +1,30 @@
+{
+    "UNKNOWN": {
+        "name": "unknown puzzle",
+        "family": "UNKNOWN"
+    },
+    "UKNOWN": {
+        "name": "uknown puzzle",
+        "family": "UNKNOWN"
+    },
+    "NFT_V1": {
+        "name": "NFT v1.0",
+        "family": "SINGLETON"
+    },
+    "STD_TRANSACTION": {
+        "name": "STD TRANSACTION",
+        "family": "STD"
+    },
+    "CAT_V2": {
+        "name": "CAT v2.0",
+        "family": "CAT"
+    },
+    "VAULT_V1": {
+        "name": "VAULT v1.0",
+        "family": "SINGLETON"
+    },
+    "TIBET_SINGLETON_LIQUIDITY_PAIR": {
+        "name": "TIBET SINGLETON LIQUIDITY PAIR",
+        "family": "SINGLETON"
+    }
+}

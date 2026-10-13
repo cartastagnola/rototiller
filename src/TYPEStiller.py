@@ -131,11 +131,18 @@ class DaemonEvent(StrEnum):
 
 _puzzle_types = CONF.PUZZLE_TYPES or {}
 
-# Build CoinType from puzzle_types.json keys (upper-cased)
+# Build CoinType from puzzle_types.json keys. The enum value is the key itself,
+# which is the same string stored as puzzle_type in layered_puzzles.json, so
+# CoinType(puzzle_type) works. The "name" field is only for display.
 CoinType = StrEnum(
     'CoinType',
-    {key.upper(): data['name'] for key, data in sorted(_puzzle_types.items())}
+    {key.upper(): key for key in sorted(_puzzle_types)}
 )
+
+# CoinType -> human readable name
+COIN_TYPE_NAMES = {
+    CoinType(key): data['name'] for key, data in _puzzle_types.items()
+}
 
 # Build CoinFamily from unique family values in puzzle_types.json
 _families = sorted({data['family'] for data in _puzzle_types.values()})
@@ -149,8 +156,10 @@ _COIN_TYPE_TO_FAMILY = {
 }
 
 # Add UNKNOWN -> UNKNOWN mapping if not present
-if CoinType.UKNOWN not in _COIN_TYPE_TO_FAMILY:
-    _COIN_TYPE_TO_FAMILY[CoinType.UKNOWN] = CoinFamily.UNKNOWN
+# (UKNOWN is the old misspelled member, kept until its users are renamed)
+for _unknown_type in (CoinType.UNKNOWN, CoinType.UKNOWN):
+    if _unknown_type not in _COIN_TYPE_TO_FAMILY:
+        _COIN_TYPE_TO_FAMILY[_unknown_type] = CoinFamily.UNKNOWN
 
 
 @dataclass
