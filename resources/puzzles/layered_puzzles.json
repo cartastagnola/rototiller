@@ -35,6 +35,21 @@
             "--settlement_payments"
         ]
     },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "puzzle_type": "NFT_V1",
+        "name": "NFT 1.0 - no ownership layer - p2_delegated or hidden puzzle",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-nft_puzzles-nft_state_layer",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "9ea12b74640ea18a1662b8973775fb519f792f95f05c78c9396e42b0bbef2fd4"
+    },
     "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
         "puzzle_type": "STD_TRANSACTION",
         "name": "STD TRASNSACTION",
@@ -94,6 +109,32 @@
             "--tibet-p2_merkle_tree_modified",
             "--tibet-pair_inner_puzzle"
         ]
+    },
+    "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd|a8490702e333ddd831a3ac9c22d0fa26d2bfeaf2d33608deb22f0e0123eb0494": {
+        "puzzle_type": "PLOTNFT",
+        "name": "PlotNFT - pool member",
+        "sub_puzzle_hashes": [
+            "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd",
+            "a8490702e333ddd831a3ac9c22d0fa26d2bfeaf2d33608deb22f0e0123eb0494"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer",
+            "--cni-pool_puzzles-pool_member_innerpuz"
+        ],
+        "example_coin_id": "1bac954ef29fa4527f45d6c40edb6ca7be1a331e85ecfa3d38f9a4d4639b08cd"
+    },
+    "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd|a317541a765bf8375e1c6e7c13503d0d2cbf56cacad5182befe947e78e2c0307": {
+        "puzzle_type": "PLOTNFT",
+        "name": "PlotNFT - waiting room",
+        "sub_puzzle_hashes": [
+            "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd",
+            "a317541a765bf8375e1c6e7c13503d0d2cbf56cacad5182befe947e78e2c0307"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer",
+            "--cni-pool_puzzles-pool_waitingroom_innerpuz"
+        ],
+        "example_coin_id": "370d3f0bff6e39999faeb7879adb2d780f2f9ec4558f516b30039365edbaca6b"
     },
     "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
         "puzzle_type": "type_auto_layered_01",
