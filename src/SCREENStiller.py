@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import curses
 from datetime import datetime
 import threading
+import time
 import traceback
 import json
 
@@ -33,6 +34,7 @@ import src.UTILStiller as UTILS
 import src.RPCtiller as RPC
 import src.PUZZLEtiller as PUZ
 import src.TYPEStiller as TYPES
+import src.SCANtiller as SCAN
 from src.TYPEStiller import (
     FingerState, CoinPriceData, ScreenState, FullNodeState, Scope, KeyboardState,
     FullNodeState, ScreenState, ScopeActions)
@@ -199,7 +201,8 @@ def screen_main_menu(stdscr, keyboardState: KeyboardState, screenState: ScreenSt
     menu_items = []
     if len(activeScope.sub_scopes) == 0:
         menu_items = [
-            ('full node', screen_full_node, ScopeActions.activate_scope, None)
+            ('full node', screen_full_node, ScopeActions.activate_scope, None),
+            ('puzzles', screen_puzzles, ScopeActions.activate_scope, None),
         ]
         print("indiddiie")
         if DEBUGGING:
@@ -1824,7 +1827,7 @@ def screen_spend_bundles(stdscr, keyboardState, screenState, fullNodeState: Full
     menu_items = [
         ('watch later', screen_sb_watch_later, ScopeActions.activate_scope),
         ('archive', screen_sb_archive, ScopeActions.activate_scope),
-        ('memepool', screen_memepool, ScopeActions.activate_scope)
+        ('mempool', screen_mempool, ScopeActions.activate_scope)
     ]
 
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
@@ -1835,12 +1838,13 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
     if DEBUGGING:
         menu_items = [
             ('blocks', screen_blocks, ScopeActions.activate_scope, None),
-            ('memepool', screen_memepool, ScopeActions.activate_scope, None),
+            ('mempool', screen_mempool, ScopeActions.activate_scope, None),
             ('spend bundles', screen_spend_bundles, ScopeActions.activate_scope, None)
         ]
     else:
         menu_items = [
             ('blocks', screen_blocks, ScopeActions.activate_scope, KEYBOARD.block_band_execution),
+            ('mempool', screen_mempool, ScopeActions.activate_scope, None),
             ('search puzzles and addresses', screen_full_node_search, ScopeActions.activate_scope, None),
             ('address_watchlist', screen_address_watchlist, ScopeActions.activate_scope, None),
         ]
@@ -4320,100 +4324,456 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
     ### save all the mempool...
     ### make sqlite for mempool and puzzle_reveal
 
-def screen_memepool(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
 
-    ### view
-    # transaction id
-    # coin selector
-    # coin viewer
+def fit_text(text, max_len: int) -> str:
+    text = str(text)
+    if len(text) <= max_len:
+        return text
+    return text[:max(max_len - 3, 0)] + '...'
 
 
-    # delete screenState size dimension? and get them from stdscr? why two places?
-    width = screenState.screen_size.x
+def put_text(win, pos: UIgraph.Point, text, P_color, bold=False):
+    """create_text that cuts the text at the window border"""
+    max_y, max_x = win.getmaxyx()
+    if pos.y >= max_y - 1 or pos.x >= max_x - 1:
+        return
+    ELEMENTS.create_text(win, pos, fit_text(text, max_x - pos.x - 1), P_color, bold)
+
+
+def human_age(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m {seconds % 60:02d}s"
+    return f"{seconds // 3600}h {seconds % 3600 // 60:02d}m"
+
+
+def fresh_table_colors(rows: list):
+    """create_tab trims the columns that do not fit also in its cached color table, a table
+    that changes every frame needs a new color table every frame"""
+    return [[None] * len(row) for row in rows]
+
+
+def scopeAction_nothing(scope: Scope, screenState: ScreenState, *args):
+    return scope
+
+
+def list_tab_scope(screenState: ScreenState, main_scope: Scope, tab_name: str, scope_activation_func):
+    """Scope of a tab that is the only element of the screen. It is active as soon as the
+    screen opens and esc goes back to the menu"""
+    scope_name = f"{main_scope.id}_{tab_name}"
+    if scope_name not in screenState.scopes:
+        tab_scope = Scope(scope_name, main_scope.screen, screenState)
+        tab_scope.parent_scope = main_scope
+        tab_scope.main_scope = main_scope
+        tab_scope.exec = ScopeActions.activate_scope
+        tab_scope.exec_esc = ScopeActions.exit_scope_N(2)
+        tab_scope.exec_own = scope_activation_func
+        main_scope.sub_scopes[scope_name] = tab_scope
+        tab_scope.visible = True
+
+    tab_scope = screenState.scopes[scope_name]
+    if screenState.activeScope is main_scope:
+        screenState.activeScope = tab_scope
+    return tab_scope
+
+
+def screen_mempool(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+
     height = screenState.screen_size.y
-
-    meme_win = createFullSubWin(stdscr, screenState, height, width)
-    meme_win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    width = screenState.screen_size.x
 
     active_scope: Scope = screenState.activeScope
     main_scope: Scope = active_scope.main_scope
     screenState.scope_exec_args = [screenState]
-
-    # load memepool
-    ## TODO: move the sorting of the mempool outside the UI loop
-
-    mempool_items = fullNodeState.deepcopy_mempool()
-    print()
-    print(mempool_items)
-    for i in mempool_items:
-        print(i)
-
-
-        # self.spend_bundle_hash = spend_bundle_hash
-        # self.cost = json_item['cost']
-        # self.fee = json_item['fee']
-
-        # self.addition_amount = json_item['npc_result']['conds']['addition_amount']
-        # self.removal_amount = json_item['npc_result']['conds']['removal_amount']
-        # self.additions = json_item['additions']
-        # self.removals = json_item['removals']
-        # self.spend_bundle = json_item['spend_bundle']
-        # self.added_coins_count = len(self.additions)
-        # self.removed_coins_count = len(self.removals)
-        # self.fee_per_cost = self.fee / self.cost
-
-    attrs = {
-        "transaction id": "spend_bundle_hash",
-        "cost": "cost",
-        "fee": "fee",
-        "fee per cost": "fee_per_cost"
-    }
-
-    ## tx_ID  -- INPUT coins -- amount --- OUTPUT coins -- amount --
-
-    legend = []
-    for key, attribute in attrs.items():
-        legend.append(key)
-
-    txs_data = []
-    txs_keys = []
-    for spend_bundle_hash, tx in mempool_items.items():
-        data = []
-        for key, attribute in attrs.items():
-            data.append(getattr(tx, attribute))
-
-        txs_data.append(data)
-        txs_keys.append(spend_bundle_hash)
-
-    P_text = screenState.colorPairs['tab_soft']
-    #key = list(mempool_items.keys())[0]
-    #spend_bundle = mempool_items[key].spend_bundle
-    pos = UIgraph.Point(2,3)
-    #ELEMENTS.create_text(meme_win, pos, str(spend_bundle)[:200], P_text, bold=False)
-
-    #with open('sb.json', 'w') as f:
-    #    f.write(json.dumps(spend_bundle, indent=4))
-
-    #print(json.dumps(spend_bundle, indent=4))
-    pos = UIgraph.Point(3,23)
-    tab_size = UIgraph.Point(width - 2, height - pos.y - 6)
-
-    print(txs_data)
-
     main_scope.update()
-    ELEMENTS.create_tab(meme_win,
+
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_title = screenState.colorPairs["xch"]
+    P_error = screenState.colorPairs["error"]
+
+    pos = UIgraph.Point(1,1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'mempool', P_title, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0,3)
+
+    scanner = SCAN.MEMPOOL_SCANNER
+    now = time.time()
+    # the scanner drops validated txs only at its next scan, hide them here on time
+    txs = [tx for tx in scanner.snapshot()
+           if tx.validated_at is None or now - tx.validated_at <= CONF.MEMPOOL_VALIDATED_TX_DELAY]
+    pending_txs = [tx for tx in txs if tx.validated_at is None]
+    total_cost = sum(tx.cost for tx in pending_txs)
+    total_fee = sum(tx.fee for tx in pending_txs)
+    info = (f"transactions: {len(pending_txs):,} | total cost: {total_cost:,} ({total_cost / BLOCK_MAX_COST:.2f} blocks) | "
+            f"total fees: {total_fee / XCH_MOJO:.6f} XCH | just validated: {len(txs) - len(pending_txs)} | "
+            f"scanner: {scanner.status}")
+    put_text(win, pos, info, P_text)
+    pos += UIgraph.Point(0,1)
+    if fullNodeState.full_node_meta.synced is False:
+        put_text(win, pos, "the node is syncing, the mempool stays empty until it is synced", P_error, bold=True)
+    pos += UIgraph.Point(0,2)
+
+    legend = ['tx id', 'type', 'cost', 'fee [XCH]', 'fee/cost', 'coins in', 'coins out', 'age']
+    C_validated = screenState.colors["light_azure"]
+
+    def validated_color(tx):
+        if tx.validated_at is None:
+            return None
+        remaining = CONF.MEMPOOL_VALIDATED_TX_DELAY - (now - tx.validated_at)
+        if remaining <= CONF.MEMPOOL_VALIDATED_TX_FLASH and int(now * 2) % 2:
+            return None  # blink off: back to the normal color
+        return C_validated
+
+    rows = []
+    keys = []
+    colors = []
+    for tx in txs:
+        colors.append([validated_color(tx)] * len(legend))
+        rows.append([
+            f"0x{tx.tx_id[:16]}...",
+            SCAN.tx_type(SCAN.CATALOG, tx.puzzle_keys),
+            f"{tx.cost:,}",
+            f"{tx.fee / XCH_MOJO:.6f}",
+            f"{tx.fee_per_cost:.2f}",
+            tx.coins_in,
+            tx.coins_out,
+            human_age(now - tx.added_at),
+        ])
+        keys.append(tx.tx_id)
+
+    tab_name = "mempool_txs"
+    tab_scope = list_tab_scope(screenState, main_scope, tab_name, scopeAction_nothing)
+    tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 1)
+    ELEMENTS.create_tab(win,
                         screenState,
-                        main_scope,  # main_scope
-                        "mempool",
-                        txs_data,
-                        txs_keys,
-                        None,
+                        main_scope,
+                        tab_name,
+                        rows,
+                        keys,
+                        colors,
                         False,
                         pos,
                         tab_size,
                         keyboardState,
-                        open_transaction,
+                        scopeAction_nothing,
                         True,
                         False,
-                        legend)
+                        legend,
+                        prepped_scope=tab_scope)
 
+
+# the two lists of the puzzles screen: status -> label, tab switches between them
+PUZZLE_VIEWS = {SCAN.STATUS_NEW: 'unknown', SCAN.STATUS_KNOWN: 'known'}
+
+
+def scopeAction_open_puzzle(scope: Scope, screenState: ScreenState, puzzle_key: str = None):
+    if puzzle_key is None:
+        return scope
+
+    new_scope = Scope(f"puzzle_{puzzle_key}", screen_puzzle_detail, screenState)
+    new_scope.parent_scope = scope
+    new_scope.data['puzzle_key'] = puzzle_key
+    new_scope.exec = None
+    screenState.activeScope = new_scope
+    return new_scope
+
+
+def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_title = screenState.colorPairs["xch"]
+
+    pos = UIgraph.Point(1,1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'puzzles', P_title, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0,3)
+
+    entries, version = SCAN.CATALOG.snapshot()
+    labels = {e.puzzle_key: e.label() for e in entries}
+    entries.sort(key=lambda e: -e.seen_count)
+    status_count = {status: 0 for status in PUZZLE_VIEWS}
+    for name, family, status in labels.values():
+        status_count[status] += 1
+
+    # tab switches between the unknown and the known puzzles, each list keeps its cursor
+    view = main_scope.data.setdefault('view', SCAN.STATUS_NEW)
+    if keyboardState.key == '\t':
+        view = SCAN.STATUS_KNOWN if view == SCAN.STATUS_NEW else SCAN.STATUS_NEW
+        main_scope.data['view'] = view
+        screenState.activeScope = main_scope
+    tab_name = f"puzzles_{view}"
+    tab_scope = list_tab_scope(screenState, main_scope, tab_name, scopeAction_open_puzzle)
+
+    chain = SCAN.CHAIN_SCANNER
+    mempool = SCAN.MEMPOOL_SCANNER
+    put_text(win, pos, (f"chain scan (last {CONF.PUZZLE_SCAN_COIN_LIMIT:,} spent coins): {chain.status} | "
+                        f"blocks {chain.blocks_scanned}/{chain.blocks_total} | coins scanned {chain.coins_scanned:,}"), P_text)
+    pos += UIgraph.Point(0,1)
+    put_text(win, pos, f"mempool scan: {mempool.status} | transactions {len(mempool.txs):,}", P_text)
+    pos += UIgraph.Point(0,2)
+
+    # list selector
+    for status, label in PUZZLE_VIEWS.items():
+        text = f" {label} ({status_count[status]}) "
+        if status == view:
+            put_text(win, pos, f"[{text}]", P_title, bold=True)
+        else:
+            put_text(win, pos, f" {text} ", P_text)
+        pos += UIgraph.Point(len(text) + 4, 0)
+    put_text(win, pos, "tab = switch list | names are saved in resources/puzzles/layered_puzzles.json", P_text)
+    pos = UIgraph.Point(1, pos.y + 2)
+
+    if view == SCAN.STATUS_KNOWN:
+        legend = ['name', 'family', 'layers', 'seen', 'first seen in', 'last seen']
+        column_widths = [30, 12, 70, None, None, None]
+    else:
+        legend = ['layers', 'seen', 'first seen in', 'last seen']
+        column_widths = [100, None, None, None]
+    rows = []
+    keys = []
+    for e in entries:
+        name, family, status = labels[e.puzzle_key]
+        if status != view:
+            continue
+        row = [
+            ' > '.join(e.sub_puzzle_names()),
+            f"{e.seen_count:,}",
+            e.source,
+            UTILS.timestamp_to_date(e.last_seen),
+        ]
+        if view == SCAN.STATUS_KNOWN:
+            row = [name or '-', family or '-'] + row
+        rows.append(row)
+        keys.append(e.puzzle_key)
+    if not rows:
+        put_text(win, pos, f"no {PUZZLE_VIEWS[view]} puzzles yet", P_text)
+        return
+
+    tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 1)
+    ELEMENTS.create_tab(win,
+                        screenState,
+                        main_scope,
+                        tab_name,
+                        rows,
+                        keys,
+                        fresh_table_colors(rows),
+                        False,
+                        pos,
+                        tab_size,
+                        keyboardState,
+                        scopeAction_open_puzzle,
+                        True,
+                        False,
+                        legend,
+                        column_widths,
+                        prepped_scope=tab_scope)
+
+
+def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update_2d()
+
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_title = screenState.colorPairs["xch"]
+
+    puzzle_key = main_scope.data['puzzle_key']
+    entry = SCAN.CATALOG.get(puzzle_key)
+    name, family, status = entry.label()
+
+    pos = UIgraph.Point(1,1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'puzzle', P_title, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0,3)
+
+    lines = [
+        f"status: {status} | name: {name or '-'} | family: {family or '-'}",
+        f"seen {entry.seen_count:,} times | first seen in: {entry.source} | "
+        f"first seen: {UTILS.timestamp_to_date(entry.first_seen)} | last seen: {UTILS.timestamp_to_date(entry.last_seen)}",
+        f"example coin: 0x{entry.example_coin_id} | "
+        f"{'spent at height ' + format(entry.example_height, ',') if entry.example_height else 'seen in the mempool'}",
+        f"puzzle key: {puzzle_key}",
+    ]
+    for line in lines:
+        put_text(win, pos, line, P_text)
+        pos += UIgraph.Point(0,1)
+    pos += UIgraph.Point(0,1)
+
+    ##### name and family
+    name_length = 40
+    family_length = 30
+    scope_name = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'puzzle_name', pos,
+                                        "Name: ", name_length, P_text, True, False,
+                                        custom_scope_function=ScopeActions.press_enter)
+    pos_family = pos + UIgraph.Point(name_length + 3, 0)
+    if pos_family.x + family_length + 15 > main_win_size.x:
+        pos_family = pos + UIgraph.Point(0, 3)
+    scope_family = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'puzzle_family', pos_family,
+                                          "Family: ", family_length, P_text, True, False,
+                                          custom_scope_function=ScopeActions.press_enter)
+    pos_button = pos_family + UIgraph.Point(family_length + 3, -1)  # buttons are drawn one line up
+    scope_save = ELEMENTS.create_button(win, screenState, main_scope, 'save', pos_button,
+                                        custom_scope_function=ScopeActions.press_enter, button_type='execution')
+    pos = UIgraph.Point(pos.x, pos_family.y + 2)
+
+    if not main_scope.data.get('prompts_filled'):
+        main_scope.data['prompts_filled'] = True
+        scope_name.data['prompt'] = name or ''
+        scope_name.data['cursor'] = len(scope_name.data['prompt'])
+        scope_family.data['prompt'] = family or ''
+        scope_family.data['cursor'] = len(scope_family.data['prompt'])
+
+    # enter on a prompt or on the button saves both values
+    save = False
+    for scope in (scope_name, scope_family, scope_save):
+        if scope.data.get('pressed_enter'):
+            scope.data['pressed_enter'] = False
+            save = True
+    if save:
+        new_name = scope_name.data['prompt'].strip()
+        new_family = scope_family.data['prompt'].strip().upper()
+        scope_family.data['prompt'] = new_family
+        try:
+            SCAN.CATALOG.set_name(puzzle_key, new_name, new_family)
+            if new_name:
+                screenState.footer_message = f"saved in layered_puzzles.json: {new_name} | family: {new_family or 'UNKNOWN'}"
+            else:
+                screenState.footer_message = "removed from layered_puzzles.json"
+        except ValueError as e:
+            # a catalog file edited by hand is not valid json, it is not overwritten
+            screenState.footer_message = f"not saved, fix the json in resources/puzzles first: {e}"
+
+    put_text(win, pos, f"known families: {', '.join(SCAN.CATALOG.families())} | saved in resources/puzzles/layered_puzzles.json, an empty name removes it", P_text)
+    pos += UIgraph.Point(0,2)
+
+    ##### layers: the puzzle uncurried
+    if 'nodes' not in main_scope.data:
+        try:
+            puzzle = PyProgram.from_bytes(entry.example_puzzle_reveal)
+            main_scope.data['nodes'] = PUZ.unroll_puzzle_to_nodes(puzzle)
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"PUZZLE DETAIL unroll error: {e}")
+            UTILS.logging_traceback('PUZZLE DETAIL')
+            main_scope.data['nodes'] = []
+    nodes = main_scope.data['nodes']
+
+    put_text(win, pos, f"layers and curried puzzles: {len(nodes)}", P_text, bold=True)
+    pos += UIgraph.Point(0,1)
+
+    legend = ['level', 'curried', 'puzzle', 'mod hash', 'curried args']
+    rows = []
+    keys = []
+    for n, node in enumerate(nodes):
+        args = ', '.join(fit_text(arg, 30) for arg in node['args'])
+        rows.append([node['level'], 'yes' if node['is_curried'] else 'no', node['puzz_name'], node['hash'], args])
+        keys.append(str(n))
+
+    space_left = main_win_size.y - pos.y - 1
+    tab_size = UIgraph.Point(main_win_size.x - 2, min(len(rows) + 5, max(space_left // 3, 6)))
+    tab_scope = ELEMENTS.create_tab(win,
+                                    screenState,
+                                    main_scope,
+                                    "puzzle_layers",
+                                    rows,
+                                    keys,
+                                    fresh_table_colors(rows),
+                                    False,
+                                    pos,
+                                    tab_size,
+                                    keyboardState,
+                                    scopeAction_nothing,
+                                    True,
+                                    False,
+                                    legend)
+    pos += UIgraph.Point(0, tab_size.y + 1)
+
+    ##### selected layer: its data in a tab, select a row and press y to copy a value
+    # (ctrl-c can not be used to copy, see the comment on yank in KEYBOARDtiller)
+    if not nodes:
+        return
+    node = nodes[tab_scope.cursor % len(nodes)]
+    reveal = bytes(entry.example_puzzle_reveal or b'')
+    if 'clvm' not in main_scope.data:
+        main_scope.data['clvm'] = PUZ.rs_disassemble(reveal) if reveal else ''
+
+    data_rows = [
+        ['path', node['path'] or ''],
+        ['puzzle', node['puzz_name'] or ''],
+        ['mod hash', node['hash'] or ''],
+    ]
+    for n, arg in enumerate(node['args']):
+        data_rows.append([f"arg {n}", arg])
+    data_rows.append(['mod clvm', node['disassembly'] or ''])
+    data_rows.append(['whole puzzle hex', reveal.hex()])
+    data_rows.append(['whole puzzle clvm', main_scope.data['clvm']])
+    data_keys = [str(n) for n in range(len(data_rows))]
+
+    put_text(win, pos, f"level {node['level']}: {node['puzz_name']} | select a row and press y to copy", P_text, bold=True)
+    pos += UIgraph.Point(0,1)
+    space_left = main_win_size.y - pos.y - 1
+    data_tab_size = UIgraph.Point(main_win_size.x - 2, min(len(data_rows) + 5, max(space_left // 2, 6)))
+    data_scope = ELEMENTS.create_tab(win,
+                                     screenState,
+                                     main_scope,
+                                     "puzzle_layer_data",
+                                     data_rows,
+                                     data_keys,
+                                     fresh_table_colors(data_rows),
+                                     False,
+                                     pos,
+                                     data_tab_size,
+                                     keyboardState,
+                                     scopeAction_nothing,
+                                     True,
+                                     False,
+                                     ['field', 'value'],
+                                     column_widths=[20, None])
+    pos += UIgraph.Point(0, data_tab_size.y + 1)
+
+    ##### the whole value of the selected row
+    field, value = data_rows[data_scope.cursor % len(data_rows)]
+    max_y = main_win_size.y - 1
+    put_text(win, pos, f"{field} ({len(value):,} chars):", P_text, bold=True)
+    pos += UIgraph.Point(0,1)
+    text_width = max(main_win_size.x - pos.x - 3, 10)
+    for i in range(0, len(value), text_width):
+        if pos.y >= max_y:
+            break
+        put_text(win, pos, value[i:i + text_width], P_text)
+        pos += UIgraph.Point(0,1)
+
+    # run copy/paste action or other pending stuffs
+    if len(screenState.pending_action) > 0:
+        for i, fn in screenState.pending_action:
+            fn()
+        screenState.pending_action = []

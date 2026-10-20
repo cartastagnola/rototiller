@@ -222,6 +222,7 @@ rpc_calls_full_node = {
     "get_coin_record_by_name": ["coin_record"],
     "get_all_mempool_items": ["mempool_items"],
     "get_all_mempool_tx_ids": ["tx_ids"],
+    "get_mempool_item_by_tx_id": ["mempool_item"],
     "get_routes": ["routes"],
     "get_additions_and_removals": [],
     "get_puzzle_and_solution": ["coin_solution"],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import os
 import re  # clvm formatter
 
 #from clvm_tools.binutils import disassemble as bu_disassemble
@@ -80,6 +81,81 @@ def compare_to_known_puzzles(puzzle_hash):
     return CONF.UNKNOWN_PUZZLE
 
 
+# --- catalog files edited by hand ---------------------------------------------
+# layered_puzzles.json and puzzle_types.json are in the repo and can be edited by hand
+# while roto runs: a change on disk is reloaded (reload_catalog_files), and a save reads
+# the file from disk and changes only its own entry (update_catalog_file), so nothing
+# written by hand is lost. Both need CONF.LAYERED_PUZZLES_LOCK.
+
+# path -> (mtime_ns, size) of the file as last loaded or written by roto
+_catalog_file_stamps = {}
+
+
+def _catalog_files():
+    """(path, dict in memory) of the catalog files that are watched"""
+    return ((CONF.KNOWN_LAYERED_PUZZLES_PATH, CONF.KNOWN_LAYERED_PUZZLES),
+            (CONF.PUZZLE_TYPES_PATH, CONF.PUZZLE_TYPES))
+
+
+def _file_stamp(path):
+    stat = os.stat(path)
+    return stat.st_mtime_ns, stat.st_size
+
+
+def _replace_in_place(target: dict, data: dict):
+    """Update the dict in memory without replacing it, other modules keep a reference to it.
+    No clear(): a reader in another thread never sees an empty catalog."""
+    target.update(data)
+    for key in [key for key in target if key not in data]:
+        del target[key]
+
+
+def reload_catalog_files():
+    """Reload the catalog files changed on disk. Return the paths reloaded.
+    A file that is not valid json (eg: an edit not finished) is skipped until it changes again."""
+    reloaded = []
+    with CONF.LAYERED_PUZZLES_LOCK:
+        for path, target in _catalog_files():
+            try:
+                stamp = _file_stamp(path)
+            except FileNotFoundError:
+                continue
+            last_stamp = _catalog_file_stamps.get(path)
+            _catalog_file_stamps[path] = stamp
+            if last_stamp is None or stamp == last_stamp:
+                # first check: the file was just loaded by CONFtiller
+                continue
+            try:
+                with open(path, 'r') as f:
+                    data = json.load(f)
+            except ValueError as e:
+                logging(debug_logger, "DEBUG", f"CATALOG {path} is not valid json, keeping the previous version: {e}")
+                continue
+            _replace_in_place(target, data)
+            reloaded.append(path)
+    return reloaded
+
+
+def update_catalog_file(path, target: dict, change):
+    """Read the file from disk, apply change(data) and write it back, then update the dict
+    in memory. change returns False when there is nothing to write.
+    Raise ValueError if the file on disk is not valid json: it is never overwritten."""
+    with open(path, 'r') as f:
+        text = f.read()
+    data = json.loads(text)
+    if change(data) is False:
+        _replace_in_place(target, data)
+        return
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, 'w') as f:
+        json.dump(data, f, indent=4)
+        if text.endswith('\n'):
+            f.write('\n')
+    os.replace(tmp_path, path)  # a crash can not leave a truncated file
+    _catalog_file_stamps[path] = _file_stamp(path)
+    _replace_in_place(target, data)
+
+
 def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
     """Save a layered puzzle combination to the appropriate JSON file.
 
@@ -107,14 +183,15 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
         lock = CONF.LAYERED_PUZZLES_LOCK
         prefix = "auto_layered"
 
-    with lock:
-        if puzzle_key in target_dict:
-            entry = target_dict[puzzle_key]
-            return entry['puzzle_type'], entry['name']
+    def add_entry(catalog: dict):
+        """Add the entry to the catalog, return (puzzle_type, name, added)"""
+        if puzzle_key in catalog:
+            entry = catalog[puzzle_key]
+            return entry['puzzle_type'], entry['name'], False
 
         #find max unkonw puzzle
         max_num = 0
-        for entry in target_dict.values():
+        for entry in catalog.values():
             name = entry.get('name', '')
             if name.startswith(prefix + '_'):
                 try:
@@ -127,18 +204,39 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
         new_name = f"{prefix}_{max_num + 1:02d}"
         new_type = f"type_{new_name}"
 
-        entry = {
+        catalog[puzzle_key] = {
             "puzzle_type": new_type,
             "name": new_name,
             "sub_puzzle_hashes": sub_hashes,
             "sub_puzzle_names": sub_names
         }
-        target_dict[puzzle_key] = entry
+        return new_type, new_name, True
 
-        with open(target_path, 'w') as f:
-            json.dump(target_dict, f, indent=4)
+    with lock:
+        if puzzle_key in target_dict:
+            entry = target_dict[puzzle_key]
+            return entry['puzzle_type'], entry['name']
 
-        return new_type, new_name
+        if has_unknown:
+            # local file, only roto writes it
+            new_type, new_name, added = add_entry(target_dict)
+            with open(target_path, 'w') as f:
+                json.dump(target_dict, f, indent=4)
+            return new_type, new_name
+
+        # layered_puzzles.json can be edited by hand: add the entry to the file on disk
+        result = []
+
+        def change(data):
+            result.extend(add_entry(data))
+            return result[2]
+
+        try:
+            update_catalog_file(target_path, target_dict, change)
+        except ValueError as e:
+            logging(debug_logger, "DEBUG", f"CATALOG {target_path} is not valid json, {puzzle_key} not saved: {e}")
+            return add_entry(dict(target_dict))[:2]
+        return result[0], result[1]
 
 
 def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
@@ -332,19 +430,23 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
 
     puzzle_hash = puzzle.get_tree_hash().hex()
     puzzle_name = compare_to_known_puzzles(puzzle_hash)
+    # the walk depends only on the shared catalog (puzzles.json), not on the local
+    # unknown_puzzles.json, or the same puzzle would get a different key on every machine
+    puzzle_is_known = puzzle_hash in CONF.KNOWN_PUZZLES
 
     mod, curried_args = puzzle.uncurry()
     mod_hash = mod.get_tree_hash().hex()
     mod_name = compare_to_known_puzzles(mod_hash)
+    mod_is_known = mod_hash in CONF.KNOWN_PUZZLES
 
-    if mod != puzzle and puzzle_name == CONF.UNKNOWN_PUZZLE:
+    if mod != puzzle and not puzzle_is_known:
 
         array[0].append(mod_name)
         array[1].append(mod_hash)
 
         # Check if the mod itself can be uncurried further
         mod2, curried_args2 = mod.uncurry()
-        if mod2 != mod and mod_name == CONF.UNKNOWN_PUZZLE:
+        if mod2 != mod and not mod_is_known:
             # here we should check if there are multiple
             unroll_puzzle_to_names(mod, level, array=array)
 
@@ -354,7 +456,7 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
             if sub_mod != arg:
                 # remove last level and fo to the right
                 unroll_puzzle_to_names(arg, level, array=array)
-    elif puzzle_name != CONF.UNKNOWN_PUZZLE:
+    elif puzzle_is_known:
         # case where a puzzle is use as argument without any curried args
         array[0].append(puzzle_name)
         array[1].append(puzzle_hash)

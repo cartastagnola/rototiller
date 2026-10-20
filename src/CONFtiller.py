@@ -50,6 +50,7 @@ USER_ADDX_WATCHLIST = Path('db/address_watchlist.csv')
 DB_WDB = 'DBiller_wallets.db'  # TODO: rename to DB_CACHED_WALLET
 DB_CACHED_BLOCKCHAIN = DB_FOLDER / 'DBiller_cached_blockchain.db'
 DB_SB = 'db/DBiller_spend_bundles.db'
+DB_PUZZLES = DB_FOLDER / 'DBiller_puzzles.db'
 
 blockchain_db_path = config["full_node"]["database_path"].replace("CHALLENGE", chain_network)
 # database_path in config.yaml is relative to the chia root (e.g. db/blockchain_v2_CHALLENGE.sqlite)
@@ -94,6 +95,14 @@ LAYERED_PUZZLES_LOCK = threading.Lock()
 
 ## memepool
 TXS_MEMPOOL_DELAY = 1000  # ms
+
+## puzzle scanners
+PUZZLE_SCAN_COIN_LIMIT = 10_000  # the chain scanner looks only at the last N spent coins
+PUZZLE_SCAN_CHAIN_DELAY = 60  # s, wait between chain scans for new blocks
+PUZZLE_SCAN_MEMPOOL_DELAY = 5  # s, wait between mempool scans
+PUZZLE_CATALOG_WATCH_DELAY = 2  # s, check if layered_puzzles.json or puzzle_types.json were edited by hand
+MEMPOOL_VALIDATED_TX_DELAY = 15  # s, validated transactions stay in the mempool view before disappearing
+MEMPOOL_VALIDATED_TX_FLASH = 5  # s, validated transactions blink during the last seconds before disappearing
 
 ## chia tail
 XCH_FAKETAIL = '0c61a'

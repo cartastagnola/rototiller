@@ -41,6 +41,9 @@ def init_colors(screen_state):  # UItiller.ScreenState
     screen_state.colors["azure_up"] = UIgraph.addCustomColor(
         (80, 150, 210),
         screen_state.cursesColors)
+    screen_state.colors["light_azure"] = UIgraph.addCustomColor(
+        (150, 215, 250),
+        screen_state.cursesColors)
     screen_state.colors["white_down"] = UIgraph.addCustomColor(
         (250, 245, 245),
         screen_state.cursesColors)
