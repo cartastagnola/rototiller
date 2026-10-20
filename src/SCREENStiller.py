@@ -199,7 +199,8 @@ def screen_main_menu(stdscr, keyboardState: KeyboardState, screenState: ScreenSt
     menu_items = []
     if len(activeScope.sub_scopes) == 0:
         menu_items = [
-            ('full node', screen_full_node, ScopeActions.activate_scope, None)
+            ('full node', screen_full_node, ScopeActions.activate_scope, None),
+            ('cacheDB', screen_cache_db, ScopeActions.activate_scope, None),
         ]
         print("indiddiie")
         if DEBUGGING:
@@ -2091,13 +2092,26 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
             cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
             db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
 
-            logging(debug_logger, "DEBUG", f"DB LOAD starting cache fetcher")
-            WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
-            logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
+            cache_updater = screenState.cache_updater
+            if cache_updater.is_followed(puzzle_hash):
+                # already kept up to date by the cache updater, nothing to build
+                logging(debug_logger, "DEBUG", f"DB LOAD address already followed by the cache updater")
+            else:
+                logging(debug_logger, "DEBUG", f"DB LOAD starting cache fetcher")
+                built_height = cache_updater.node_peak(db_conn)[0]
+                WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+                cache_updater.follow(puzzle_hash, built_height)
+                logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
+
+                # the loaders were built while the cache was still updating, rebuild them on the fresh cache
+                load_the_loaders_cache_mode(screenState, address_loaders, inbound, outbound, uncurry_puzzle)
 
             logging(debug_logger, "DEBUG", f"DB LOAD starting memo fetcher")
             WDB.FetchMaker.memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls=0.05)
             logging(debug_logger, "DEBUG", f"DB LOAD ENDED memo fetcher")
+
+            # reload to show the memos
+            load_the_loaders_cache_mode(screenState, address_loaders, inbound, outbound, uncurry_puzzle=False)
 
             aa_timo.clocking('fetch')
 
@@ -2137,7 +2151,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
     cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
     try:
         add_info = WDB.retrive_cache_address_info(cache_conn, search_value)
-        if len(add_info) > 0:
+        if add_info:
             with address_loaders.lock:
                 address_loaders.balance = add_info[1]
                 address_loaders.unspent_coin_count = add_info[3]
@@ -2228,16 +2242,11 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                 spent_height = None
                 logging(debug_logger, "DEBUG", f"LOAD pre coin: {search_value}")
 
-                fetcher = WDB.FetchMaker.CACHE_puzzle_hash_fetcher(search_value, 'spent_index', 0, uint32((2**32) - 1), False, False, order='DESC')
+                # any spent coin has the puzzle reveal of the puzzle hash
                 conn = sqlite3.connect(CONF.DB_CACHED_BLOCKCHAIN, uri=True)
                 with conn:
-                    coin_records: List[TYPES.CoinRecordRoto] = fetcher(conn, 0, 100)
+                    spent_coin: TYPES.CoinRecordRoto = WDB.FetchMaker.CACHE_one_spent_coin(conn, search_value)
                 conn.close()
-
-                spent_coin = None
-                for cr in coin_records:
-                    if cr.spent_block_index != 0:
-                        spent_coin = cr
 
                 logging(debug_logger, "DEBUG", f"LOAD i fetcher a check THIS: {spent_coin}")
                 #spent_height = int(spent_coin[1])
@@ -2465,6 +2474,108 @@ def screen_address_watchlist(stdscr, keyboardState: KeyboardState, screenState: 
 
 
 
+def screen_cache_db(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+    """Addresses saved in the cache DB, the space they take and the size of the DB"""
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error"]
+    P_title_selected = screenState.colorPairs["xch"]
+
+    # sub win
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+
+    main_win_size = win.getmaxyx()
+    main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+    pos = UIgraph.Point(1, 1)
+
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'cache DB', P_title_selected, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0, 3)
+
+    # load the stats in background, the counts can take some seconds on a big cache
+    # reload them when they are older than 30 sec
+    data = main_scope.data
+    now = datetime.now().timestamp()
+    if not data.get('cache_stats_loading') and now - data.get('cache_stats_time', 0) > 30:
+        data['cache_stats_loading'] = True
+
+        def load_cache_stats():
+            cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            try:
+                data['cache_stats'] = WDB.retrive_cache_db_stats(cache_conn, CONF.DB_CACHED_BLOCKCHAIN)
+                data['cache_stats_error'] = None
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"cache stats ERROR {e}")
+                UTILS.logging_traceback("CACHE STATS")
+                data['cache_stats_error'] = f"cache stats error: {e}"
+            finally:
+                cache_conn.close()
+                data['cache_stats_time'] = datetime.now().timestamp()
+                data['cache_stats_loading'] = False
+
+        stats_thread = threading.Thread(target=load_cache_stats, daemon=True)
+        stats_thread.start()
+        stats_thread.setName("loading cache stats")
+        with screenState.lock:
+            screenState.running_threads.append(stats_thread)
+
+    stats = data.get('cache_stats')
+    if data.get('cache_stats_error'):
+        ELEMENTS.create_text(win, pos, data['cache_stats_error'], P_error, bold=True)
+        pos += UIgraph.Point(0, 2)
+    elif stats is None:
+        ELEMENTS.create_text(win, pos, "loading cache stats...", P_text, bold=True)
+        pos += UIgraph.Point(0, 2)
+
+    if stats is not None:
+        text = (f"file: {CONF.DB_CACHED_BLOCKCHAIN}  |  total size: {UTILS.human_bytes(stats['file_size'])} "
+                f"(wal {UTILS.human_bytes(stats['wal_size'])})  |  coin rows: {UTILS.human_int(stats['total_rows'])}")
+        ELEMENTS.create_text(win, pos, text, P_text, bold=True)
+        pos += UIgraph.Point(0, 2)
+
+        if len(stats['addresses']) == 0:
+            ELEMENTS.create_text(win, pos, "no address in the cache", P_text)
+        else:
+            rows = []
+            for add in stats['addresses']:
+                rows.append([encode_puzzle_hash(add['puzzle_hash'], CONF.ADD_PREFIX),
+                             add['coins'], add['created'], add['size'], add['last_height']])
+
+            legend = ['address', 'coins', 'created coins', '~ size', 'last height']
+            column_widths = [None, None, None, None, None]
+            formatters = [None, UTILS.human_int, UTILS.human_int, UTILS.human_bytes, None]
+            max_y = main_win_size.y - pos.y - 3
+            tab_size = UIgraph.Point(min(130, main_win_size.x - 4), max(5, max_y))
+
+            ELEMENTS.create_tab(win,
+                                screenState,
+                                main_scope,
+                                "cache_db",
+                                rows,
+                                None,
+                                None,
+                                False,
+                                pos,
+                                tab_size,
+                                keyboardState,
+                                ScopeActions.exit_scope,
+                                False,
+                                False,
+                                legend,
+                                column_widths,
+                                formatters)
+
+
 def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     height = screenState.screen_size.y
@@ -2489,7 +2600,7 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
 
 
     # subscribe once 
-    def update_address_loaders(data):
+    def update_address_loaders():
         # update only the current address_loader without triggering the cache update
         logging(debug_logger, "DEBUG", f"reoloading the chunk for {address_loaders.puzzle_hash}")
         loaders_thread = threading.Thread(target=load_the_loaders,
@@ -2503,9 +2614,8 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
 
     #logging(debug_logger, "DEBUG", f"FUN ID {id(update_address_loaders)}")
 
-    screenState.daemon_socket_dispatcher.subscribe_once(f'update_loaders_{address_loaders.puzzle_hash}',
-                                                        TYPES.DaemonEvent.NEW_BLOCK,
-                                                        update_address_loaders)
+    # after the cache updater wrote the new blocks, so the reload sees them
+    screenState.cache_updater.after_sync[f'update_loaders_{address_loaders.puzzle_hash}'] = update_address_loaders
 
     # footer
     screenState.footer_text += "| save_to_watchlist=w "
@@ -3524,68 +3634,59 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
             screenState.running_threads.append(loaders_thread)
 
 
-        # load the preview
+        # load the preview in background, it can be slow for big puzzle hashes
+        # TODO: the preview should be light, simplify it (see WDB.FetchMaker.puzzle_hash_preview)
+        # each search has its own id, an old preview thread stops when a new search starts
+        preview_id = main_scope.data.get('preview_id', 0) + 1
+        main_scope.data['preview_id'] = preview_id
+        main_scope.data['tab_preview'] = None
+        main_scope.data['preview_status'] = "loading preview..."
 
-        sorting_column = 'confirmed_index'
-        preview_fecher = WDB.FetchMaker.puzzle_hash_fetcher(
-            address_loaders.puzzle_hash,
-            sorting_column,
-            start_height=address_loaders.start_height,
-            end_height=address_loaders.end_height,
-            remove_spent_coins=address_loaders.remove_spent_coins,
-            remove_self_transactions=address_loaders.remove_self_transactions,
-            order='DESC')
+        def load_preview(puzzle_hash, start_height, end_height, remove_spent_coins, remove_self_transactions):
+            def is_old():
+                return main_scope.data.get('preview_id') != preview_id
 
-        db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
-        try:
-            last_10_entries = preview_fecher(db_conn, 0, 10)
-            main_scope.data['tab_preview'] = last_10_entries
-        except Exception as e:
-            logging(debug_logger, "DEBUG", f"preview ERROR{e}")
-            UTILS.logging_traceback("TAB_PREV")
-        finally:
-            db_conn.close()
+            def progress(height):
+                if not is_old():
+                    main_scope.data['preview_status'] = f"loading preview... scanning height {height:,}"
 
+            db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
+            try:
+                preview = WDB.FetchMaker.puzzle_hash_preview(
+                    db_conn, puzzle_hash, 100,
+                    start_height=start_height,
+                    end_height=end_height,
+                    remove_spent_coins=remove_spent_coins,
+                    remove_self_transactions=remove_self_transactions,
+                    progress=progress,
+                    stop=is_old)
+                if preview is not None and not is_old():
+                    main_scope.data['tab_preview'] = preview
+                    main_scope.data['preview_status'] = None
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"preview ERROR{e}")
+                UTILS.logging_traceback("TAB_PREV")
+                if not is_old():
+                    main_scope.data['preview_status'] = f"preview error: {e}"
+            finally:
+                db_conn.close()
 
+        with address_loaders.lock:
+            preview_args = (address_loaders.puzzle_hash, address_loaders.start_height, address_loaders.end_height,
+                            address_loaders.remove_spent_coins, address_loaders.remove_self_transactions)
+        preview_thread = threading.Thread(target=load_preview, args=preview_args, daemon=True)
+        preview_thread.start()
+        preview_thread.setName("loading preview")
+        with screenState.lock:
+            screenState.running_threads.append(preview_thread)
 
-        def make_update_cached_address(puzzle_hash):
-            puzzle_hash = bytes32(puzzle_hash)
-
-            def update_cached_address(data):
-                """data: websocket data from the daemon"""
-
-                if not data['data']['transaction_block']:
-                    return
-
-                # TODO: move the whole fun elsewhere
-                from chia_rs.sized_bytes import bytes32
-                from chia.util.bech32m import decode_puzzle_hash
-
-                db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
-                cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
-                logging(debug_logger, "DEBUG", f"DB starting cache fetcher for watchlist")
-                try:
-                    #if add.startswith(CONF.ADD_PREFIX):
-                    #    puzzle_hash = bytes(decode_puzzle_hash(add))
-                    #else:
-                    #    puzzle_hash = bytes(UTILS.ensure_bytes32(add))
-
-                    WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
-
-                except Exception as e:
-                    logging(debug_logger, "DEBUG", f"update cache ERROR{e}")
-                    UTILS.logging_traceback("CACHE UPDATE")
-                finally:
-                    cache_conn.close()
-                    db_conn.close()
-
-                logging(debug_logger, "DEBUG", f"DB cache fetcher for SINGLE DONE")
-            return update_cached_address
-
-        screenState.daemon_socket_dispatcher.subscribe(TYPES.DaemonEvent.NEW_BLOCK, make_update_cached_address(address_loaders.puzzle_hash))
 
 
     lapper.clocking("pressed enter")
+    if main_scope.data.get('preview_status'):
+        ELEMENTS.create_text(node_data, pos, main_scope.data['preview_status'], P_text, bold=True)
+        pos += UIgraph.Point(0, 2)
+
     if 'tab_preview' in main_scope.data and main_scope.data['tab_preview'] is not None:
 
         ELEMENTS.create_text(node_data, pos, 'preview', P_text, bold=True, underline=True)

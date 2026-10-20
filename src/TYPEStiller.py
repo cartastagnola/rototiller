@@ -97,12 +97,12 @@ class DaemonEvent(StrEnum):
         return None
 
 
-    #class CacheCoinRecordType(IntEnum):
-    #    NORMAL = 0
-    #    CHILD = 1  # limited data
-    #    PHANTOM_SPENT = 2  # coin spent with no child
-    #
-    #
+class CacheCoinRecordType(IntEnum):
+    NORMAL = 0
+    CHILD = 1  # limited data
+    PHANTOM_SPENT = 2  # coin spent with no child
+
+
     ## class CoinType
     ## Dynamically build CoinType StrEnum from puzzle_types.json.
     #_puzzle_types = CONF.PUZZLE_TYPES or {}
@@ -706,6 +706,7 @@ class ScreenState:
         self.footer_message_counter = 0
         self.pending_action = []
         self.daemon_socket_dispatcher = None
+        self.cache_updater = None  # WDB.CacheUpdater
         #self.session_search_list = []
         self.running_threads = []
         self.lock = threading.Lock()

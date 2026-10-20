@@ -233,6 +233,12 @@ def human_int(num: int) -> str:
     return humanizer(num, suffixes)
 
 
+def human_bytes(num: int) -> str:
+    # suffixes
+    suffixes = [' B', ' KB', ' MB', ' GB', ' TB']
+    return humanizer(num, suffixes)
+
+
 # TODO: keep only one
 def timestamp_to_date(timestamp):
     return datetime.fromtimestamp(int(timestamp)).strftime('%Y-%m-%d %H:%M:%S')

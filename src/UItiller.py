@@ -120,68 +120,29 @@ def interFace(stdscr):
 
         logging(debug_logger, "DEBUG", f"DB '{CONF.DB_CACHED_BLOCKCHAIN}' initialized successfully.")
 
-        def update_watchlisted_cached_addresses(data):
-            """data: websocket data from the daemon"""
-            # load the watch list
-            path = CONF.USER_ADDX_WATCHLIST
-            lines = WDB.load_csv_no_comments(path)
+        # one updater for all the cached addresses: on every new block it reads only the coins
+        # created and spent in the new blocks. At startup it catches up the followed addresses,
+        # then builds the watchlist addresses not followed yet
+        def watchlist_puzzle_hashes():
+            puzzle_hashes = []
+            for line in WDB.load_csv_no_comments(CONF.USER_ADDX_WATCHLIST):
+                add = line[0]
+                try:
+                    if add.startswith(CONF.ADD_PREFIX):
+                        puzzle_hashes.append(bytes(decode_puzzle_hash(add)))
+                    else:
+                        puzzle_hashes.append(bytes(UTILS.ensure_bytes32(add)))
+                except Exception:
+                    logging(debug_logger, "DEBUG", f"watchlist: not a valid address {add}")
+            return puzzle_hashes
 
-            logging(debug_logger, "DEBUG", f"DB UPDATING CACHE... ... ... ...")
-            logging(debug_logger, "DEBUG", f"DB {data}")
-            logging(debug_logger, "DEBUG", f"DB {data['data']['transaction_block']}")
-            logging(debug_logger, "DEBUG", f"DB {type(data['data']['transaction_block'])}")
-
-            if not data['data']['transaction_block']:
-                logging(debug_logger, "DEBUG", f"DB do nothinggggg")
-                return
-
-            ttime = time.perf_counter()
-
-            # TODO: move the whole fun elsewhere
-            from chia_rs.sized_bytes import bytes32
-            from chia.util.bech32m import decode_puzzle_hash
-
-            db_conn = WDB.get_connection(CONF.DB_BLOCKCHAIN_RO)
-            cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
-            logging(debug_logger, "DEBUG", f"DB starting cache fetcher for watchlist")
-            try:
-                for line in lines:
-                    add = line[0]
-                    try:
-                        if add.startswith(CONF.ADD_PREFIX):
-                            puzzle_hash = bytes(decode_puzzle_hash(add))
-                        else:
-                            puzzle_hash = bytes(UTILS.ensure_bytes32(add))
-
-                        # test if the add is correct
-                        encode_puzzle_hash(puzzle_hash, CONF.ADD_PREFIX)
-                        WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
-                        WDB.FetchMaker.memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls=0.05)
-
-                        # bacis info
-                        balance, unspent_coin_count, total_coin_count, peak_height = WDB.FetchMaker.get_total_amount_and_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)
-                        unspent_hinted_coin_count, total_hinted_coin_count = WDB.FetchMaker.get_hinted_amount_and_type_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)
-                        WDB.insert_cache_address_info(cache_conn, puzzle_hash, peak_height, balance, total_coin_count, unspent_coin_count, total_hinted_coin_count, unspent_coin_count)
-                    except Exception as e:
-                        logging(debug_logger, "DEBUG", f"exception decoding {puzzle_hash} - watchlist input: {add}")
-                        UTILS.logging_traceback('CACHE LOAD')
-
-            except Exception as e:
-                print(e)
-                logging(debug_logger, "DEBUG", f"UPDAYTE CACHE TIMO TRHE BIG ONE LOAD OUT exc {e}")
-                logging(debug_logger, "DEBUG", f"UPDATE CACHE TIMO LOAD edarbello {line}")
-                UTILS.logging_traceback('CACHE LOAD')
-
-            logging(debug_logger, "DEBUG", "DB ENDED cache fetcher for watchlist")
-            cache_conn.close()
-            db_conn.close()
-
-            new_tttime = time.perf_counter()
-            pp = new_tttime - ttime
-
-            logging(debug_logger, "DEBUG", f"DB ENDED cache fetcher for watchlist TOTALLLLL {pp}")
-
-        daemon_dispatcher.subscribe(TYPES.DaemonEvent.NEW_BLOCK, update_watchlisted_cached_addresses)
+        cache_updater = WDB.CacheUpdater()
+        cache_updater_thread = threading.Thread(target=cache_updater.start,
+                                                args=(watchlist_puzzle_hashes(),),
+                                                daemon=True)
+        cache_updater_thread.setName("cache updater start")
+        cache_updater_thread.start()
+        daemon_dispatcher.subscribe(TYPES.DaemonEvent.NEW_BLOCK, cache_updater.on_new_block)
 
         def chain_state(data):
             logging(debug_logger, "DEBUG", f"CHAIN STATE update ... ... ... ...")
@@ -232,6 +193,7 @@ def interFace(stdscr):
 
         screenState = ScreenState()
         screenState.daemon_socket_dispatcher = daemon_dispatcher
+        screenState.cache_updater = cache_updater
         screenState.active_pk = [finger_active[0], screenState.active_pk[1]]
 
         ### TODO to fun

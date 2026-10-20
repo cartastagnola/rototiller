@@ -166,8 +166,18 @@ def create_cache_blockchain_db(conn):
             "coin_type INT, "
             "coin_type_metadata BLOB, "  # like tail
             "full_memo BLOB, "
-            "hint BLOB);"
+            "hint BLOB, "
+            # coin sent from the same puzzle hash, computed by sqlite, used in the indexes for the remove_self filter
+            "is_self INT GENERATED ALWAYS AS (COALESCE(parent_puzzle_hash = puzzle_hash, 0)) VIRTUAL);"
         )
+
+        # add is_self to caches created before it existed
+        columns = [row[1] for row in cursor.execute("PRAGMA table_xinfo(cached_coin_record);")]
+        if 'is_self' not in columns:
+            cursor.execute(
+                "ALTER TABLE cached_coin_record ADD COLUMN "
+                "is_self INT GENERATED ALWAYS AS (COALESCE(parent_puzzle_hash = puzzle_hash, 0)) VIRTUAL;"
+            )
 
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS cached_memo_progress ("
@@ -176,11 +186,32 @@ def create_cache_blockchain_db(conn):
             ");"
         )
 
+        # where the cache updater arrived, for all the followed addresses (one row)
+        # the header hash is used to detect reorgs
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_sync_state ("
+            "id INTEGER PRIMARY KEY CHECK (id = 0), "
+            "height BIGINT, "
+            "header_hash BLOB);"
+        )
+
+        # addresses kept up to date by the cache updater, added once their first build is done
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_followed ("
+            "puzzle_hash BLOB PRIMARY KEY);"
+        )
+
         logging(debug_logger, "DEBUG", "WDB cached error C")
         # indexes
         ## puzzle hash
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_puzzle_hash ON cached_coin_record(puzzle_hash);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_parent_puzzle_hash ON cached_coin_record(parent_puzzle_hash);")
+        # used by the address loaders (inbound and outbound): sort by confirmed_index and apply
+        # the filters reading only the index (the first time, on a big existing cache, building them takes a while)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cache_inbound ON cached_coin_record("
+                       "puzzle_hash, confirmed_index, spent_index, is_self);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cache_outbound ON cached_coin_record("
+                       "parent_puzzle_hash, confirmed_index, record_type, spent_index, is_self);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_confirmed_index ON cached_coin_record(confirmed_index);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_spent_index ON cached_coin_record(spent_index);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_coin_type_metadata ON cached_coin_record(coin_type_metadata);")
@@ -335,6 +366,42 @@ def retrive_cache_address_info(conn, puzzle_hash):
     )
     item = cursor.fetchone()
     return item
+
+
+def retrive_cache_db_stats(conn, db_path: Path):
+    """Size of the cache DB and the addresses stored in it.
+       The size of an address is an estimate: its share of the rows times the DB size.
+       The rows of an address are its coins and the coins it created (children and phantom)."""
+    page_size = conn.execute("PRAGMA page_size;").fetchone()[0]
+    page_count = conn.execute("PRAGMA page_count;").fetchone()[0]
+    db_size = page_size * page_count
+    wal_path = Path(f"{db_path}-wal")
+    wal_size = wal_path.stat().st_size if wal_path.exists() else 0
+    file_size = Path(db_path).stat().st_size + wal_size
+
+    total_rows = conn.execute("SELECT COUNT(*) FROM cached_coin_record;").fetchone()[0]
+
+    addresses = []
+    for puzzle_hash, last_height, balance in conn.execute(
+            "SELECT puzzle_hash, last_height, balance FROM cached_address_info;").fetchall():
+        coins = conn.execute(
+            "SELECT COUNT(*) FROM cached_coin_record INDEXED BY idx_cache_inbound WHERE puzzle_hash = ?;",
+            (puzzle_hash,)).fetchone()[0]
+        created = conn.execute(
+            "SELECT COUNT(*) FROM cached_coin_record INDEXED BY idx_cache_outbound WHERE parent_puzzle_hash = ?;",
+            (puzzle_hash,)).fetchone()[0]
+        # coins sent to itself are counted in both
+        self_coins = conn.execute(
+            "SELECT COUNT(*) FROM cached_coin_record INDEXED BY idx_cache_inbound WHERE puzzle_hash = ? AND is_self = 1;",
+            (puzzle_hash,)).fetchone()[0]
+        rows = coins + created - self_coins
+        size = db_size * rows // total_rows if total_rows else 0
+        addresses.append({'puzzle_hash': bytes(puzzle_hash), 'last_height': last_height, 'balance': balance,
+                          'coins': coins, 'created': created, 'rows': rows, 'size': size})
+
+    addresses.sort(key=lambda a: a['size'], reverse=True)
+    return {'file_size': file_size, 'wal_size': wal_size, 'db_size': db_size,
+            'total_rows': total_rows, 'addresses': addresses}
 
 
 def insert_table_timestamp(conn, table_name):
@@ -1531,18 +1598,11 @@ class FetchMaker:
                         "coinbase, puzzle_hash, coin_parent, amount, timestamp, record_type, parent_puzzle_hash) "
                         "VALUES (?,?,?,?,?,?,?,?,?,?) "
 
+                        # the coin data never changes, only the spent state does. A child that is
+                        # also a coin of a followed address stays NORMAL (NORMAL < CHILD)
                         "ON CONFLICT(coin_name) DO UPDATE SET "
-                        "confirmed_index = excluded.confirmed_index, "
                         "spent_index = excluded.spent_index, "
-                        "coinbase = excluded.coinbase, "
-                        "puzzle_hash = excluded.puzzle_hash, "
-                        "coin_parent = excluded.coin_parent, "
-                        "amount = excluded.amount, "
-                        "timestamp = excluded.timestamp, "
-                        "record_type = excluded.record_type, "
-                        "parent_puzzle_hash = excluded.parent_puzzle_hash "
-
-                        f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
+                        "record_type = MIN(cached_coin_record.record_type, excluded.record_type) ",
                         sub_args
                     )
 
@@ -1569,21 +1629,14 @@ class FetchMaker:
             "coin_parent, amount, timestamp, record_type, parent_puzzle_hash, "
             "child_count, coin_type, coin_type_metadata, full_memo, hint) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            # the coin data never changes: update the spent state and what a CHILD row lacks,
+            # keep coin_type, coin_type_metadata and full_memo already computed
             "ON CONFLICT(coin_name) DO UPDATE SET "
-            "confirmed_index = excluded.confirmed_index, "
             "spent_index = excluded.spent_index, "
-            "coinbase = excluded.coinbase, "
-            "puzzle_hash = excluded.puzzle_hash, "
-            "coin_parent = excluded.coin_parent, "
-            "amount = excluded.amount, "
-            "timestamp = excluded.timestamp, "
             "record_type = excluded.record_type, "
             "parent_puzzle_hash = excluded.parent_puzzle_hash, "
             "child_count = excluded.child_count, "
-            "coin_type = excluded.coin_type, "
-            "coin_type_metadata = excluded.coin_type_metadata, "
-            "hint = excluded.hint "
-            f"WHERE cached_coin_record.record_type != {TYPES.CacheCoinRecordType.NORMAL}",
+            "hint = COALESCE(excluded.hint, cached_coin_record.hint) ",
             args
         )
 
@@ -1727,6 +1780,55 @@ class FetchMaker:
         # secondary
         # find hinted
         pass
+
+    @staticmethod
+    def cache_sync_range(db_conn, cache_conn, followed: set, from_height: int, to_height: int):
+        """Update the cache of all the followed puzzle hashes for the blocks in (from_height, to_height].
+           Reads only the coins created or spent in the range, whatever the size of the addresses.
+           Returns {puzzle_hash: [balance, total_coin_count, unspent_coin_count]} with the changes
+           of the followed puzzle hashes touched in the range."""
+        cols = ("coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                "coin_parent, amount, timestamp")
+        db_cursor = db_conn.cursor()
+        cache_cursor = cache_conn.cursor()
+
+        created = db_conn.execute(
+            f"SELECT {cols} FROM coin_record INDEXED BY coin_confirmed_index "
+            "WHERE confirmed_index > ? AND confirmed_index <= ?", (from_height, to_height)).fetchall()
+        spent = db_conn.execute(
+            f"SELECT {cols} FROM coin_record INDEXED BY coin_spent_index "
+            "WHERE spent_index > ? AND spent_index <= ?", (from_height, to_height)).fetchall()
+
+        # a coin created and spent in the range is in both lists, keep it once
+        touched = {row[0]: row for row in created}
+        touched.update((row[0], row) for row in spent)
+
+        deltas = {}
+        # inbound coins. When the coin is spent, cache_coin_record also caches its children
+        # (the outbound CHILD rows) or the phantom row, so the outbound side needs nothing else:
+        # a child is always created in the same block where its parent is spent
+        for row in touched.values():
+            puzzle_hash = row[4]
+            if puzzle_hash not in followed:
+                continue
+            FetchMaker.cache_coin_record(db_cursor, cache_cursor, row, puzzle_hash)
+
+            # the row is the current state of the node, which can be ahead of to_height:
+            # count only what happened inside the range
+            is_created = from_height < row[1] <= to_height
+            is_spent = from_height < row[2] <= to_height
+            delta = deltas.setdefault(puzzle_hash, [0, 0, 0])
+            delta[0] += int_from_bytes(row[6]) * (is_created - is_spent)
+            delta[1] += is_created
+            delta[2] += is_created - is_spent
+
+        # spends of outbound children sent to puzzle hashes we don't follow (primary key lookups)
+        cache_cursor.executemany(
+            "UPDATE cached_coin_record SET spent_index = ? "
+            f"WHERE coin_name = ? AND record_type = {TYPES.CacheCoinRecordType.CHILD}",
+            [(row[2], row[0]) for row in spent if row[4] not in followed])
+
+        return deltas
 
     @staticmethod
     def memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls: float = 0.05):
@@ -1885,12 +1987,12 @@ class FetchMaker:
             f" WITH main_coins AS ( "
             f"     SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
             f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
-            f"     FROM cached_coin_record INDEXED BY idx_puzzle_hash "
+            f"     FROM cached_coin_record INDEXED BY idx_cache_inbound "
             f"     WHERE puzzle_hash = ? "
             f"       AND confirmed_index >= ? "
             f"       AND confirmed_index < ? "
             f"       {'AND spent_index <= 0' if remove_spent_coins else ''} "
-            f"       {'AND (parent_puzzle_hash IS NULL OR parent_puzzle_hash != ?1)' if remove_self_transactions else ''} "
+            f"       {'AND is_self = 0' if remove_self_transactions else ''} "
             f" ) "  # use the comma only if there is another statement for the CTE, otherwise do not place it
         )
 
@@ -1907,13 +2009,8 @@ class FetchMaker:
             def fetch(conn):
                 flc_base_query = f"{base_query}, filtered AS ( {selection_query} ) "
 
-                # count
-                flc_selection_query = (
-                    f"SELECT COUNT(*) "
-                    f"FROM filtered "
-                )
-
-                count_query = flc_base_query + flc_selection_query
+                # count on main_coins, without the ORDER BY of filtered, so it can be read from the index only
+                count_query = base_query + "SELECT COUNT(*) FROM main_coins "
 
                 with conn:
                     cursor = conn.execute(count_query,
@@ -1992,12 +2089,12 @@ class FetchMaker:
             f" WITH main_coins AS ( "
             f"     SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
             f"            coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
-            f"     FROM cached_coin_record INDEXED BY idx_parent_puzzle_hash "
+            f"     FROM cached_coin_record INDEXED BY idx_cache_outbound "
             f"     WHERE parent_puzzle_hash = ? "
             f"       AND confirmed_index >= ? "
             f"       AND confirmed_index < ? "
             f"       {'AND spent_index <= 0' if remove_spent_coins else ''} "
-            f"       {'AND (puzzle_hash IS NULL OR puzzle_hash != ?1)' if remove_self_transactions else ''} "
+            f"       {'AND is_self = 0' if remove_self_transactions else ''} "
             f"       {'' if show_phantom_coin_outputs else 'AND record_type != 2'} "  # 2 are sibling input coins
             f" ) "  # use the comma only if there is another statement for the CTE, otherwise do not place it
         )
@@ -2015,13 +2112,8 @@ class FetchMaker:
 
                 flc_base_query = f"{base_query}, filtered AS ( {selection_query} ) "
 
-                # count
-                flc_selection_query = (
-                    f"SELECT COUNT(*) "
-                    f"FROM filtered "
-                )
-
-                count_query = flc_base_query + flc_selection_query
+                # count on main_coins, without the ORDER BY of filtered, so it can be read from the index only
+                count_query = base_query + "SELECT COUNT(*) FROM main_coins "
 
 
                 with conn:
@@ -2081,6 +2173,19 @@ class FetchMaker:
                 return coin_record_list
 
         return fetch
+
+    @staticmethod
+    def CACHE_one_spent_coin(conn, puzzle_hash: bytes):
+        """Any spent coin of the puzzle hash, or None. All the coins with the same puzzle hash
+           have the same puzzle, so any spent coin is enough to get the puzzle reveal."""
+        row = conn.execute(
+            "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+            "       coin_parent, amount, timestamp, record_type, parent_puzzle_hash "
+            "FROM cached_coin_record INDEXED BY idx_cache_inbound "
+            "WHERE puzzle_hash = ? AND spent_index > 0 "
+            "LIMIT 1",
+            (puzzle_hash,)).fetchone()
+        return TYPES.CoinRecordRoto(row) if row else None
 
     @staticmethod
     def puzzle_hash_base_cte(remove_spent_coins: bool,
@@ -2159,6 +2264,103 @@ class FetchMaker:
             return coin_record_list
 
         return fetch
+
+    # TODO: the preview should be light, it is only a quick look at the last coins before opening
+    # the address viewer. Rowid windows, filters and progress make it heavier than needed, simplify it.
+    @staticmethod
+    def puzzle_hash_preview(conn, puzzle_hash: bytes, count: int = 100,
+                            start_height: uint32 = uint32(0),
+                            end_height: uint32 = uint32((2**32) - 1),
+                            remove_spent_coins: bool = False,
+                            remove_self_transactions: bool = False,
+                            window_size: int = 5000,
+                            progress: Callable = None,
+                            stop: Callable = None):
+        """Last `count` coins of a puzzle hash, newest first, from the chia db.
+           The chia db inserts the coins block by block, so the rowid follows the confirmed height,
+           and the coin_puzzle_hash index (puzzle_hash, rowid) can be walked backward without sorting
+           all the coins of the puzzle hash. The scan goes in windows of `window_size` index entries,
+           after each window `progress(height)` is called with the height reached.
+           `stop()` returning True ends the scan (e.g. a new search started), and None is returned."""
+
+        # rowid bounds of the height range, so the scan jump directly to it
+        low_rowid = 0
+        if start_height > 0:
+            row = conn.execute(
+                "SELECT rowid FROM coin_record INDEXED BY coin_confirmed_index "
+                "WHERE confirmed_index >= ? ORDER BY confirmed_index ASC, rowid ASC LIMIT 1",
+                (start_height,)).fetchone()
+            if row is None:
+                return []
+            low_rowid = row[0]
+        high_rowid = 2**63 - 1
+        if end_height < 2**32 - 1:
+            row = conn.execute(
+                "SELECT rowid FROM coin_record INDEXED BY coin_confirmed_index "
+                "WHERE confirmed_index < ? ORDER BY confirmed_index DESC, rowid DESC LIMIT 1",
+                (end_height,)).fetchone()
+            if row is None:
+                return []
+            high_rowid = row[0]
+
+        # the confirmed_index condition stay as the real filter, the rowid only bounds the scan
+        main_coins = (
+            "SELECT rowid AS rid, coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+            "       coin_parent, amount, timestamp "
+            "FROM coin_record INDEXED BY coin_puzzle_hash "
+            "WHERE puzzle_hash = ?1 AND rowid BETWEEN ?2 AND ?3 "
+            "  AND confirmed_index >= ?4 AND confirmed_index < ?5 "
+            f" {'AND spent_index <= 0' if remove_spent_coins else ''} "
+            "ORDER BY rowid DESC "
+        )
+        if remove_self_transactions:
+            # the parent is needed to filter, join the whole window
+            query = (
+                f"SELECT mc.coin_name, mc.confirmed_index, mc.spent_index, mc.coinbase, mc.puzzle_hash, "
+                f"       mc.coin_parent, mc.amount, mc.timestamp, 0 AS record_type, cr.puzzle_hash AS parent_puzzle_hash "
+                f"FROM ({main_coins}) mc "
+                f"LEFT JOIN coin_record cr ON mc.coin_parent = cr.coin_name "
+                f"WHERE COALESCE(cr.puzzle_hash, '') != ?1 "
+                f"ORDER BY mc.rid DESC LIMIT ?6"
+            )
+        else:
+            # join only the coins kept
+            query = (
+                f"SELECT mc.coin_name, mc.confirmed_index, mc.spent_index, mc.coinbase, mc.puzzle_hash, "
+                f"       mc.coin_parent, mc.amount, mc.timestamp, 0 AS record_type, cr.puzzle_hash AS parent_puzzle_hash "
+                f"FROM ({main_coins} LIMIT ?6) mc "
+                f"LEFT JOIN coin_record cr ON mc.coin_parent = cr.coin_name "
+                f"ORDER BY mc.rid DESC"
+            )
+
+        items = []
+        cursor_rowid = high_rowid
+        while len(items) < count and cursor_rowid >= low_rowid:
+            if stop and stop():
+                return None
+
+            # lower rowid of the next window, reading only the index
+            row = conn.execute(
+                "SELECT rowid, confirmed_index FROM coin_record INDEXED BY coin_puzzle_hash "
+                "WHERE puzzle_hash = ? AND rowid BETWEEN ? AND ? "
+                "ORDER BY rowid DESC LIMIT 1 OFFSET ?",
+                (puzzle_hash, low_rowid, cursor_rowid, window_size - 1)).fetchone()
+            if row is None:
+                window_low_rowid = low_rowid
+                window_height = start_height
+            else:
+                window_low_rowid, window_height = row
+
+            items += conn.execute(query, (puzzle_hash, window_low_rowid, cursor_rowid, start_height,
+                                          end_height, count - len(items))).fetchall()
+            cursor_rowid = window_low_rowid - 1
+
+            if progress:
+                progress(window_height)
+
+        coin_record_list = [TYPES.CoinRecordRoto(i) for i in items]
+        coin_record_list.sort(key=lambda cr: cr.confirmed_block_index, reverse=True)
+        return coin_record_list
 
 
     @staticmethod
@@ -2988,6 +3190,223 @@ class Chunk:
                 valid_items += 1
 
         return True if valid_items == self.chunk_size else False
+
+
+def refresh_cache_address_info(cache_conn, puzzle_hash):
+    """Recompute balance and counts of an address from the node DB (slow on big addresses)"""
+    balance, unspent_coin_count, total_coin_count, peak_height = \
+        FetchMaker.get_total_amount_and_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)
+    unspent_hinted_coin_count, total_hinted_coin_count = \
+        FetchMaker.get_hinted_amount_and_type_count_from_puzzle_hash(CONF.DB_BLOCKCHAIN_RO, puzzle_hash)
+    insert_cache_address_info(cache_conn, puzzle_hash, peak_height, balance, total_coin_count,
+                              unspent_coin_count, total_hinted_coin_count, unspent_hinted_coin_count)
+
+
+class CacheUpdater:
+    """Keeps all the followed addresses of the cache up to date, with one pass per new block
+       over the coins created and spent in the new blocks.
+       An address is followed after its first build (FetchMaker.cache_fetcher), see follow()."""
+    WINDOW = 100        # blocks per pass, so a long gap is read in pieces
+    REORG_DEPTH = 32    # blocks rolled back when the last synced block is not in the main chain anymore
+
+    def __init__(self):
+        self.followed: set = set()
+        self.lock = threading.Lock()  # one pass at a time
+        self.memo_lock = threading.Lock()
+        self.after_sync = {}  # name -> callback, called once after the next pass
+
+    def start(self, puzzle_hashes_to_build=()):
+        """Load the followed addresses, bring them to the node peak, then build and follow
+           the given addresses not followed yet (watchlist and old caches). Run it in a thread."""
+        cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+        try:
+            self.followed = {bytes(row[0]) for row in
+                             cache_conn.execute("SELECT puzzle_hash FROM cached_followed").fetchall()}
+        finally:
+            cache_conn.close()
+        logging(debug_logger, "DEBUG", f"CACHE UPDATER following {len(self.followed)} addresses")
+
+        self.sync()
+
+        for puzzle_hash in puzzle_hashes_to_build:
+            puzzle_hash = bytes(puzzle_hash)
+            if puzzle_hash in self.followed:
+                continue
+            try:
+                self.build_and_follow(puzzle_hash)
+            except Exception:
+                UTILS.logging_traceback("CACHE UPDATER BUILD")
+
+    def is_followed(self, puzzle_hash) -> bool:
+        return bytes(puzzle_hash) in self.followed
+
+    def node_peak(self, db_conn):
+        return db_conn.execute(
+            "SELECT height, header_hash FROM full_blocks WHERE in_main_chain = 1 "
+            "ORDER BY height DESC LIMIT 1").fetchone()
+
+    def build_and_follow(self, puzzle_hash):
+        """First build of an address, then follow it"""
+        db_conn = get_connection(CONF.DB_BLOCKCHAIN_RO)
+        cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+        try:
+            built_height = self.node_peak(db_conn)[0]
+            FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+            refresh_cache_address_info(cache_conn, puzzle_hash)
+            self.follow(puzzle_hash, built_height)
+            FetchMaker.memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls=0.05)
+        finally:
+            cache_conn.close()
+            db_conn.close()
+
+    def follow(self, puzzle_hash, built_height: int):
+        """Start following an address whose first build read the node up to built_height.
+           The blocks between its build and the updater are read for this address only."""
+        puzzle_hash = bytes(puzzle_hash)
+        with self.lock:
+            if puzzle_hash in self.followed:
+                return
+            db_conn = get_connection(CONF.DB_BLOCKCHAIN_RO)
+            cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            try:
+                state = cache_conn.execute("SELECT height FROM cached_sync_state").fetchone()
+                if state is None:
+                    # first followed address, the updater starts from its build
+                    self.save_state(cache_conn, built_height, None)
+                    sync_height = built_height
+                else:
+                    sync_height = state[0]
+
+                height = built_height
+                while height < sync_height:
+                    to_height = min(height + self.WINDOW, sync_height)
+                    deltas = FetchMaker.cache_sync_range(db_conn, cache_conn, {puzzle_hash}, height, to_height)
+                    self.apply_deltas(cache_conn, deltas, height, to_height)
+                    cache_conn.commit()
+                    height = to_height
+
+                cache_conn.execute("INSERT OR IGNORE INTO cached_followed (puzzle_hash) VALUES (?)",
+                                   (puzzle_hash,))
+                cache_conn.commit()
+                self.followed.add(puzzle_hash)
+                logging(debug_logger, "DEBUG", f"CACHE UPDATER follow {puzzle_hash.hex()} from {built_height}")
+            finally:
+                cache_conn.close()
+                db_conn.close()
+
+    def on_new_block(self, data):
+        """Daemon NEW_BLOCK callback"""
+        if not data['data']['transaction_block']:
+            return
+        self.sync()
+
+    def sync(self):
+        """Bring the followed addresses to the node peak"""
+        # a pass is already running: it or the next block will cover this one
+        if not self.lock.acquire(blocking=False):
+            return
+        changed = set()
+        try:
+            db_conn = get_connection(CONF.DB_BLOCKCHAIN_RO)
+            cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            try:
+                state = cache_conn.execute("SELECT height, header_hash FROM cached_sync_state").fetchone()
+                if state is not None and self.followed:
+                    height, header_hash = state
+                    reorg = header_hash is not None and not self.in_main_chain(db_conn, header_hash)
+                    if reorg:
+                        height = self.rollback(cache_conn, max(height - self.REORG_DEPTH, 0))
+                    changed = self.advance(db_conn, cache_conn, height)
+                    if reorg:
+                        # the balances had the deltas of the orphaned blocks
+                        for puzzle_hash in self.followed:
+                            refresh_cache_address_info(cache_conn, puzzle_hash)
+            finally:
+                cache_conn.close()
+                db_conn.close()
+        except Exception:
+            UTILS.logging_traceback("CACHE UPDATER")
+        finally:
+            self.lock.release()
+
+        callbacks, self.after_sync = self.after_sync, {}
+        for callback in callbacks.values():
+            try:
+                callback()
+            except Exception:
+                UTILS.logging_traceback("CACHE UPDATER CALLBACK")
+
+        if changed:
+            self.fetch_memos(changed)
+
+    def advance(self, db_conn, cache_conn, height):
+        peak_height, peak_hash = self.node_peak(db_conn)
+        changed = set()
+        while height < peak_height:
+            to_height = min(height + self.WINDOW, peak_height)
+            deltas = FetchMaker.cache_sync_range(db_conn, cache_conn, self.followed, height, to_height)
+            self.apply_deltas(cache_conn, deltas, height, to_height)
+            changed |= deltas.keys()
+            to_hash = db_conn.execute(
+                "SELECT header_hash FROM full_blocks WHERE height = ? AND in_main_chain = 1",
+                (to_height,)).fetchone()[0]
+            self.save_state(cache_conn, to_height, to_hash)
+            # commit per window: an interrupted pass restarts from the last window, no gaps
+            cache_conn.commit()
+            height = to_height
+        if changed:
+            logging(debug_logger, "DEBUG", f"CACHE UPDATER synced to {height}, {len(changed)} addresses changed")
+        return changed
+
+    @staticmethod
+    def apply_deltas(cache_conn, deltas, from_height, to_height):
+        """Add the changes of the range to the address info. An info computed after from_height
+           (a new search recomputes it) already has them, so it is left as it is"""
+        for puzzle_hash, (balance, total, unspent) in deltas.items():
+            cache_conn.execute(
+                "UPDATE cached_address_info SET "
+                "balance = balance + ?, total_coin_count = total_coin_count + ?, "
+                "unspent_coin_count = unspent_coin_count + ?, last_height = ? "
+                "WHERE puzzle_hash = ? AND last_height <= ?",
+                (balance, total, unspent, to_height, puzzle_hash, from_height))
+
+    def fetch_memos(self, puzzle_hashes):
+        """Memos of the new coins, through the RPC. Skipped if a previous one is still running,
+           memo_fetcher resumes from where it arrived"""
+        if not self.memo_lock.acquire(blocking=False):
+            return
+        cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+        try:
+            for puzzle_hash in puzzle_hashes:
+                FetchMaker.memo_fetcher(cache_conn, puzzle_hash, sleep_between_calls=0.05)
+        except Exception:
+            UTILS.logging_traceback("CACHE UPDATER MEMO")
+        finally:
+            cache_conn.close()
+            self.memo_lock.release()
+
+    @staticmethod
+    def in_main_chain(db_conn, header_hash):
+        row = db_conn.execute("SELECT in_main_chain FROM full_blocks WHERE header_hash = ?",
+                              (header_hash,)).fetchone()
+        return bool(row and row[0])
+
+    def rollback(self, cache_conn, fork_height):
+        """Undo everything above fork_height, the next advance reads it again from the node"""
+        logging(debug_logger, "DEBUG", f"CACHE UPDATER reorg, rolling back to {fork_height}")
+        cache_conn.execute("DELETE FROM cached_coin_record WHERE confirmed_index > ?", (fork_height,))
+        cache_conn.execute("UPDATE cached_coin_record SET spent_index = 0, child_count = 0 "
+                           "WHERE spent_index > ?", (fork_height,))
+        cache_conn.execute("UPDATE cached_memo_progress SET last_confirmed_index = "
+                           "MIN(last_confirmed_index, ?)", (fork_height,))
+        self.save_state(cache_conn, fork_height, None)
+        cache_conn.commit()
+        return fork_height
+
+    @staticmethod
+    def save_state(cache_conn, height, header_hash):
+        cache_conn.execute("INSERT OR REPLACE INTO cached_sync_state (id, height, header_hash) "
+                           "VALUES (0, ?, ?)", (height, header_hash))
 
 
 class DataChunkLoader:
