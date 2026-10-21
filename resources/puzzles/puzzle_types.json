@@ -26,5 +26,9 @@
     "TIBET_SINGLETON_LIQUIDITY_PAIR": {
         "name": "TIBET SINGLETON LIQUIDITY PAIR",
         "family": "SINGLETON"
+    },
+    "PLOTNFT": {
+        "name": "PlotNFT",
+        "family": "SINGLETON"
     }
 }

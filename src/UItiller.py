@@ -27,6 +27,7 @@ import src.RPCtiller as RPC
 import src.CONFtiller as CONF
 import src.TYPEStiller as TYPES
 import src.UTILStiller as UTILS
+import src.SCANtiller as SCAN
 
 import src.DEBUGtiller as DEBUGtiller
 
@@ -190,6 +191,14 @@ def interFace(stdscr):
         WDB.create_spend_bundle_db(conn)
         logging(debug_logger, "DEBUG", f"NODE STATE {DB_SB}' initialized successfully.")
         conn.close()
+
+        ### puzzle scanners: last spent coins and mempool ###
+        try:
+            SCAN.start_scanners()
+        except Exception as e:
+            print("puzzle scanners failed to start")
+            print(e)
+            traceback.print_exc()
 
         screenState = ScreenState()
         screenState.daemon_socket_dispatcher = daemon_dispatcher

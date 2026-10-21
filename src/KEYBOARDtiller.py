@@ -80,6 +80,10 @@ def processing(stdscr, screen_state: TYPE.ScreenState, keyboard_state: TYPE.Keyb
                 elif key == curses.KEY_MOUSE:
                     keyboard_state.mouse = True
                 elif key == ord('y'):
+                    # ctrl-c is not a copy key: curses runs in cbreak mode, so the terminal turns
+                    # ctrl-c into SIGINT and getch never sees it (it closes the app).
+                    # To use it as copy, catch SIGINT (signal.signal) and set yank there, or switch
+                    # to curses.raw() and match key 3; then the app has to be closed with 'q' only.
                     keyboard_state.yank = True
                 elif key == ord('0') or key == curses.KEY_HOME:
                     keyboard_state.home = True
