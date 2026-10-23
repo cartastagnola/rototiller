@@ -29,6 +29,11 @@ from clvm_tools.binutils import disassemble as bu_disassemble
 #               {"file": <.md path in the repo>, "section": <heading text>, "name": <puzzle name>},
 #               the puzzle is the first code block under that heading. A source with
 #               "markdown_puzzles" compiles only them, "subdir" is not scanned
+#   "compiled_dir": (rue only) folder of the repo with the compiled <file>.rue.hex, when it
+#               is not next to the .rue file (dist_dir in Rue.toml). The folder is flat: the
+#               hex of puzzles/upstream/slot.rue is <compiled_dir>/slot.rue.hex
+#   "exclude":  files or folders of "subdir" that are not scanned (e.g. test puzzles),
+#               paths relative to "subdir"
 SOURCES = [
     {
         "name": "cni",
@@ -136,6 +141,50 @@ SOURCES = [
         "name": "dig_datalayer",
         "url": "https://github.com/DIG-Network/DataLayer-Driver.git",
         "subdir": "puzzles",
+    },
+    {
+        # Forge (forge.awizard.dev): a weighted N-asset AMM, an action layer singleton built on
+        # CHIP-0050. One Rue project for every revision in contracts/vNN: V16 is the shipping
+        # one (the only one on mainnet), V15 and V14 are still live on testnet11.
+        # The hex is in compiled/ (dist_dir of Rue.toml). puzzles/upstream/ is slot-machine
+        # copied verbatim (already in slot_machine_rue, same puzzle hashes).
+        # The puzzles equal in more revisions get the name of the last one (forge_v16)
+        "name": "forge_v14",
+        "repo": "forge",
+        "url": "https://github.com/awizardxch/forge-puzzles.git",
+        "subdir": "contracts/v14/puzzles",
+        "compiled_dir": "contracts/v14/compiled",
+        "exclude": ["testing"],
+        "language": "rue",
+    },
+    {
+        "name": "forge_v15",
+        "repo": "forge",
+        "url": "https://github.com/awizardxch/forge-puzzles.git",
+        "subdir": "contracts/v15/puzzles",
+        "compiled_dir": "contracts/v15/compiled",
+        "exclude": ["testing"],
+        "language": "rue",
+    },
+    {
+        "name": "forge_v16",
+        "repo": "forge",
+        "url": "https://github.com/awizardxch/forge-puzzles.git",
+        "subdir": "contracts/v16/puzzles",
+        "compiled_dir": "contracts/v16/compiled",
+        "exclude": ["testing"],
+        "language": "rue",
+    },
+    {
+        # The chialisp puzzles of Forge: the inner puzzles of the LP token, the same in V14,
+        # V15 and V16 (vNN/clsp/forge_lp_mint_inner.clsp, and forge_lp_melt_inner_FORGE.clsp
+        # in contracts/ that every revision uses). forge_lp_mint_inner_FORGE.clsp is the
+        # older V10 version, not used by V14-V16
+        "name": "forge_clsp",
+        "repo": "forge",
+        "url": "https://github.com/awizardxch/forge-puzzles.git",
+        "subdir": "contracts",
+        "exclude": ["v14", "v15", "forge_lp_mint_inner_FORGE.clsp"],
     },
 ]
 
@@ -429,9 +478,9 @@ def build_hardcoded_puzzles():
     return store
 
 
-def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dirs=None):
+def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dirs=None, exclude=()):
     """Recursively scan *path* for .clsp files, compile them, and store
-    metadata in *store* keyed by puzzle_hash."""
+    metadata in *store* keyed by puzzle_hash. The paths in *exclude* are skipped."""
     if puzzles_root_folder is None:
         puzzles_root_folder = path
     if include_dirs is None:
@@ -440,9 +489,12 @@ def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dir
     files = os.listdir(path)
     for file_name in files:
         sub_path = os.path.join(path, file_name)
+        if pathlib.Path(sub_path) in exclude:
+            print(f"  excluded: {sub_path}")
+            continue
         if os.path.isdir(sub_path):
             prefix_puzzle = f"{prefix}-{file_name}"
-            parse_puzzles(sub_path, store, prefix_puzzle, puzzles_root_folder, include_dirs)
+            parse_puzzles(sub_path, store, prefix_puzzle, puzzles_root_folder, include_dirs, exclude)
         else:
             if file_name.endswith(".clsp"):
                 short_name = file_name[:-5]
@@ -477,19 +529,26 @@ def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dir
 #     committed .rue.hex: a difference means the committed output is out of date
 #   - if rue is not installed, or its version differs from Rue.toml, use the committed
 #     .rue.hex as now and print a warning
-def parse_rue_puzzles(path, store, prefix="-"):
+def parse_rue_puzzles(path, store, prefix="-", compiled_dir=None, exclude=()):
     """Recursively scan *path* for .rue files that have their compiled <file>.rue.hex
-    committed next to them, and store them in *store* keyed by puzzle_hash.
+    committed next to them (or in *compiled_dir*, see SOURCES), and store them in *store*
+    keyed by puzzle_hash. The paths in *exclude* are skipped.
     The hash of the hex must be equal to <file>.rue.hash when that file exists.
     .rue files without .rue.hex are libraries, they are skipped."""
     for file_name in sorted(os.listdir(path)):
         sub_path = os.path.join(path, file_name)
+        if pathlib.Path(sub_path) in exclude:
+            print(f"  excluded: {sub_path}")
+            continue
         if os.path.isdir(sub_path):
-            parse_rue_puzzles(sub_path, store, f"{prefix}-{file_name}")
+            parse_rue_puzzles(sub_path, store, f"{prefix}-{file_name}", compiled_dir, exclude)
             continue
         if not file_name.endswith(".rue"):
             continue
-        hex_path = pathlib.Path(sub_path + ".hex")
+        if compiled_dir is None:
+            hex_path = pathlib.Path(sub_path + ".hex")
+        else:
+            hex_path = pathlib.Path(compiled_dir) / f"{file_name}.hex"
         if not hex_path.exists():
             print(f"  library (no .rue.hex), skipped: {sub_path}")
             continue
@@ -500,7 +559,7 @@ def parse_rue_puzzles(path, store, prefix="-"):
             print(f"  [ERROR] skipped {sub_path}: invalid .rue.hex: {exc}", file=sys.stderr)
             continue
         puzzle_hash = str(prog.get_tree_hash())
-        hash_path = pathlib.Path(sub_path + ".hash")
+        hash_path = hex_path.with_suffix(".hash")
         if hash_path.exists():
             expected = hash_path.read_text().strip().removeprefix("0x")
             if puzzle_hash != expected:
@@ -641,8 +700,16 @@ if __name__ == "__main__":
             continue
 
         repo_catalog = {}
+        exclude = {puzzle_root / entry for entry in src.get("exclude", [])}
         if src.get("language", "chialisp") == "rue":
-            parse_rue_puzzles(str(puzzle_root), repo_catalog, prefix=f"--{src['name']}")
+            compiled_dir = repo_path / src["compiled_dir"] if "compiled_dir" in src else None
+            parse_rue_puzzles(
+                str(puzzle_root),
+                repo_catalog,
+                prefix=f"--{src['name']}",
+                compiled_dir=compiled_dir,
+                exclude=exclude,
+            )
         elif "markdown_puzzles" in src:
             parse_markdown_puzzles(src, repo_path, repo_catalog, resolve_include_dirs(src, repo_path))
         else:
@@ -654,6 +721,7 @@ if __name__ == "__main__":
                 repo_catalog,
                 prefix=f"--{src['name']}",
                 include_dirs=include_dirs,
+                exclude=exclude,
             )
 
         out_file = f"{src['name']}_puzzles.json"
