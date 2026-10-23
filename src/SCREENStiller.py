@@ -4689,14 +4689,11 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     for name, family, status in labels.values():
         status_count[status] += 1
 
-    # tab switches between the unknown and the known puzzles, each list keeps its cursor
-    view = main_scope.data.setdefault('view', SCAN.STATUS_NEW)
-    if keyboardState.key == '\t':
-        view = SCAN.STATUS_KNOWN if view == SCAN.STATUS_NEW else SCAN.STATUS_NEW
-        main_scope.data['view'] = view
-        screenState.activeScope = main_scope
+    # left/right switch between the unknown and the known puzzles (like the address viewer),
+    # enter goes into the list and esc comes back. Each list keeps its cursor
+    views = list(PUZZLE_VIEWS)
+    view = views[main_scope.cursor_x % len(views)]
     tab_name = f"puzzles_{view}"
-    tab_scope = list_tab_scope(screenState, main_scope, tab_name, scopeAction_open_puzzle)
 
     chain = SCAN.CHAIN_SCANNER
     mempool = SCAN.MEMPOOL_SCANNER
@@ -4706,16 +4703,11 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     put_text(win, pos, f"mempool scan: {mempool.status} | transactions {len(mempool.txs):,}", P_text)
     pos += UIgraph.Point(0,2)
 
-    # list selector
-    for status, label in PUZZLE_VIEWS.items():
-        text = f" {label} ({status_count[status]}) "
-        if status == view:
-            put_text(win, pos, f"[{text}]", P_title, bold=True)
-        else:
-            put_text(win, pos, f" {text} ", P_text)
-        pos += UIgraph.Point(len(text) + 4, 0)
-    put_text(win, pos, "tab = switch list | names are saved in resources/puzzles/layered_puzzles.json", P_text)
-    pos = UIgraph.Point(1, pos.y + 2)
+    # list selector: tabs drawn like the address viewer, touching the table below. They are
+    # drawn after the table, so the line under the selected tab joins the table border
+    pos_tab_title = pos
+    pos += UIgraph.Point(0, 2)
+    screenState.footer_text += "| switch list=←→ "
 
     if view == SCAN.STATUS_KNOWN:
         legend = ['name', 'family', 'layers', 'seen', 'first seen in', 'last seen']
@@ -4739,28 +4731,41 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
             row = [name or '-', family or '-'] + row
         rows.append(row)
         keys.append(e.puzzle_key)
-    if not rows:
-        put_text(win, pos, f"no {PUZZLE_VIEWS[view]} puzzles yet", P_text)
-        return
+    if rows:
+        tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2)
+        ELEMENTS.create_tab(win,
+                            screenState,
+                            main_scope,
+                            tab_name,
+                            rows,
+                            keys,
+                            fresh_table_colors(rows),
+                            False,
+                            pos,
+                            tab_size,
+                            keyboardState,
+                            scopeAction_open_puzzle,
+                            True,
+                            False,
+                            legend,
+                            column_widths)
+    else:
+        put_text(win, pos + UIgraph.Point(0, 1), f"no {PUZZLE_VIEWS[view]} puzzles yet", P_text)
 
-    tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 1)
-    ELEMENTS.create_tab(win,
-                        screenState,
-                        main_scope,
-                        tab_name,
-                        rows,
-                        keys,
-                        fresh_table_colors(rows),
-                        False,
-                        pos,
-                        tab_size,
-                        keyboardState,
-                        scopeAction_open_puzzle,
-                        True,
-                        False,
-                        legend,
-                        column_widths,
-                        prepped_scope=tab_scope)
+    P_tab_title = screenState.colorPairs["title"]
+    P_tab_soft = screenState.colorPairs["tab_soft"]
+    pos = pos_tab_title
+    for status, label in PUZZLE_VIEWS.items():
+        text = f" {label.upper()} puzzles ({status_count[status]}) "
+        selected = status == view
+        P_used = P_title if selected else P_tab_title
+        ELEMENTS.create_text_double_space(win, screenState, pos, text, P_used, C_background, 3, True)
+        underline_pos = pos + UIgraph.Point(0, 2)
+        if selected:
+            ELEMENTS.create_text(win, underline_pos, u'▀' * (len(text) + 2), P_tab_soft, True)
+        else:
+            ELEMENTS.create_text(win, underline_pos, ' ' * (len(text) + 2), P_used, True)
+        pos += UIgraph.Point(len(text) + 2, 0)
 
 
 def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
