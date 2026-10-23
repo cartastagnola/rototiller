@@ -404,6 +404,53 @@ def retrive_cache_db_stats(conn, db_path: Path):
             'total_rows': total_rows, 'addresses': addresses}
 
 
+CACHE_DATA_TABLES = ("cached_coin_record", "cached_address_info", "cached_memo_progress",
+                     "cached_sync_state", "cached_followed")
+
+
+def clear_cache_db(conn):
+    """Delete every address and coin of the cache DB (the tables stay), then VACUUM so the
+       file shrinks. Use CacheUpdater.clear(), it stops the updater while the cache is emptied"""
+    for table in CACHE_DATA_TABLES:
+        conn.execute(f"DELETE FROM {table};")
+    conn.commit()
+    shrink_cache_db(conn)
+
+
+def shrink_cache_db(conn):
+    """VACUUM after a big delete, so the file shrinks. The delete is already committed: if the
+       VACUUM fails (e.g. the DB is busy) the free pages stay in the file and are reused later"""
+    try:
+        conn.execute("VACUUM;")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+    except sqlite3.OperationalError as e:
+        logging(debug_logger, "DEBUG", f"cache VACUUM skipped: {e}")
+
+
+def delete_cache_address(conn, puzzle_hash, vacuum=True):
+    """Delete one address from the cache DB: its coins and the coins it created, except the
+       rows another cached address still uses (a coin sent between two cached addresses).
+       Use CacheUpdater.remove(), it stops the updater while the rows are deleted"""
+    puzzle_hash = bytes(puzzle_hash)
+    others = "SELECT puzzle_hash FROM cached_address_info WHERE puzzle_hash != ?"
+    conn.execute(
+        "DELETE FROM cached_coin_record INDEXED BY idx_puzzle_hash WHERE puzzle_hash = ? "
+        f"AND (parent_puzzle_hash IS NULL OR parent_puzzle_hash NOT IN ({others}));",
+        (puzzle_hash, puzzle_hash))
+    conn.execute(
+        "DELETE FROM cached_coin_record INDEXED BY idx_parent_puzzle_hash WHERE parent_puzzle_hash = ? "
+        f"AND (puzzle_hash IS NULL OR puzzle_hash NOT IN ({others}));",
+        (puzzle_hash, puzzle_hash))
+    for table in ("cached_address_info", "cached_memo_progress", "cached_followed"):
+        conn.execute(f"DELETE FROM {table} WHERE puzzle_hash = ?;", (puzzle_hash,))
+    # no address followed anymore: the next followed one starts the sync from its own build
+    if conn.execute("SELECT COUNT(*) FROM cached_followed;").fetchone()[0] == 0:
+        conn.execute("DELETE FROM cached_sync_state;")
+    conn.commit()
+    if vacuum:
+        shrink_cache_db(conn)
+
+
 def insert_table_timestamp(conn, table_name):
     cursor = conn.cursor()
     cursor.execute(
@@ -3236,6 +3283,30 @@ class CacheUpdater:
                 self.build_and_follow(puzzle_hash)
             except Exception:
                 UTILS.logging_traceback("CACHE UPDATER BUILD")
+
+    def clear(self):
+        """Empty the cache DB and stop following every address. It waits for the running pass
+           and memo fetch, so nothing is written while the tables are emptied"""
+        with self.lock, self.memo_lock:
+            cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            try:
+                clear_cache_db(cache_conn)
+            finally:
+                cache_conn.close()
+            self.followed = set()
+        logging(debug_logger, "DEBUG", "CACHE UPDATER cache cleared")
+
+    def remove(self, puzzle_hash):
+        """Delete one address from the cache DB and stop following it, like clear()"""
+        puzzle_hash = bytes(puzzle_hash)
+        with self.lock, self.memo_lock:
+            cache_conn = get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+            try:
+                delete_cache_address(cache_conn, puzzle_hash)
+            finally:
+                cache_conn.close()
+            self.followed.discard(puzzle_hash)
+        logging(debug_logger, "DEBUG", f"CACHE UPDATER removed {puzzle_hash.hex()}")
 
     def is_followed(self, puzzle_hash) -> bool:
         return bytes(puzzle_hash) in self.followed

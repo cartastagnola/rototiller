@@ -2487,12 +2487,13 @@ def screen_cache_db(stdscr, keyboardState: KeyboardState, screenState: ScreenSta
     active_scope: Scope = screenState.activeScope
     main_scope: Scope = active_scope.main_scope
     screenState.scope_exec_args = [screenState]
-    main_scope.update()
+    main_scope.update_2d()
 
     C_background = screenState.colors["background"]
     P_text = screenState.colorPairs["body"]
     P_error = screenState.colorPairs["error"]
     P_title_selected = screenState.colorPairs["xch"]
+    data = main_scope.data
 
     # sub win
     win = createFullSubWin(stdscr, screenState, height, width)
@@ -2508,9 +2509,9 @@ def screen_cache_db(stdscr, keyboardState: KeyboardState, screenState: ScreenSta
 
     # load the stats in background, the counts can take some seconds on a big cache
     # reload them when they are older than 30 sec
-    data = main_scope.data
     now = datetime.now().timestamp()
-    if not data.get('cache_stats_loading') and now - data.get('cache_stats_time', 0) > 30:
+    if (not data.get('cache_stats_loading') and not data.get('cache_job')
+            and now - data.get('cache_stats_time', 0) > 30):
         data['cache_stats_loading'] = True
 
         def load_cache_stats():
@@ -2545,7 +2546,23 @@ def screen_cache_db(stdscr, keyboardState: KeyboardState, screenState: ScreenSta
         text = (f"file: {CONF.DB_CACHED_BLOCKCHAIN}  |  total size: {UTILS.human_bytes(stats['file_size'])} "
                 f"(wal {UTILS.human_bytes(stats['wal_size'])})  |  coin rows: {UTILS.human_int(stats['total_rows'])}")
         ELEMENTS.create_text(win, pos, text, P_text, bold=True)
-        pos += UIgraph.Point(0, 2)
+        pos += UIgraph.Point(0, 1)
+
+        # clear the whole cache, after a confirmation
+        if data.get('cache_job'):
+            ELEMENTS.create_text(win, pos + UIgraph.Point(0, 1), f"{data['cache_job']}...", P_text, bold=True)
+        else:
+            clear_button = ELEMENTS.create_button(win, screenState, main_scope, 'clear cache', pos,
+                                                  custom_scope_function=ScopeActions.press_enter,
+                                                  button_type='execution')
+            if clear_button.data.get('pressed_enter'):
+                clear_button.data['pressed_enter'] = False
+                banner_scope = ELEMENTS.confirm_banner_scope(screenState, main_scope, 'clear_cache_banner')
+                banner_scope.cursor_x = 1  # cancel is selected when the banner opens
+                screenState.activeScope = banner_scope
+        if data.get('cache_job_message'):
+            ELEMENTS.create_text(win, pos + UIgraph.Point(22, 1), data['cache_job_message'], P_text)
+        pos += UIgraph.Point(0, 3)
 
         if len(stats['addresses']) == 0:
             ELEMENTS.create_text(win, pos, "no address in the cache", P_text)
@@ -2561,23 +2578,79 @@ def screen_cache_db(stdscr, keyboardState: KeyboardState, screenState: ScreenSta
             max_y = main_win_size.y - pos.y - 3
             tab_size = UIgraph.Point(min(130, main_win_size.x - 4), max(5, max_y))
 
-            ELEMENTS.create_tab(win,
-                                screenState,
-                                main_scope,
-                                "cache_db",
-                                rows,
-                                None,
-                                None,
-                                False,
-                                pos,
-                                tab_size,
-                                keyboardState,
-                                ScopeActions.exit_scope,
-                                False,
-                                False,
-                                legend,
-                                column_widths,
-                                formatters)
+            tab_scope = ELEMENTS.create_tab(win,
+                                            screenState,
+                                            main_scope,
+                                            "cache_db",
+                                            rows,
+                                            None,
+                                            None,
+                                            False,
+                                            pos,
+                                            tab_size,
+                                            keyboardState,
+                                            ScopeActions.exit_scope,
+                                            False,
+                                            False,
+                                            legend,
+                                            column_widths,
+                                            formatters)
+
+            # d (or delete) on the selected address asks to delete it from the cache
+            if tab_scope is screenState.activeScope and not data.get('cache_job'):
+                screenState.footer_text += "| delete address=d "
+                if keyboardState.delete:
+                    data['address_to_delete'] = stats['addresses'][tab_scope.cursor % len(stats['addresses'])]
+                    banner_scope = ELEMENTS.confirm_banner_scope(screenState, tab_scope, 'delete_address_banner')
+                    banner_scope.cursor_x = 1  # cancel is selected when the banner opens
+                    screenState.activeScope = banner_scope
+
+            add = data.get('address_to_delete')
+            if add is not None:
+                lines = ["Delete this address from the cache DB?",
+                         encode_puzzle_hash(add['puzzle_hash'], CONF.ADD_PREFIX),
+                         f"{UTILS.human_int(add['coins'])} coins and {UTILS.human_int(add['created'])} created coins, "
+                         f"~ {UTILS.human_bytes(add['size'])}. It is not followed anymore: open it to build it again."]
+                if ELEMENTS.create_confirm_banner(win, screenState, tab_scope, 'delete_address_banner',
+                                                  lines, 'delete address'):
+                    address = encode_puzzle_hash(add['puzzle_hash'], CONF.ADD_PREFIX)
+                    start_cache_job(screenState, data, f"deleting {address}", f"deleted {address}",
+                                    screenState.cache_updater.remove, add['puzzle_hash'])
+
+        lines = ["Clear the whole cache DB?",
+                 f"{len(stats['addresses'])} addresses and {UTILS.human_int(stats['total_rows'])} coin rows "
+                 f"are deleted, the file ({UTILS.human_bytes(stats['file_size'])}) shrinks.",
+                 "No address is followed anymore: open an address to build it again, "
+                 "the watchlist addresses are built again at the next start."]
+        if ELEMENTS.create_confirm_banner(win, screenState, main_scope, 'clear_cache_banner',
+                                          lines, 'clear the cache'):
+            start_cache_job(screenState, data, "clearing the cache", "cache cleared",
+                            screenState.cache_updater.clear)
+
+
+def start_cache_job(screenState: ScreenState, data: dict, job: str, done_message: str, fn, *args):
+    """Run a change of the cache DB (clear, delete an address) in a thread, one at a time.
+    The cacheDB screen shows the job while it runs, then reloads the stats"""
+    data['cache_job'] = job
+    data['cache_job_message'] = None
+
+    def run():
+        try:
+            fn(*args)
+            data['cache_job_message'] = done_message
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"cache job ERROR {job}: {e}")
+            UTILS.logging_traceback("CACHE JOB")
+            data['cache_job_message'] = f"{job} error: {e}"
+        finally:
+            data['cache_stats_time'] = 0  # reload the stats
+            data['cache_job'] = None
+
+    job_thread = threading.Thread(target=run, daemon=True)
+    job_thread.start()
+    job_thread.setName(job)
+    with screenState.lock:
+        screenState.running_threads.append(job_thread)
 
 
 def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):

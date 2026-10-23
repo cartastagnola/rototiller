@@ -1289,6 +1289,71 @@ def create_message_banner(stdscr, screenState: ScreenState, parent_scope: Scope,
                                                    )
 
 
+def confirm_banner_scope(screenState: ScreenState, parent_scope: Scope, banner_name: str) -> Scope:
+    """Scope of a confirmation banner (see create_confirm_banner), activate it to open the banner"""
+    scope_name = f"{parent_scope.id}_{banner_name}"
+    if scope_name not in screenState.scopes:
+        scope = Scope(scope_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope.main_scope
+        scope.exec = ScopeActions.activate_scope
+        scope.exec_esc = ScopeActions.exit_scope
+    return screenState.scopes[scope_name]
+
+
+def create_confirm_banner(stdscr, screenState: ScreenState, parent_scope: Scope, banner_name: str,
+                          lines: list, confirm_text: str) -> bool:
+    """Banner with a question and two buttons: confirm_text and cancel (esc cancels too).
+    Draw it while its scope (confirm_banner_scope) or one of its buttons is active.
+    Return True in the frame the user confirms, then the banner closes"""
+    scope = confirm_banner_scope(screenState, parent_scope, banner_name)
+    active = screenState.activeScope
+    if active is not scope and active.parent_scope is not scope:
+        return False
+
+    if scope is active:
+        scope.update_2d()
+        screenState.scope_exec_args = [screenState]
+
+    P_banner = screenState.colorPairs["copy_banner"]
+    win_dim = UIgraph.Point(stdscr.getmaxyx()[1], stdscr.getmaxyx()[0])
+    width = int(win_dim.x * 0.85)
+    height = len(lines) + 6
+    banner = stdscr.subwin(height, width, win_dim.y // 2 - height // 2, (win_dim.x - width) // 2)
+    banner.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    for i in range(height - 1):
+        create_text(banner, UIgraph.Point(0, i), ' ' * width, P_banner, True)
+
+    margin = UIgraph.Point(0, 1)
+    for n, line in enumerate(lines):
+        create_text_aligned(banner, margin, line, P_banner, bold=(n == 0), align_h=1)
+        margin += UIgraph.Point(0, 1)
+
+    # the two buttons on one row, centered
+    cancel_text = 'cancel'
+    bbox = UIgraph.Point(len(confirm_text) + 6 + 4 + len(cancel_text) + 6, 1)
+    margin += UIgraph.Point(0, 1)
+    pos = align_bounding_box(banner, bbox, margin, align_h=1)
+    button_colors = dict(C_background=screenState.colors['tab_softer'],
+                         C_text=screenState.colors['white'],
+                         C_selection=screenState.colors['gray'])
+    confirm_button = create_button(banner, screenState, scope, confirm_text, pos,
+                                   custom_scope_function=ScopeActions.press_enter,
+                                   button_type='execution',
+                                   C_button=screenState.colors['red'], **button_colors)
+    pos += UIgraph.Point(len(confirm_text) + 6 + 4, 0)
+    create_button(banner, screenState, scope, cancel_text, pos,
+                  custom_scope_function=ScopeActions.exit_scope_N(2),
+                  button_type='execution',
+                  C_button=screenState.colors['chia_green'], **button_colors)
+
+    if confirm_button.data.get('pressed_enter'):
+        confirm_button.data['pressed_enter'] = False
+        screenState.activeScope = parent_scope
+        return True
+    return False
+
+
 def create_save_address_banner(stdscr, screenState: ScreenState, parent_scope: Scope,
                                address: str):
     ### name
