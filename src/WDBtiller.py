@@ -1691,7 +1691,9 @@ class FetchMaker:
     @staticmethod
     def cache_fetcher(db_conn, cache_conn, puzzle_hash, start_height: uint32 = 0,
                       end_height: uint32 = (2**32 - 1), callback: Callable = None):
-        '''the callback load data while the cache is still being created'''
+        '''callback(done, total) is called while the cache is still being created, so the
+           caller can show the coins already cached and the progress'''
+        CALLBACK_INTERVAL = 2  # seconds
         # take all coin with puzz hash in batches
 
         db_cursor = db_conn.cursor()
@@ -1701,63 +1703,43 @@ class FetchMaker:
         import time
         ttime = time.perf_counter()
 
-        ## check last peak
         try:
-            cache_peak = 0
-            cache_cursor.execute(
-                "SELECT confirmed_index FROM cached_coin_record "
-                "  WHERE puzzle_hash = ? "
-                "  ORDER BY confirmed_index DESC "
-                "  LIMIT 1; ",
+            # only used for the first build of an address (not followed yet), so it reads all its
+            # coins: the upserts below make a build stopped halfway safe to run again.
+            # newest first, so the coins shown while the cache is building are the latest ones
+            db_cursor.execute(
+                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
+                "coin_parent, amount, timestamp FROM coin_record "
+                "WHERE puzzle_hash=? "
+                "ORDER BY confirmed_index DESC",
                 (puzzle_hash,)
             )
-
-            rows = cache_cursor.fetchall()
-
-            if len(rows) != 0:
-                cache_peak = rows[0][0]
-                logging(debug_logger, "DEBUG", f"CACHE peak found: {cache_peak} SYNCING FROM THERE")
-            else:
-                logging(debug_logger, "DEBUG", f"CACHE no peak found NOOOOOOOOOOOOO PEAK")
-
-            db_cursor.execute(
-                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
-                "coin_parent, amount, timestamp FROM coin_record "  # INDEXED BY coin_puzzle_hash " 
-                "WHERE puzzle_hash=? AND (confirmed_index >= ? OR spent_index >= ? )",
-                (puzzle_hash, cache_peak, cache_peak,)
-            )
-
-            rr = db_cursor.fetchall()
-
-            logging(debug_logger, "DEBUG", f"TIMO CACHE LOAD ok for a total of {len(rr)} ALLLLLLLLLLLLL")
-
-
-            db_cursor.execute(
-                "SELECT coin_name, confirmed_index, spent_index, coinbase, puzzle_hash, "
-                "coin_parent, amount, timestamp FROM coin_record "  # INDEXED BY coin_puzzle_hash " 
-                "WHERE puzzle_hash=? AND (confirmed_index >= ? OR spent_index >= ? )",
-                (puzzle_hash, cache_peak, cache_peak,)
-            )
-            logging(debug_logger, "DEBUG", f"TIMO CACHE LOAD ok")
+            all_rows = db_cursor.fetchall()
+            total = len(all_rows)
+            logging(debug_logger, "DEBUG", f"CACHE build {puzzle_hash.hex()}: {total} coins")
 
             sub_db_cursor = db_conn.cursor()
-            count = 0
-            while True:
-                rows = db_cursor.fetchmany(1000)
-                logging(debug_logger, "DEBUG", f"DB fetchmany {len(rows)}")
-                if not rows:
-                    break
-
+            done = 0
+            last_done = 0
+            last_callback = time.perf_counter()
+            chunk_size = 100  # small first chunk, so the first coins show quickly
+            while done < total:
+                rows = all_rows[done:done + chunk_size]
                 for row in rows:
                     FetchMaker.cache_coin_record(sub_db_cursor, cache_cursor, row, puzzle_hash)
-
                 cache_conn.commit()
-                logging(debug_logger, "DEBUG", f"cached COMMIT")
+                done += len(rows)
+                chunk_size = 1000
 
-                if callback and count % 10 == 0:
-                    callback()
-                    logging(debug_logger, "DEBUG", f"CALLING BACK")
-                count += 1
+                # after the first chunk, then at most every CALLBACK_INTERVAL seconds
+                if callback and (done == len(rows) or time.perf_counter() - last_callback > CALLBACK_INTERVAL):
+                    callback(done, total)
+                    last_callback = time.perf_counter()
+                    last_done = done
+
+            # all the coins are cached, the spent children are checked below
+            if callback and total and last_done != total:
+                callback(total, total)
 
             ######
             ### rescan upsent children coins that could have been spended

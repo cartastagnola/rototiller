@@ -1884,6 +1884,7 @@ class AddressLoaders():
         self.total_hinted_coin_count = -1
         self.layered_puzzle_type = 'No data'
         self.layered_puzzle_name = 'No data'
+        self.cache_progress = None  # (coins done, total coins or None) while the cache is building
 
 
 ### WHERE should i go?
@@ -2102,8 +2103,21 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                 logging(debug_logger, "DEBUG", f"DB LOAD address already followed by the cache updater")
             else:
                 logging(debug_logger, "DEBUG", f"DB LOAD starting cache fetcher")
+
+                def show_cache_progress(done, total):
+                    # reload the tables on the coins already cached
+                    with address_loaders.lock:
+                        address_loaders.cache_progress = (done, total)
+                    load_the_loaders_cache_mode(screenState, address_loaders, inbound, outbound, uncurry_puzzle=False)
+
+                with address_loaders.lock:
+                    address_loaders.cache_progress = (0, None)  # total not known yet
                 built_height = cache_updater.node_peak(db_conn)[0]
-                WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash)
+                try:
+                    WDB.FetchMaker.cache_fetcher(db_conn, cache_conn, puzzle_hash, callback=show_cache_progress)
+                finally:
+                    with address_loaders.lock:
+                        address_loaders.cache_progress = None
                 cache_updater.follow(puzzle_hash, built_height)
                 logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
 
@@ -2235,8 +2249,10 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
     logging(debug_logger, "DEBUG", f"LOAD the bool {uncurry_puzzle}")
     with address_loaders.lock:
         add_loader_out = address_loaders.address_loader_outbound
+        puzzle_unknown = address_loaders.puzzle_and_sol_rpc is None
     logging(debug_logger, "DEBUG", f"LOAD row count {add_loader_out.total_row_count}")
-    if uncurry_puzzle:
+    # also when the first spent coin appears after the first load (spent in a new block)
+    if uncurry_puzzle or (puzzle_unknown and add_loader_out.total_row_count > 0):
         if add_loader_out.total_row_count > 0:
             try:
                 parent = None
@@ -3044,6 +3060,14 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
         ELEMENTS.create_text_double_space(add_viewer, screenState, pos, text, P_used, C_background, 3, True)
         blend_selector(blend, pos)
         pos += UIgraph.Point(len(text) + 2,0)
+
+    # cache build progress, next to the tabs
+    with address_loaders.lock:
+        cache_progress = address_loaders.cache_progress
+    if cache_progress is not None:
+        done, total = cache_progress
+        text = "building cache..." if total is None else f"building cache... {done:,} / {total:,} coins"
+        ELEMENTS.create_text(add_viewer, pos + UIgraph.Point(2, 1), text, P_text, True)
 
     pos = UIgraph.Point(pos_orig.x, pos.y + 2)
 
