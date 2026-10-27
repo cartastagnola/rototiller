@@ -15,13 +15,17 @@ from clvm_tools.binutils import disassemble as bu_disassemble
 # Each entry maps a repo name to its Git URL and the sub-directory that
 # contains the .clsp files (use "" for repo root).
 # Optional fields:
-#   "language": "chialisp" (default, the .clsp files are compiled here) or "rue" (the
-#               compiled .rue.hex committed in the repo is read, see parse_rue_puzzles)
+#   "language": "chialisp" (default, the .clsp files are compiled here), "rue" (the
+#               compiled .rue.hex committed in the repo is read, see parse_rue_puzzles) or
+#               "chialisp-23" (modern Chialisp with modules, compiled with the chialisp
+#               package, see parse_chialisp23_puzzles)
 #   "repo":     folder of the clone in CACHE_DIR (default: "name"), two sources of the
 #               same repo share one clone
 #   "include_dirs": folders of the repo to search for included files, added to the ones
 #               found by find_include_dirs (it finds only folders with .clib files).
 #               {"repo": <name>, "path": <folder>} is a folder of another source's clone
+#   "ref":      commit to check out instead of the latest one, for old versions of the
+#               puzzles that are still on chain. The clone has only that commit
 #   "sparse":   folders to check out, for big repos (git sparse checkout, cone mode).
 #               The clone has only these folders, so find_include_dirs looks only there
 #   "markdown_puzzles": puzzles written inside a markdown file (e.g. a CHIP) instead of a
@@ -34,6 +38,8 @@ from clvm_tools.binutils import disassemble as bu_disassemble
 #               hex of puzzles/upstream/slot.rue is <compiled_dir>/slot.rue.hex
 #   "exclude":  files or folders of "subdir" that are not scanned (e.g. test puzzles),
 #               paths relative to "subdir"
+#   "files":    only these files of "subdir" are compiled, paths relative to "subdir".
+#               They can end in .clvm (old repos), not only .clsp
 SOURCES = [
     {
         "name": "cni",
@@ -43,6 +49,15 @@ SOURCES = [
     {
         "name": "tibet",
         "url": "https://github.com/Yakuhito/tibet.git",
+        "subdir": "clsp",
+    },
+    {
+        # TibetSwap v1 beta, used on mainnet in April 2023 (heights 3,560,549-3,603,036) and
+        # replaced after "fix bug in pair code" (2023-04-29). At this commit (2023-04-09) the
+        # pair_inner_puzzle, router and p2_singleton_flashloan are the beta ones seen on chain
+        "name": "tibet_v1_beta",
+        "url": "https://github.com/Yakuhito/tibet.git",
+        "ref": "48944f2dcfe1a34a570a79e08331d6fffe628b45",
         "subdir": "clsp",
     },
     {
@@ -127,6 +142,33 @@ SOURCES = [
         "sparse": ["chia/wallet/puzzles"],
     },
     {
+        # CAT v1 (puzzle hash 72dec062...), used on mainnet from 2022 until CAT v2 (chia 1.5.0,
+        # July 2022). It is cat.clvm in chia-blockchain 1.3.0 and 1.4.0, this is 1.4.0.
+        # The old CATs on chain still use it
+        "name": "chia_blockchain_cat_v1",
+        "url": "https://github.com/Chia-Network/chia-blockchain.git",
+        "ref": "bd35cb183bd9cd752dc9df5ffba3efd437011c90",
+        "sparse": ["chia/wallet/puzzles"],
+        "subdir": "chia/wallet/puzzles",
+        "files": ["cat.clvm"],
+    },
+    {
+        # chia-gaming: two-player games over state channels (Chia Network). On chain: the
+        # unroll coin (closes a channel), the referee (a game coin in a dispute) and the move
+        # validators of each game, run by the referee. Arcade21 builds on it. Modern Chialisp
+        # (cl-23, modules). The factories build a game's parameters off chain: not compiled
+        "name": "chia_gaming",
+        "url": "https://github.com/Chia-Network/chia-gaming.git",
+        "ref": "ad21a649434dd5eb9eb7c0d4df70da841a44e44f",
+        "language": "chialisp-23",
+        "subdir": "",
+        "exclude": ["clsp/test", "games/debug", "node_modules", "front-end", "wasm",
+                    "games/calpoker/clsp/factory.clsp", "games/calpoker/clsp/factory_probe.clsp",
+                    "games/calpoker/clsp/onchain/test_atomsort.clsp",
+                    "games/krunk/clsp/factory.clsp", "games/krunk/clsp/factory_probe.clsp",
+                    "games/spacepoker/clsp/factory.clsp", "games/spacepoker/clsp/factory_probe.clsp"],
+    },
+    {
         # Yakuhito's streaming puzzle: pays CATs/XCH to a recipient over time, with clawback.
         # It is STREAM_PUZZLE in chia-wallet-sdk. Its included files end in .clsp, not .clib
         "name": "streaming",
@@ -189,7 +231,9 @@ SOURCES = [
 ]
 
 # Puzzles that are not in a .clsp file, they are hardcoded here as compiled bytecode.
-# The puzzle hash is checked when the catalog is built.
+# The puzzle hash is checked when the catalog is built. "clvm" is the source written here,
+# checked to compile to the same puzzle hash; an entry without "clvm" has "source" instead:
+# where the bytecode comes from, for code that today's compilers build to another hash.
 HARDCODED_PUZZLES = [
     {
         # MIPS index wrapper: (a 5 7), curried with (nonce inner_puzzle) it runs the inner
@@ -323,6 +367,19 @@ HARDCODED_PUZZLES = [
         ),
     },
     {
+        # chia-gaming unroll puzzle (state_channel_unrolling) used from July 2024 until
+        # "Tightened up unroll logic" (2026-05-05), seen on mainnet at heights
+        # 8,031,665-8,661,414. The bytecode is the compiled file committed in the repo; the
+        # repo built it with an unreleased compiler (clvm_tools_rs rev c3ecaa49 in Cargo.toml),
+        # the released chialisp 0.4.4-0.5.0 build the same source to other hashes. The
+        # current version is in the chia_gaming source
+        "source": "chia_gaming",
+        "name": "unroll_puzzle_state_channel_unrolling_v1",
+        "bytecode": "ff02ffff01ff02ff26ffff04ff02ffff04ff03ffff04ffff02ff3effff04ff02ffff04ff2fff80808080ff8080808080ffff04ffff01ff80ffffff02ff2affff04ff02ffff04ff03ffff04ff05ff8080808080ffff02ffff03ffff09ff23ffff010180ffff0153ffff01ff02ff12ffff04ff02ffff04ff19ff8080808080ff0180ff02ff26ffff04ff02ffff04ff03ffff04ffff02ff3effff04ff02ffff04ff2fff80808080ff8080808080ffffff02ffff03ff7dffff01ff02ff36ffff04ff02ffff04ff03ffff04ffff02ff5dffff04ff8200bdff808080ff8080808080ffff01ff02ffff03ffff09ff2dff0b80ffff015dffff01ff088080ff018080ff0180ff02ff2effff04ff02ffff04ff03ffff04ffff02ff12ffff04ff02ffff04ff0bff80808080ff8080808080ffff02ffff03ffff15ff0bff5180ffff01ff02ffff03ffff18ffff0101ffff1aff0bff518080ffff01ff02ffff03ffff09ff21ff2980ffff0115ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ff02ffff03ffff07ff0580ffff01ff0bffff0102ffff02ff3effff04ff02ffff04ff09ff80808080ffff02ff3effff04ff02ffff04ff0dff8080808080ffff01ff0bffff0101ff058080ff0180ff018080",
+        "puzzle_hash": "e2589bed0800093691a2d78ecbb92a46507b77554f0057caba1c0f569bd4f3bb",
+        "source_url": "https://github.com/Chia-Network/chia-gaming/blob/78f1e604ebad3a3db3b6b7b70b4c0f9dcdc30ada/clsp/unroll/unroll_puzzle_state_channel_unrolling.hex",
+    },
+    {
         # The program 1: returns its whole solution (identity). One puzzle hash for many roles,
         # so the name says what it does, not where it is used. In chia-wallet-sdk (commit ed584e3):
         #   - XCH_CAT_MAKER_PUZZLE (action layer: for XCH the payment puzzle hash is not wrapped)
@@ -374,15 +431,25 @@ SCRIPT_DIR = pathlib.Path(__file__).parent.resolve()
 CACHE_DIR = SCRIPT_DIR / "repo_sources"
 
 
-def ensure_repo(name: str, url: str, sparse: list = None) -> pathlib.Path:
+def ensure_repo(name: str, url: str, sparse: list = None, ref: str = None) -> pathlib.Path:
     """Shallow-clone a repo into CACHE_DIR if it isn't already cached.
-    With *sparse* only those folders are checked out (see "sparse" in SOURCES)."""
+    With *sparse* only those folders are checked out (see "sparse" in SOURCES).
+    With *ref* only that commit is fetched and checked out (see "ref" in SOURCES)."""
     dest = CACHE_DIR / name
     if dest.exists():
         print(f"[cache] Using existing clone: {dest}")
         return dest
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    if ref:
+        print(f"[git] Fetching {url} at {ref[:10]} …")
+        sparse_steps = [["-C", str(dest), "sparse-checkout", "set", *sparse]] if sparse else []
+        filter_args = ["--filter=blob:none"] if sparse else []
+        for args in (["init", "-q", str(dest)], *sparse_steps,
+                     ["-C", str(dest), "fetch", "-q", "--depth", "1", *filter_args, url, ref],
+                     ["-C", str(dest), "checkout", "-q", "FETCH_HEAD"]):
+            subprocess.run(["git", *args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return dest
     print(f"[git] Cloning {url} …")
     sparse_args = ["--filter=blob:none", "--sparse"] if sparse else []
     subprocess.run(
@@ -461,26 +528,29 @@ def build_hardcoded_puzzles():
         if puzzle_hash != puzzle["puzzle_hash"]:
             raise ValueError(f"{puzzle['name']}: puzzle hash {puzzle_hash} != {puzzle['puzzle_hash']}")
         # the clvm is written here, not taken from a repo: check it is the same puzzle
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            clsp_path = pathlib.Path(tmp_dir) / "puzzle.clsp"
-            clsp_path.write_text(puzzle["clvm"])
-            clvm_hash = str(load_clvm_from_file(clsp_path).get_tree_hash())
-        if clvm_hash != puzzle_hash:
-            raise ValueError(f"{puzzle['name']}: the clvm compiles to {clvm_hash}, not {puzzle_hash}")
+        if "clvm" in puzzle:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                clsp_path = pathlib.Path(tmp_dir) / "puzzle.clsp"
+                clsp_path.write_text(puzzle["clvm"])
+                clvm_hash = str(load_clvm_from_file(clsp_path).get_tree_hash())
+            if clvm_hash != puzzle_hash:
+                raise ValueError(f"{puzzle['name']}: the clvm compiles to {clvm_hash}, not {puzzle_hash}")
         store[puzzle_hash] = {
             "file_name": None,
             "name": f"--{puzzle['source']}-{puzzle['name']}",
             "puzzle_hash": puzzle_hash,
             "bytecode": prog.to_json_dict(),
             "bytecode_disassembled": bu_disassemble(prog),
-            "clvm": puzzle["clvm"],
+            "clvm": puzzle.get("clvm"),
+            **({"source": puzzle["source_url"]} if "source_url" in puzzle else {}),
         }
     return store
 
 
-def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dirs=None, exclude=()):
+def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dirs=None, exclude=(), only=None):
     """Recursively scan *path* for .clsp files, compile them, and store
-    metadata in *store* keyed by puzzle_hash. The paths in *exclude* are skipped."""
+    metadata in *store* keyed by puzzle_hash. The paths in *exclude* are skipped.
+    With *only* (a set of paths) only those files are compiled, .clvm ones too."""
     if puzzles_root_folder is None:
         puzzles_root_folder = path
     if include_dirs is None:
@@ -494,9 +564,11 @@ def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dir
             continue
         if os.path.isdir(sub_path):
             prefix_puzzle = f"{prefix}-{file_name}"
-            parse_puzzles(sub_path, store, prefix_puzzle, puzzles_root_folder, include_dirs, exclude)
+            parse_puzzles(sub_path, store, prefix_puzzle, puzzles_root_folder, include_dirs, exclude, only)
         else:
-            if file_name.endswith(".clsp"):
+            if only is not None and pathlib.Path(sub_path) not in only:
+                continue
+            if file_name.endswith(".clsp") or (only is not None and file_name.endswith(".clvm")):
                 short_name = file_name[:-5]
                 name = f"{prefix}-{short_name}"
                 print(f"  processing {sub_path} …")
@@ -578,6 +650,66 @@ def parse_rue_puzzles(path, store, prefix="-", compiled_dir=None, exclude=()):
             "language": "rue",
         }
         print(f"  → {name} ({puzzle_hash})")
+
+
+def parse_chialisp23_puzzles(repo_path, puzzle_root, store, prefix, exclude=()):
+    """Compile the .clsp files under *puzzle_root* with the modern compiler (chialisp
+    package): files that start with (include *standard-cl-23*) use modules, (import a.b)
+    is a file of the repo, searched from the repo root and from clsp/ (like chia-gaming's
+    build.rs). A module writes one <file>[_<export>].hex next to the source for each
+    export, so the repo is copied to a temporary folder first: the cached clone is not
+    changed. Each export is a puzzle, named <prefix>-<folders>-<hex name>; the exports
+    that are only a hash (32 bytes) are skipped. The paths in *exclude* are skipped."""
+    import shutil
+    import chialisp
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        work = pathlib.Path(tmp_dir) / "repo"
+        shutil.copytree(repo_path, work, ignore=shutil.ignore_patterns(".git", "node_modules", "target"))
+        root = work / puzzle_root.relative_to(repo_path)
+        skip = {work / p.relative_to(repo_path) for p in exclude}
+        cwd = os.getcwd()
+        os.chdir(work)
+        try:
+            for clsp in sorted(root.rglob("*.clsp")):
+                if any(clsp == x or x in clsp.parents for x in skip):
+                    continue
+                rel = clsp.relative_to(work)
+                # compiling a module also writes the .hex of the modules it imports: remove
+                # this file's outputs first, so the ones found after compiling are its own
+                own = lambda: set(clsp.parent.glob(clsp.stem + ".hex")) | set(clsp.parent.glob(clsp.stem + "_*.hex"))
+                for old in own():
+                    old.unlink()
+                print(f"  processing {rel} …")
+                try:
+                    with tempfile.TemporaryDirectory() as out_dir:
+                        out = pathlib.Path(out_dir) / "out.hex"
+                        chialisp.compile_clvm(str(rel), str(out), ["clsp", "."])
+                        # classic files: the program is the output; modules: the output
+                        # lists the exports, written as .hex files next to the source
+                        outputs = sorted(own()) or [out]
+                        compiled = [(o, Program.fromhex(o.read_text().strip())) for o in outputs]
+                except Exception as exc:
+                    print(f"  [ERROR] skipped {rel}: {str(exc).splitlines()[-1][:200]}", file=sys.stderr)
+                    continue
+                folders = "-".join(rel.parent.relative_to(root.relative_to(work)).parts)
+                for o, prog in compiled:
+                    if prog.atom is not None and len(prog.atom) == 32:
+                        continue  # <export>_hash.hex: the hash of another export
+                    stem = clsp.stem if o.name == "out.hex" else o.name[:-4]
+                    name = "-".join(x for x in (prefix, folders, stem) if x)
+                    puzzle_hash = str(prog.get_tree_hash())
+                    store[puzzle_hash] = {
+                        "file_name": clsp.name,
+                        "name": name,
+                        "puzzle_hash": puzzle_hash,
+                        "bytecode": prog.to_json_dict(),
+                        "bytecode_disassembled": bu_disassemble(prog),
+                        "clvm": clsp.read_text(),
+                    }
+                    print(f"  → {name} ({puzzle_hash})")
+        finally:
+            os.chdir(cwd)
 
 
 def resolve_include_dirs(src, repo_path):
@@ -689,7 +821,7 @@ if __name__ == "__main__":
 
     for src in SOURCES:
         print(f"\n=== {src['name']} ===")
-        repo_path = ensure_repo(src.get("repo", src["name"]), src["url"], src.get("sparse"))
+        repo_path = ensure_repo(src.get("repo", src["name"]), src["url"], src.get("sparse"), src.get("ref"))
         puzzle_root = get_puzzle_root(repo_path, src.get("subdir", ""))
 
         if not puzzle_root.exists():
@@ -710,6 +842,8 @@ if __name__ == "__main__":
                 compiled_dir=compiled_dir,
                 exclude=exclude,
             )
+        elif src.get("language") == "chialisp-23":
+            parse_chialisp23_puzzles(repo_path, puzzle_root, repo_catalog, f"--{src['name']}", exclude)
         elif "markdown_puzzles" in src:
             parse_markdown_puzzles(src, repo_path, repo_catalog, resolve_include_dirs(src, repo_path))
         else:
@@ -722,9 +856,10 @@ if __name__ == "__main__":
                 prefix=f"--{src['name']}",
                 include_dirs=include_dirs,
                 exclude=exclude,
+                only={puzzle_root / entry for entry in src["files"]} if "files" in src else None,
             )
 
-        out_file = f"{src['name']}_puzzles.json"
+        out_file = SCRIPT_DIR / f"{src['name']}_puzzles.json"
         with open(out_file, "w") as f:
             json.dump(repo_catalog, f, indent=4)
         print(f"Wrote {out_file} ({len(repo_catalog)} puzzles)")

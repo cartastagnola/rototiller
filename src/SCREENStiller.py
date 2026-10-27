@@ -5314,27 +5314,80 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
     if 'clvm' not in main_scope.data:
         main_scope.data['clvm'] = PUZ.rs_disassemble(reveal) if reveal else ''
 
+    if 'cat_names' not in main_scope.data:
+        main_scope.data['cat_names'] = WDB.retrive_asset_names(CONF.DB_WDB)
+    cat_names = main_scope.data['cat_names']
+
+    # the 32 byte args that are not a known puzzle or CAT: look them up on chain, once, in a
+    # thread (a coin id, a puzzle hash with coins, a hint). None while it runs, '' if not found
+    if 'chain_lookup' not in main_scope.data:
+        chain_lookup = {}
+        for n_node in nodes:
+            for arg_hex in n_node.get('arg_hex', []):
+                try:
+                    for h in PUZ.unknown_hashes_in_arg(PyProgram.fromhex(arg_hex), cat_names):
+                        chain_lookup[h] = None
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"PUZZLE DETAIL arg not read: {e}")
+        main_scope.data['chain_lookup'] = chain_lookup
+
+        def lookup_hashes():
+            for h in list(chain_lookup):
+                try:
+                    chain_lookup[h] = PUZ.chain_lookup_hash(h)
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"PUZZLE DETAIL chain lookup of {h} failed: {e}")
+                    chain_lookup[h] = ''
+        if chain_lookup:
+            lookup_thread = threading.Thread(target=lookup_hashes, daemon=True)
+            lookup_thread.start()
+            screenState.running_threads.append(lookup_thread)
+    chain_lookup = main_scope.data['chain_lookup']
+
+    # columns: field, type, meaning, value
+    puzzle_hash = node.get('puzzle_hash') or ''
     data_rows = [
-        ['path', node['path'] or ''],
-        ['puzzle', node['puzz_name'] or ''],
-        ['mod hash', node['hash'] or ''],
+        ['path', '', '', node['path'] or ''],
+        ['puzzle', '', '', node['puzz_name'] or ''],
+        ['mod hash', 'hash 32', node['puzz_name'] or '', node['hash'] or ''],
+        # for the STD layer inside a CAT or an NFT, this is the owner's address
+        ['puzzle hash', 'hash 32',
+         f"address: {PUZ.puzzle_hash_to_address(bytes.fromhex(puzzle_hash))}" if puzzle_hash else '',
+         puzzle_hash],
     ]
     for n, arg in enumerate(node['args']):
-        data_rows.append([f"arg {n}", arg])
-    data_rows.append(['mod clvm', node['disassembly'] or ''])
-    data_rows.append(['whole puzzle hex', reveal.hex()])
-    data_rows.append(['whole puzzle clvm', main_scope.data['clvm']])
+        arg_type, meaning = '', ''
+        if n < len(node.get('arg_hex', [])):
+            try:
+                arg_type, meaning = PUZ.describe_curried_arg(
+                    PyProgram.fromhex(node['arg_hex'][n]), cat_names, chain_lookup)
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"PUZZLE DETAIL arg {n} not described: {e}")
+        data_rows.append([f"arg {n}", arg_type, meaning, arg])
+    data_rows.append(['mod clvm', '', '', node['disassembly'] or ''])
+    data_rows.append(['whole puzzle hex', '', '', reveal.hex()])
+    data_rows.append(['whole puzzle clvm', '', '', main_scope.data['clvm']])
     data_keys = [str(n) for n in range(len(data_rows))]
 
     put_text(win, pos, f"level {node['level']}: {node['puzz_name']} | select a row and press y to copy", P_text, bold=True)
     pos += UIgraph.Point(0,1)
     space_left = main_win_size.y - pos.y - 1
     data_tab_size = UIgraph.Point(main_win_size.x - 2, min(len(data_rows) + 5, max(space_left // 2, 6)))
+    # the value takes the width left (create_tab drops the columns that do not fit, from
+    # the rows it gets: it gets a copy, the rows are used again below)
+    value_width = max(data_tab_size.x - 102, 10)
+    # no frame cache (the chain lookups change rows in the middle): new column sizes when
+    # the rows change (another layer, a lookup done) or the screen is resized
+    data_tab_name = f"{main_scope.id}_puzzle_layer_data"
+    if data_tab_name in screenState.scopes and (screenState.screen_resized or
+                                                main_scope.data.get('data_rows_shown') != data_rows):
+        screenState.scopes[data_tab_name].data['column_sizes'] = None
+    main_scope.data['data_rows_shown'] = data_rows
     data_scope = ELEMENTS.create_tab(win,
                                      screenState,
                                      main_scope,
                                      "puzzle_layer_data",
-                                     data_rows,
+                                     [list(row) for row in data_rows],
                                      data_keys,
                                      fresh_table_colors(data_rows),
                                      False,
@@ -5344,15 +5397,19 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
                                      scopeAction_nothing,
                                      True,
                                      False,
-                                     ['field', 'value'],
-                                     column_widths=[20, None])
+                                     ['field', 'type', 'meaning', 'value'],
+                                     column_widths=[18, 14, 50, value_width],
+                                     no_cache=True)
     pos += UIgraph.Point(0, data_tab_size.y + 1)
 
     ##### the whole value of the selected row
-    field, value = data_rows[data_scope.cursor % len(data_rows)]
+    field, arg_type, meaning, value = data_rows[data_scope.cursor % len(data_rows)]
     max_y = main_win_size.y - 1
     put_text(win, pos, f"{field} ({len(value):,} chars):", P_text, bold=True)
     pos += UIgraph.Point(0,1)
+    if meaning:
+        put_text(win, pos, f"{arg_type} | {meaning}", P_text)
+        pos += UIgraph.Point(0,1)
     text_width = max(main_win_size.x - pos.x - 3, 10)
     for i in range(0, len(value), text_width):
         if pos.y >= max_y:

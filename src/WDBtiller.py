@@ -641,6 +641,27 @@ def retrive_asset(conn, tail):
     return asset
 
 
+def retrive_asset_names(db_path) -> dict:
+    """All the CAT names: asset id hex (no 0x) -> 'name (TICKER)'. Empty if the table
+    is not there yet (it is filled by SERVICES.fetch_cat_assets)"""
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=CONF.SQL_TIMEOUT)
+        try:
+            rows = conn.execute("SELECT tail, name, ticker FROM asset_name").fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        logging(debug_logger, "DEBUG", f"WDB no asset names: {e}")
+        return {}
+    names = {}
+    for tail, name, ticker in rows:
+        if isinstance(tail, bytes):
+            tail = tail.hex()
+        tail = str(tail).lower().removeprefix('0x')
+        names[tail] = f"{name} ({ticker})" if ticker else (name or '')
+    return names
+
+
 def get_asset_id(conn, tail):
     """Needed?"""
     # cursor = conn.cursor()

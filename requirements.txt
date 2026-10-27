@@ -7,3 +7,5 @@ websockets
 sshkeyboard
 pympler
 numpy
+# modern Chialisp compiler (cl-23, modules): PUZZLECATALOGiller.py "language": "chialisp-23"
+chialisp==0.5.0

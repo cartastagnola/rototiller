@@ -1,0 +1,1118 @@
+{
+"5b3f13dfa0693c5c8cb886fa571c992b874bc753": [
+"CAT_V2",
+"standard transaction",
+false,
+"cat_v2 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"925761d34927ecb3e910cdf7a15578847c171948": [
+"CAT_V2",
+"settlement payments",
+false,
+"cat_v2 > settlement_payments"
+],
+"5488a049167d0a14154c96db9196cc5ebe489530": [
+"CAT_V2",
+"unidentified inner, 2 layers",
+true,
+"cat_v2 > * > *"
+],
+"0084a936f2c9eca38962a3075dee31f7cabd4331": [
+"CAT_V2",
+"unidentified 9a6c5ff6",
+true,
+"cat_v2 > ?9a6c5ff6"
+],
+"373a77d94b5376b2c650e60ccbda7b15f788ec64": [
+"CAT_V2",
+"pay to vault (singleton member)",
+false,
+"cat_v2 > sdk-mips-index_wrapper > delegated_puzzle_feeder > singleton_member"
+],
+"7b58a57a9d5ebbd2b0089e623d0db26455908908": [
+"CAT_V2",
+"unidentified 25fbd0d4",
+true,
+"cat_v2 > ?25fbd0d4 > ?87a17c3e"
+],
+"bebc595e147c86094926e9e7a8564f9c627776a1": [
+"CAT_V2",
+"unidentified 1b08dc6c",
+true,
+"cat_v2 > ?1b08dc6c > ?f992d595"
+],
+"575320c612e36a81bed8737ace1c16272e72ef3d": [
+"CAT_V2",
+"locked by WARP_GREEN (p2 controller puzzle hash)",
+false,
+"cat_v2 > warp-wrapped_cats-p2_controller_puzzle_hash"
+],
+"d3dd9da701b5a09941832612bf0dd0ace7dd697a": [
+"CAT_V2",
+"revocable (revocation layer)",
+false,
+"cat_v2 > revocation_layer"
+],
+"055cc5505bea210f3d86f974291c655118781cfa": [
+"CIRCUIT",
+"run CAT tail",
+false,
+"cat_v2 > circuit-run_tail"
+],
+"08b6c9218429d1c4a140011dac1e86eb1034e26d": [
+"XCHANDLES",
+"registration precommit (CAT)",
+true,
+"cat_v2 > * > slot_machine_rue-singleton-precommit"
+],
+"e4860e4ade9aca31ab4880004ca4462096a64f23": [
+"CAT_V2",
+"delegated conditions",
+false,
+"cat_v2 > p2_delegated_conditions"
+],
+"5334707f64d9baa43fedf562513714d9af4ccc11": [
+"CAT_V2",
+"unidentified 00323215",
+true,
+"cat_v2 > ?00323215 > ?a3c21438"
+],
+"3b4bb3f5871bc619bf145814db2d387be9b3b523": [
+"CAT_V2",
+"pay to delegated by singleton",
+false,
+"cat_v2 > slot_machine_rue-singleton-p2_delegated_by_singleton"
+],
+"d6e6a1dae4099276a97e39356de2958ef580526b": [
+"CAT_V2",
+"CIRCUIT treasury",
+false,
+"cat_v2 > * > circuit-treasury"
+],
+"78310ee2a92e20e8be56476ea6a65892172fc17e": [
+"CAT_V2",
+"mint and payout by WARP_GREEN",
+false,
+"cat_v2 > warp-wrapped_assets-cat_mint_and_payout"
+],
+"b3da1b2be947e2bae92980918392022087485f6f": [
+"CAT_V2",
+"burn by WARP_GREEN",
+false,
+"cat_v2 > * > warp-wrapped_assets-burn_inner_puzzle"
+],
+"394ce9a6039cf341e757346a9eb750e9e39badf4": [
+"CAT_V2",
+"unidentified f36f91db",
+true,
+"cat_v2 > ?f36f91db > ?be055d94"
+],
+"68c918bcd72e2a5487fb0f01437fc90e87678264": [
+"CAT_V2",
+"CIRCUIT savings vault",
+false,
+"cat_v2 > * > circuit-savings_vault > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"773d99325f565fcb2e4e0cee68a1b1eef2e15131": [
+"CAT_V2",
+"unidentified c01ab057",
+true,
+"cat_v2 > ?c01ab057 > ?f992d595"
+],
+"8d542c0235eec2b4c372eb65b060df3052858a7c": [
+"TIBET_SWAP",
+"CAT reserve v1 beta",
+false,
+"cat_v2 > ?f28ec9bb > ?5626c391"
+],
+"849f95f8a72ad7c9bb382c35a5c3618322ace238": [
+"CAT_V2",
+"unidentified 25169a34",
+true,
+"cat_v2 > ?25169a34 > ?c9d2983e"
+],
+"fd5e2c48aa54841e91e0fb80fb84aee84011e59c": [
+"CAT_V2",
+"streamed payment",
+false,
+"cat_v2 > * > streaming-stream"
+],
+"f02da806314a92c52e4a4337075ec53caaf035dc": [
+"CAT_V2",
+"CIRCUIT surplus auction",
+false,
+"cat_v2 > * > circuit-surplus_auction"
+],
+"fb7f3acbd9007525615266fcf13e334e80574611": [
+"CAT_V2",
+"unidentified 2a14be2a",
+true,
+"cat_v2 > ?2a14be2a > ?5e96a6f0"
+],
+"491cae005e07265c557306dd775874d00f194333": [
+"CAT_V2",
+"unidentified inner, 1 layer",
+true,
+"cat_v2 > *"
+],
+"d2203ac35e7b1a75b9aa8fe256e6604c5bcf1c63": [
+"CAT_V2",
+"1 of n",
+false,
+"cat_v2 > p2_1_of_n"
+],
+"4bd1e94458f349f00cb80ddb890ccc297357a27c": [
+"CAT_V2",
+"pay to vault (1 of n)",
+false,
+"cat_v2 > sdk-mips-index_wrapper > delegated_puzzle_feeder > 1_of_n"
+],
+"8a539a51e1bd1797c3296d6f3e0701c7303842d1": [
+"CAT_V2",
+"CIRCUIT governance",
+false,
+"cat_v2 > * > circuit-governance"
+],
+"79dc0a93e6a31555960597c8be8e2ada70b907e8": [
+"CAT_V2",
+"unidentified 4ba89147",
+true,
+"cat_v2 > * > ?4ba89147"
+],
+"50393db671bfd7b2cc3f22ae4afa2f87f8de5f14": [
+"CAT_V2",
+"unidentified 693e0175",
+true,
+"cat_v2 > * > * > ?693e0175"
+],
+"4ead2cafc14265eed9f56c387ddb66f91835bc57": [
+"CAT_V2",
+"unidentified 8390fc59",
+true,
+"cat_v2 > ?8390fc59 > ?2d0aeb4c"
+],
+"6d51ab70f986e93ccae68219ce44249a96f53d23": [
+"CAT_V2",
+"CIRCUIT payout",
+false,
+"cat_v2 > * > circuit-payout"
+],
+"3bc2dec1256f21a06e5a4c1751fd6087464632ee": [
+"CAT_V2",
+"unidentified d744b1ce",
+true,
+"cat_v2 > * > ?d744b1ce"
+],
+"8cdbda96f7d34a58f88e25396e1887df2225a0be": [
+"CAT_V2",
+"CIRCUIT governance launcher",
+false,
+"cat_v2 > circuit-governance_launcher"
+],
+"d7063e9a8e64053dbacb308f28698ddee36a7a37": [
+"CAT_V2",
+"CIRCUIT governance exit",
+false,
+"cat_v2 > circuit-governance_exit"
+],
+"cfccd18bd77d402976b948f13b7cf8061476b471": [
+"CAT_V2",
+"unidentified inner, 3 layers",
+true,
+"cat_v2 > * > * > *"
+],
+"b3e8f05d75eb149abf214bea383bb531711d1291": [
+"CAT_V2",
+"unidentified 85cd51da",
+true,
+"cat_v2 > ?85cd51da > ?6fb00617 > ?6db22474 > ?e409fced"
+],
+"94cc18bb1c9d45fe8fa58f8982107179d7e50d36": [
+"CAT_V2",
+"pay to delegated by singleton (index wrapper)",
+false,
+"cat_v2 > sdk-mips-index_wrapper > slot_machine_rue-singleton-p2_delegated_by_singleton"
+],
+"f5604e8f956c1033d71070faaf12c5762ca55462": [
+"CAT_V2",
+"unidentified 7ce9095a",
+true,
+"cat_v2 > ?7ce9095a > ?6dcc5a7c"
+],
+"11f9c4d00fa8b46e8de82f957ee53c3cfedf2897": [
+"CAT_V2",
+"unidentified 238e8e3c",
+true,
+"cat_v2 > ?238e8e3c > ?a3107477"
+],
+"67762eba636337d3594d63e90414db4db2eccbe6": [
+"CAT_V2",
+"unidentified 5b9b86da",
+true,
+"cat_v2 > * > * > ?5b9b86da"
+],
+"24fa583b7e36fa986c3b1777e5eea4c0a58ef4d9": [
+"CAT_V2",
+"unidentified b6e32301",
+true,
+"cat_v2 > ?b6e32301 > ?80f50d4b"
+],
+"5357cea8d722caf3aa25a2948ad84df80ba4edd4": [
+"CAT_V2",
+"unidentified 79bd0d65",
+true,
+"cat_v2 > ?79bd0d65 > ?32c10874"
+],
+"eb884074972b4a5ba8e9fdf80655e5f30b1efded": [
+"CAT_V2",
+"unidentified 79bd0d65, standard transaction",
+true,
+"cat_v2 > ?79bd0d65 > ?32c10874 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"91f39ef0be1f355226ec91917c3be029570453c3": [
+"CAT_V2",
+"CIRCUIT recharge auction",
+false,
+"cat_v2 > * > circuit-recharge_auction"
+],
+"8246e55626e0eebc1682955142464d9b575b82d4": [
+"NFT_V1",
+"standard transaction",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"30971ddf9d98cca56791d9172a51957eefea021f": [
+"NFT_V1",
+"settlement payments",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > settlement_payments"
+],
+"311e8a24803df3d1c0c173ae050f98dc829f1649": [
+"NFT_V1",
+"unidentified inner, 2 layers",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > * > *"
+],
+"4666d85a24fa1ffb7bd256503e23ded30c72ab25": [
+"NFT_V1",
+"unidentified 9a6c5ff6",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > ?9a6c5ff6"
+],
+"3004b9c94d8456c3d1c7e203002cb3fb023a9c75": [
+"NFT_V1",
+"no ownership layer, standard transaction",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"68e1012af6b8424611c127c71d91d5960c8ff13d": [
+"NFT_V1",
+"unidentified 25fbd0d4 in a vault index wrapper",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > sdk-mips-index_wrapper > ?25fbd0d4 > ?87a17c3e"
+],
+"ac2baaa468d27f9d8e874ecf9f07b435f28c8913": [
+"NFT_V1",
+"inner puzzle not curried",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties"
+],
+"6a4fd069f0a6e4420e61ef09dbec24f59a66c0d2": [
+"NFT_V1",
+"pay to delegated by singleton",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > slot_machine_rue-singleton-p2_delegated_by_singleton"
+],
+"76885c92484a1d0e97a54ec6cbd931a8bf389199": [
+"NFT_V1",
+"pay to vault (singleton member)",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > sdk-mips-index_wrapper > delegated_puzzle_feeder > singleton_member"
+],
+"6969fb7a67edcae746ab3f034398ba931112bb8d": [
+"NFT_V1",
+"delegated conditions",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > p2_delegated_conditions"
+],
+"e9e86418bd5ca505154aa836ee2d8462cf3f428e": [
+"NFT_V1",
+"unidentified 0b1a2cfa",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > ?0b1a2cfa > ?e4ca85aa"
+],
+"93bdf5322fbeff058ff5a68cecfafa6fd171920b": [
+"NFT_V1",
+"no ownership layer, unidentified inner",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > * > *"
+],
+"355eb2d717bc060391a83cb5effabf03e5bdcf1a": [
+"NFT_V1",
+"pay to delegated by singleton (index wrapper)",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > sdk-mips-index_wrapper > slot_machine_rue-singleton-p2_delegated_by_singleton"
+],
+"91a3afa8df479eeb3dfc5d9374b5c379fc769eba": [
+"NFT_V1",
+"no ownership layer, settlement payments",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > settlement_payments"
+],
+"2ce647c2667f404b4b0b4da52fc35007d84b163e": [
+"NFT_V1",
+"pay to vault (1 of n)",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > sdk-mips-index_wrapper > delegated_puzzle_feeder > 1_of_n"
+],
+"581af49d3f9dd90f1d582bc309efda60deddc606": [
+"NFT_V1",
+"1 of n",
+false,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > p2_1_of_n"
+],
+"1b7ef62640f024c649354781c20789d1f6cba3b9": [
+"NFT_V1",
+"no ownership layer, unidentified 9a6c5ff6",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > ?9a6c5ff6"
+],
+"12692eec3b143e1bfe0379917466c121c018f6bb": [
+"NFT_V1",
+"unidentified b6e32301",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > ?b6e32301 > ?80f50d4b"
+],
+"25d2e85a09563c8e69b4b56c6cf98701af721a42": [
+"NFT_V1",
+"no ownership layer, unidentified 0b1a2cfa",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > ?0b1a2cfa > ?e4ca85aa"
+],
+"30bef4b97c8eeb243b6783dd21fd420bd3740178": [
+"NFT_V1",
+"unidentified 8390fc59",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > nft_ownership_layer > nft_ownership_transfer_program_one_way_claim_with_royalties > ?8390fc59 > ?2d0aeb4c"
+],
+"4388ac630bfab42e864c76a9f3eb429d095d3f95": [
+"PLOTNFT",
+"pool member",
+false,
+"singleton_top_layer > pool_member_innerpuz"
+],
+"08a38790f8c5657dc57e6666bf6bd95659bc0225": [
+"PLOTNFT",
+"waiting room",
+false,
+"singleton_top_layer > pool_waitingroom_innerpuz"
+],
+"5d81e533cc08dfd6fdc065d45c90cc53b35d06b7": [
+"SINGLETON",
+"v1.0, unidentified inner (2021-2022, early NFT prototypes?)",
+true,
+"singleton_top_layer > * > *"
+],
+"cc564f95a2b719034cf8add9e9b50ea5b052d01f": [
+"CAT_V1",
+"standard transaction",
+false,
+"?72dec062 > ?ba7dbcc0 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"b9ee88037921b27856bac9b1de014f0f82991a0a": [
+"CAT_V1",
+"unidentified 9a6c5ff6",
+true,
+"?72dec062 > ?ba7dbcc0 > ?9a6c5ff6"
+],
+"aa895eaa43732ff82112a049002b899a5bc8eba5": [
+"CAT_V1",
+"inner puzzle not curried",
+true,
+"?72dec062 > ?ba7dbcc0"
+],
+"e6a5d813b1d786da6dfb66a869cd8d7f728c4db7": [
+"CAT_V1",
+"unidentified inner",
+true,
+"?72dec062 > ?ba7dbcc0 > *"
+],
+"4945ca192585b29593028b3d569a640a691aee62": [
+"CAT_V1",
+"unidentified 6dcdbf2a",
+true,
+"?72dec062 > ?ba7dbcc0 > ?6dcdbf2a > ?4bc34f7c"
+],
+"f154d75c07487aaa65f4ebd12e09c6506efe3f96": [
+"CAT_V1",
+"unidentified 2859f5d6",
+true,
+"?72dec062 > ?ba7dbcc0 > ?2859f5d6 > ?5c554c87"
+],
+"0aae6d6b1e3e9b9d2e2e1d49c76f0590469e0906": [
+"CAT_V1",
+"CAT_V1 inside CAT_V1, standard transaction",
+true,
+"?72dec062 > ?ba7dbcc0 > ?72dec062 > ?ba7dbcc0 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"0d10539bad69da2e2171f8b37d4742cbed840794": [
+"CAT_V1",
+"unidentified a897c8f1",
+true,
+"?72dec062 > ?ba7dbcc0 > ?a897c8f1 > ?aaa20810"
+],
+"653ba11f0ddc6bbcd3a80c7a7eb57389c97f37ce": [
+"CAT_V1",
+"variant bb9ed2fd, standard transaction",
+true,
+"?bb9ed2fd > ?ba7dbcc0 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"2fe7e2d1fa200603d5ffc5b3283946e8634c4fda": [
+"CAT_V1",
+"variant fe8f5c74, standard transaction",
+true,
+"?fe8f5c74 > ?ba7dbcc0 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"a6d6f04ddab713affabda8146c4e400402904e0a": [
+"CAT_V1",
+"variant bb9ed2fd, inner puzzle not curried",
+true,
+"?bb9ed2fd > ?ba7dbcc0"
+],
+"6d2f75cfffac2a1523232a76e603f9012c1343da": [
+"CAT_V1",
+"variant bb9ed2fd twice, standard transaction",
+true,
+"?bb9ed2fd > ?ba7dbcc0 > ?bb9ed2fd > ?ba7dbcc0 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"6ec30d2117bd1e81a24600a9fcac96ea3dfa05be": [
+"CAT_V1",
+"variant fe8f5c74, inner puzzle not curried",
+true,
+"?fe8f5c74 > ?ba7dbcc0"
+],
+"8d8b0a6aeadaea9c595dde7fa5d2a1ec369bfe78": [
+"CAT_V1",
+"variant fe8f5c74 twice, standard transaction",
+true,
+"?fe8f5c74 > ?ba7dbcc0 > ?fe8f5c74 > ?ba7dbcc0 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"082bbc270c5bba70681daae1a32bdc1b89bf35a1": [
+"CAT_V1",
+"delegated conditions",
+false,
+"?72dec062 > ?ba7dbcc0 > p2_delegated_conditions"
+],
+"924d016527fe43fad06c69b09e66c2db64abcf26": [
+"CAT_V1",
+"unidentified inner, 2 layers",
+true,
+"?72dec062 > ?ba7dbcc0 > * > *"
+],
+"55d79aaabf0d7639e5b5a25f21fef5b41897c688": [
+"DID_V1",
+"standard transaction",
+false,
+"singleton_top_layer_v1_1 > did_innerpuz > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"c09d2dc696056c5a7f8a9be4f128731351e060de": [
+"DID_V1",
+"unidentified outer f1e8350c",
+true,
+"?f1e8350c > ?7302d5c2 > did_innerpuz > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"9d0dfbd56acdbd690261b46aaf09e6f90d09ce58": [
+"TIBET_SWAP",
+"liquidity pair v1",
+false,
+"singleton_top_layer_v1_1 > tibet-p2_merkle_tree_modified > tibet-pair_inner_puzzle"
+],
+"8c88bf2ec4860303187921ae5ed36ff2e9cb2253": [
+"TIBET_SWAP",
+"CAT reserve (p2 singleton flashloan)",
+false,
+"cat_v2 > tibet-p2_singleton_flashloan"
+],
+"ccad8be8596a6859e32edc067385c56f2742f957": [
+"TIBET_SWAP",
+"liquidity pair v2",
+false,
+"singleton_top_layer_v1_1 > tibet-p2_merkle_tree_modified > tibet-v2r_pair_inner_puzzle"
+],
+"024870e48bd687d60307034a3e5b3b43842170e3": [
+"TIBET_SWAP",
+"liquidity pair v1 beta (before the April 2023 fix)",
+false,
+"singleton_top_layer_v1_1 > tibet-p2_merkle_tree_modified > * > *"
+],
+"6a585e72c3a1811adb28a057f1bdbafa896c0f24": [
+"TIBET_SWAP",
+"router v1",
+false,
+"singleton_top_layer_v1_1 > tibet-router"
+],
+"df70cae4815690734bdb40bdda4a50b53b28b97f": [
+"TIBET_SWAP",
+"router v2",
+false,
+"singleton_top_layer_v1_1 > tibet-v2r_router"
+],
+"bf137f37e20b0ca5f110a3494790663343d52919": [
+"SINGLETON",
+"unidentified inner",
+true,
+"singleton_top_layer_v1_1 > *"
+],
+"e0e3b86f2cbf92b3db3833e7964b2e54ad336617": [
+"SINGLETON",
+"unidentified app 2ad6e558, d277207e",
+true,
+"singleton_top_layer_v1_1 > ?2ad6e558 > ?06e3f924 > * > ?d277207e > ?745f24f6"
+],
+"d71cbadc38435374fe895f4f88221cab60aa1f77": [
+"SINGLETON",
+"unidentified inner, 2 layers",
+true,
+"singleton_top_layer_v1_1 > * > *"
+],
+"a8a9626eeeb6a1766d4cca0694a3ba453c987346": [
+"SINGLETON",
+"unidentified 2576e15e",
+true,
+"singleton_top_layer_v1_1 > * > ?2576e15e"
+],
+"702d605c58bca23025c6bbe832f7bdd18fc5a4a1": [
+"SINGLETON",
+"unidentified app 2ad6e558, 34b1f957",
+true,
+"singleton_top_layer_v1_1 > ?2ad6e558 > ?06e3f924 > * > ?34b1f957 > ?c5d05613"
+],
+"59e42646b0e9536dd8c4a41cf297f6f59b14cd66": [
+"SINGLETON",
+"unidentified 679d2a21",
+true,
+"singleton_top_layer_v1_1 > * > ?679d2a21"
+],
+"92769d1c5002f7554b6fd0d1f51b38a777b921e8": [
+"SINGLETON",
+"unidentified app 2ad6e558, f2c96e97",
+true,
+"singleton_top_layer_v1_1 > ?2ad6e558 > ?06e3f924 > * > ?f2c96e97 > ?aedd3124"
+],
+"370392be7aad4c8e652c8f364a61f98f39a66ad5": [
+"SINGLETON",
+"unidentified 6bf61e08",
+true,
+"singleton_top_layer_v1_1 > * > * > ?6bf61e08"
+],
+"f46ebb24fad1f66102bb119df0a4a2ef2ff31317": [
+"SINGLETON",
+"standard transaction",
+false,
+"singleton_top_layer_v1_1 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"828a3795e3f883226de0043d0bd48056c56a23ed": [
+"SINGLETON",
+"unidentified, standard transaction",
+true,
+"singleton_top_layer_v1_1 > * > * > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"612982ab6a84a3f99eee065afa05cb1486d20c70": [
+"SINGLETON",
+"unidentified e572d641",
+true,
+"singleton_top_layer_v1_1 > * > ?e572d641"
+],
+"ecce5d2dbfbb0b418c02d9f38accc312a6015a9a": [
+"SINGLETON",
+"multisig (m of n keys)",
+false,
+"singleton_top_layer_v1_1 > p2_m_of_n_delegate_direct"
+],
+"ba12ed938d129c726362b1c4169e253afd0e8fd3": [
+"SINGLETON",
+"unidentified 74a2efca",
+true,
+"singleton_top_layer_v1_1 > * > ?74a2efca"
+],
+"0b9e84468046052f92eab568728cdc265c7d2e7d": [
+"SINGLETON",
+"unidentified inner, 3 layers",
+true,
+"singleton_top_layer_v1_1 > * > * > *"
+],
+"4cd125a8589cfbf4ab8fafce7b58dce10c56941c": [
+"SINGLETON",
+"unidentified inner, 4 layers",
+true,
+"singleton_top_layer_v1_1 > * > * > * > *"
+],
+"9daae5f06fb5424418741c901fd52dcbc1819cb4": [
+"UNKNOWN",
+"2d55c090",
+true,
+"* > ?2d55c090 > ?58006121"
+],
+"40fdf024474ac54d063e17ba78519935f875bcd1": [
+"UNKNOWN",
+"two unidentified layers",
+true,
+"* > *"
+],
+"e2250fc37c9de10e815a12db2cded2f7995bdbdb": [
+"UNKNOWN",
+"1b08dc6c",
+true,
+"?1b08dc6c > ?f992d595"
+],
+"b681adf01614ebcf475db10f1ccb87cbe59eac7e": [
+"UNKNOWN",
+"00d20b97",
+true,
+"* > * > ?00d20b97"
+],
+"4a7af60ba2d94056bdbfee356b3d34952c2d061c": [
+"UNKNOWN",
+"f38ae27c",
+true,
+"* > ?f38ae27c"
+],
+"a72ea320f86c3b8da2f6430c1ae6850a174c5adb": [
+"UNKNOWN",
+"c01ab057",
+true,
+"?c01ab057 > ?f992d595"
+],
+"b4431dee76163f920e44022947bf6e05ee326ed1": [
+"UNKNOWN",
+"00323215",
+true,
+"?00323215 > ?a3c21438"
+],
+"e9c2b63751cb3e86b0e484b7881e9494ba5082ec": [
+"UNKNOWN",
+"f36f91db",
+true,
+"?f36f91db > ?be055d94"
+],
+"c6dbe02c31b9e8ba783397b18e1150fa889ecef9": [
+"TIBET_SWAP",
+"XCH reserve v1 beta",
+false,
+"?f28ec9bb > ?5626c391"
+],
+"646d4daebfd850e0c84103b3241ebf711fadd980": [
+"UNKNOWN",
+"25169a34",
+true,
+"?25169a34 > ?c9d2983e"
+],
+"c9f65c295dba0880682ac342deafb2837b45c66a": [
+"UNKNOWN",
+"four unidentified layers",
+true,
+"* > * > * > *"
+],
+"de88c5dfc55591278c3d7538e66504782ebbe685": [
+"UNKNOWN",
+"d4596fa7, standard transaction",
+true,
+"?d4596fa7 > ?b3a24b98 > ?258008f8 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"74c9e728fa8b2905d2a8778fa7ab7243d54222a7": [
+"UNKNOWN",
+"2a14be2a",
+true,
+"?2a14be2a > ?5e96a6f0"
+],
+"7d660a3e4cdf4e8f85f0b7928c82f5e7af9779b7": [
+"UNKNOWN",
+"fa279361",
+true,
+"* > ?fa279361 > ?17bc4080"
+],
+"a3c99c2ebbf4ac2c1c1058e598bc6381aa23968a": [
+"UNKNOWN",
+"8390fc59",
+true,
+"?8390fc59 > ?2d0aeb4c"
+],
+"0b6e5c093732037cb2c419748ced854ddb9e027c": [
+"UNKNOWN",
+"cdf47b5c",
+true,
+"* > ?cdf47b5c"
+],
+"e572f065b17010fdfd8a7ab3106f44275c6ab16d": [
+"UNKNOWN",
+"f151a226",
+true,
+"* > ?f151a226"
+],
+"ab4fd0de8683f9c99cf709ba3abbc54004f71d96": [
+"UNKNOWN",
+"e9bf0503",
+true,
+"?e9bf0503 > ?b11155ab"
+],
+"ca25713ae3c9232d5833df70f6696c8b6004d0d9": [
+"UNKNOWN",
+"d4596fa7, 4485b963",
+true,
+"?d4596fa7 > ?b3a24b98 > ?258008f8 > ?4485b963 > ?37e340b9"
+],
+"de70e168445a55ece0123415a759752154d6e6b6": [
+"UNKNOWN",
+"d4596fa7, e9bf0503",
+true,
+"?d4596fa7 > ?b3a24b98 > ?258008f8 > ?e9bf0503 > ?b11155ab"
+],
+"4618f8e7c9f8a334c0c13352edc156c78cffb140": [
+"UNKNOWN",
+"ee28acae",
+true,
+"* > ?ee28acae"
+],
+"2aece8d5a4145c84bf40780724ca0e677b390831": [
+"UNKNOWN",
+"bb1c4e9f",
+true,
+"?bb1c4e9f > ?56b0177e > * > *"
+],
+"228bea153b753922ee3c89a0f4bf7726c76f0012": [
+"UNKNOWN",
+"4485b963",
+true,
+"?4485b963 > ?37e340b9"
+],
+"27acf8332b2dbf5ffbc748f99b42e904f6d24701": [
+"UNKNOWN",
+"430d155b",
+true,
+"* > ?430d155b"
+],
+"ce50fc01ab86d56fd46f546820c58b67675732e9": [
+"UNKNOWN",
+"4ba93c16",
+true,
+"* > * > ?4ba93c16"
+],
+"262ff85b7c5de88bf56d96a1bb20efd355830165": [
+"UNKNOWN",
+"d4596fa7, two more layers",
+true,
+"?d4596fa7 > ?b3a24b98 > ?258008f8 > * > *"
+],
+"aa1ac47fd573524907f10a3ab78b9d77a87546eb": [
+"UNKNOWN",
+"2859f5d6",
+true,
+"?2859f5d6 > ?5c554c87"
+],
+"f574ee751c459863c195fcf3673e4e734651e94d": [
+"UNKNOWN",
+"5f5eb85d",
+true,
+"* > ?5f5eb85d > ?d16bbd9e"
+],
+"2cc2736b105cb10083ca8cd40fc3d4376a5f2ba8": [
+"UNKNOWN",
+"f1e8350c, 31f5e810, standard transaction",
+true,
+"?f1e8350c > ?7302d5c2 > ?31f5e810 > ?3dad4a24 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"602f504c12285e7569fc654b0c87e2b553bb6b2a": [
+"UNKNOWN",
+"f1e8350c, 610ef9a4, standard transaction",
+true,
+"?f1e8350c > ?7302d5c2 > * > ?610ef9a4 > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"117df1d53a7c692474b88c3850ab5592aac366de": [
+"UNKNOWN",
+"6dcdbf2a",
+true,
+"?6dcdbf2a > ?4bc34f7c"
+],
+"0e6644a1c34b075882dafd8ff407f82d94cb9bf3": [
+"UNKNOWN",
+"7ce9095a",
+true,
+"?7ce9095a > ?6dcc5a7c"
+],
+"67d30bc19d5a4403dbeb26a39dfeabb7c29641e9": [
+"UNKNOWN",
+"449001e0",
+true,
+"* > ?449001e0"
+],
+"69c959544858e0e356290228e4c59d24f4d008f2": [
+"UNKNOWN",
+"b6e32301",
+true,
+"?b6e32301 > ?80f50d4b"
+],
+"5f13a8fe2dca456a3834b939d425543c09229e88": [
+"UNKNOWN",
+"three unidentified layers",
+true,
+"* > * > *"
+],
+"28da8af00e5eccebc09c142c4db598d3ec7e0e57": [
+"UNKNOWN",
+"669252a6",
+true,
+"* > ?669252a6"
+],
+"f68476f755d32bcc52cd9362971d3c5899928b76": [
+"UNKNOWN",
+"238e8e3c",
+true,
+"?238e8e3c > ?a3107477"
+],
+"f9ed98ecf48f8896f59ed577d043c4ff2e024ce3": [
+"UNKNOWN",
+"85cd51da",
+true,
+"?85cd51da > ?6fb00617 > ?6db22474 > ?e409fced"
+],
+"df15275d176dcd74cc043879997cc381808f0e79": [
+"UNKNOWN",
+"8127e18e",
+true,
+"* > ?8127e18e"
+],
+"433258ae7b9016c4688e5e04277bf5e9c62c23e4": [
+"UNKNOWN",
+"unidentified layer, ba7dbcc0",
+true,
+"* > ?ba7dbcc0"
+],
+"d413af5831e361bced3a5b11434bc87e6654ef92": [
+"UNKNOWN",
+"a897c8f1",
+true,
+"?a897c8f1 > ?aaa20810"
+],
+"73fdfc18374ca8c287f55ba7e7e514464dfd917b": [
+"UNKNOWN",
+"f1e8350c, 31f5e810, 4 more layers, standard transaction",
+true,
+"?f1e8350c > ?7302d5c2 > ?31f5e810 > ?3dad4a24 > * > * > * > * > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"be4b705ab0f7d7aaacb81f79fdee0ce3190207a9": [
+"UNKNOWN",
+"25fbd0d4",
+true,
+"?25fbd0d4 > ?87a17c3e"
+],
+"9e582af4c96e2704545df2dbd2d039649362c1ce": [
+"CIRCUIT",
+"atom announcer",
+false,
+"unknown_puzz_02 > circuit-atom_announcer"
+],
+"6af59239cad72d7da97f8d5d3f1c1f1e58c800fb": [
+"CIRCUIT",
+"statutes",
+false,
+"circuit-singleton_top_layer_isa > * > circuit-statutes"
+],
+"8149b988b1c7d9a52515bc8d7ca50afea7444d11": [
+"CIRCUIT",
+"collateral vault",
+false,
+"* > circuit-collateral_vault"
+],
+"cd5b8315c66a9be95a4fb999a8a457db780f2756": [
+"CIRCUIT",
+"oracle",
+false,
+"singleton_top_layer_v1_1 > * > circuit-oracle"
+],
+"84dbdb2b6b8bd19df21d661fa6ab015a3a24e26f": [
+"CIRCUIT",
+"unidentified 7c62fa84",
+true,
+"circuit-singleton_top_layer_isa > * > ?7c62fa84 > ?91a93448"
+],
+"a627f15f328e78930115f37e78e07c5282691ab7": [
+"CIRCUIT",
+"announcer registry",
+false,
+"* > circuit-announcer_registry"
+],
+"a3de09a8ad84179ff25754fcbccd9ade4c356345": [
+"VAULT",
+"pay to vault (singleton member)",
+false,
+"sdk-mips-index_wrapper > delegated_puzzle_feeder > singleton_member"
+],
+"365857ff21b5e7b43f53adda8b4671bd98cba945": [
+"VAULT",
+"vault singleton, 1 of n",
+false,
+"singleton_top_layer_v1_1 > sdk-mips-index_wrapper > delegated_puzzle_feeder > 1_of_n"
+],
+"aae9ba93d023de5fafa9b1cbf5168af013fb55ee": [
+"VAULT",
+"1 of n, not in a singleton",
+true,
+"sdk-mips-index_wrapper > delegated_puzzle_feeder > 1_of_n"
+],
+"8efdffd60c5f6ab93765e26b2506a12f68e2f144": [
+"VAULT",
+"vault singleton, m of n",
+false,
+"singleton_top_layer_v1_1 > sdk-mips-index_wrapper > delegated_puzzle_feeder > m_of_n"
+],
+"36ff110e6cb83e776f0153d8f3a4e786e1f52267": [
+"SLOT_MACHINE",
+"slot",
+false,
+"* > slot_machine_rue-singleton-slot"
+],
+"a8d84d3326524208e79c8328153335ad7899b6c5": [
+"SLOT_MACHINE",
+"action singleton with reserve",
+true,
+"singleton_top_layer_v1_1 > slot_machine_rue-singleton-action > * > slot_machine_rue-singleton-reserve_finalizer"
+],
+"51f763327b767bcc62f45a0caa4ac77bb9690c39": [
+"SLOT_MACHINE",
+"action singleton",
+true,
+"singleton_top_layer_v1_1 > slot_machine_rue-singleton-action > * > slot_machine_rue-singleton-finalizer"
+],
+"3e7c50ea8b331ef845411018f94895f61a1c46c5": [
+"SLOT_MACHINE",
+"action singleton 9121874f",
+true,
+"singleton_top_layer_v1_1 > slot_machine_rue-singleton-action > * > ?9121874f"
+],
+"9bbc790c03e09edc6e08fb8c5123aa539a7a9299": [
+"SLOT_MACHINE",
+"CAT action 5b4289f5",
+true,
+"cat_v2 > slot_machine_rue-singleton-action > * > ?5b4289f5"
+],
+"8d678cfa6034167af7a8e0d756fd4bbd23da2a1c": [
+"SLOT_MACHINE",
+"CAT action 63fff50f",
+true,
+"cat_v2 > slot_machine_rue-singleton-action > * > ?63fff50f"
+],
+"3303434fa6d80dba54cac47b6055645b681e3176": [
+"SLOT_MACHINE",
+"state scheduler",
+false,
+"singleton_top_layer_v1_1 > slot_machine_rue-singleton-state_scheduler"
+],
+"dfe69be8e922b5924bca968fd27b8c421944a0f7": [
+"SLOT_MACHINE",
+"action singleton, unidentified finalizer",
+true,
+"singleton_top_layer_v1_1 > slot_machine_rue-singleton-action > * > *"
+],
+"f797584ffba70eafc67a2791b5b536569de8195d": [
+"WARP_GREEN",
+"portal receiver",
+false,
+"singleton_top_layer_v1_1 > * > warp-portal_receiver"
+],
+"4874d2510d73cc6bf899b364d4c23b4a972c4d81": [
+"WARP_GREEN",
+"message coin",
+false,
+"* > warp-message_coin"
+],
+"0fbca58ca652f6e208e9907d9cf1f7f84d8831d2": [
+"DIG",
+"datalayer store (delegation layer)",
+true,
+"singleton_top_layer_v1_1 > nft_state_layer > dig_datalayer-delegation_layer"
+],
+"92f24f4a159ae78f989c894ffa37e9465c4e7f25": [
+"OPTION_CONTRACT",
+"standard transaction",
+false,
+"singleton_top_layer_v1_1 > chip_0045-option_contract > p2_delegated_puzzle_or_hidden_puzzle"
+],
+"a6f190f8c37c3143343f2491683659080a947559": [
+"OPTION_CONTRACT",
+"settlement payments",
+false,
+"singleton_top_layer_v1_1 > chip_0045-option_contract > settlement_payments"
+],
+"2eb0ec9bf3606a65037d7cff6ce0433b9331bfac": [
+"OPTION_CONTRACT",
+"inner puzzle not curried",
+true,
+"singleton_top_layer_v1_1 > chip_0045-option_contract"
+],
+"3e50f74b32fdb6ea68c2b690acb5f64212f38922": [
+"OPTION_CONTRACT",
+"1 of n",
+false,
+"singleton_top_layer_v1_1 > chip_0045-option_contract > p2_1_of_n"
+],
+"edd7a4d51e783c79f40cccd0ffee01b69b9a31d1": [
+"FORGE",
+"pool",
+false,
+"singleton_top_layer_v1_1 > slot_machine_rue-singleton-action > * > forge_v16-forge_multi_reserve_finalizer > forge_v16-forge_reserve_amount"
+],
+"59cb24a1d453f6544bd9e6f24f925317bd8b6500": [
+"FORGE",
+"CAT reserve launcher",
+false,
+"cat_v2 > forge_v16-forge_reserve_launcher"
+],
+"b361805af10c35f66cdfef645f087d587a714d1b": [
+"REWARD_DIST",
+"CAT pay to parent (Rue)",
+false,
+"cat_v2 > reward_distributor-p2_parent_v2 > slot_machine_rue-default_puzzles-default_cat_maker"
+],
+"218b9bb5898b4e111c226a00c11ad42297dab171": [
+"REWARD_DIST",
+"CAT pay to next epoch",
+false,
+"cat_v2 > reward_distributor_rue-p2_next_reward_distributor_epoch"
+],
+"e02e74eb284ce938a99e2c8131ebad0c9daee78f": [
+"REWARD_DIST",
+"CAT pay to parent (Chialisp)",
+false,
+"cat_v2 > reward_distributor-p2_parent_v2 > slot_machine-default_puzzles-default_cat_maker"
+],
+"6621821009985004e90289ff3f75a691fb25d626": [
+"VC",
+"announced delegated puzzle (exigent metadata layer)",
+true,
+"singleton_top_layer_v1_1 > exigent_metadata_layer > p2_announced_delegated_puzzle"
+],
+"f52b4e4e2f92e279d45907acb1bf026095467e57": [
+"VC",
+"verified credential",
+false,
+"singleton_top_layer_v1_1 > exigent_metadata_layer > eml_transfer_program_covenant_adapter > covenant_layer > * > eml_covenant_morpher > eml_update_metadata_with_DID > revocation_layer"
+],
+"58af5bac16a448ca1da1d7b2c2c91b3531ab0ce6": [
+"VC",
+"unidentified outer 849d8852, verified credential",
+true,
+"singleton_top_layer_v1_1 > ?849d8852 > ?82d8ceb1 > eml_transfer_program_covenant_adapter > covenant_layer > * > eml_covenant_morpher > * > * > revocation_layer"
+],
+"b247d88c8c01125b3b8b93c8ad12da854063dc92": [
+"VC",
+"unidentified outer 849d8852, announced delegated puzzle",
+true,
+"singleton_top_layer_v1_1 > ?849d8852 > ?82d8ceb1 > p2_announced_delegated_puzzle"
+],
+"aa983fa42a2b615cce12ad50cd887daff2cf2b3a": [
+"TIBET_SWAP",
+"router v1 beta",
+false,
+""
+]
+}

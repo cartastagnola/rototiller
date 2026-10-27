@@ -16,6 +16,8 @@ from chia.wallet.util.debug_spend_bundle import debug_spend_bundle
 from chia.wallet.util.debug_spend_bundle import uncurry_dump
 
 from chia_rs import Program as RsProgram
+from chia_rs import G1Element, G2Element
+from chia_rs.sized_bytes import bytes32
 
 from clvm_tools_rs import binutils as binutils_rs
 
@@ -156,6 +158,23 @@ def update_catalog_file(path, target: dict, change):
     _replace_in_place(target, data)
 
 
+def layered_puzzle_tags(family: str, sub_puzzle_names: list, old_tags: list = None) -> list:
+    """Tags of an entry of layered_puzzles.json: the family (also when it is in puzzle_types.json),
+    then a tag for each known sub-puzzle, the last part of its name
+    ('--cni-nft_puzzles-nft_state_layer' -> 'nft_state_layer'). The tags of old_tags that are
+    not a family are kept: they were added by hand."""
+    tags = [family]
+    for name in sub_puzzle_names:
+        if name.startswith(('?', '(', 'not curried')):
+            continue  # unknown or not curried layer
+        tag = name.rsplit('-', 1)[-1]
+        if tag and not tag.startswith('unknown') and tag not in tags:
+            tags.append(tag)
+    families = {data['family'] for data in CONF.PUZZLE_TYPES.values()}
+    tags += [tag for tag in old_tags or [] if tag not in tags and tag not in families]
+    return tags
+
+
 def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
     """Save a layered puzzle combination to the appropriate JSON file.
 
@@ -210,6 +229,9 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
             "sub_puzzle_hashes": sub_hashes,
             "sub_puzzle_names": sub_names
         }
+        if not has_unknown:
+            # a new type is not in puzzle_types.json yet: UNKNOWN family
+            catalog[puzzle_key]["tags"] = layered_puzzle_tags('UNKNOWN', sub_names)
         return new_type, new_name, True
 
     with lock:
@@ -312,6 +334,155 @@ def save_unknown_puzzle(puzzle_hash: str, puzzle: PyProgram, example: str = None
             json.dump(CONF.UNKNOWN_PUZZLES, f, indent=4)
 
 
+G1_INFINITY = bytes(G1Element())  # c0 followed by 47 zero bytes
+TIMESTAMP_RANGE = (1_500_000_000, 2_500_000_000)  # an int in this range is shown also as a date
+
+
+def puzzle_hash_to_address(puzzle_hash: bytes) -> str:
+    from chia.util.bech32m import encode_puzzle_hash
+    return encode_puzzle_hash(bytes32(puzzle_hash), CONF.ADD_PREFIX)
+
+
+CHAIN_CHECKING = 'checking the chain...'
+
+
+def chain_lookup_hash(hash_hex: str) -> str:
+    """What 32 bytes are on chain: a coin id, a puzzle hash with coins, a hint of coins.
+    Empty if the node knows nothing about them (or does not answer). Slow: run it in a thread.
+    A popular puzzle hash returns all its coin records, it can take long."""
+    found = []
+    try:
+        record = RPC.call_rpc_node('get_coin_record_by_name', name='0x' + hash_hex)
+    except Exception:
+        record = None  # not a coin id: the node answers with an error
+    if record:
+        spent = (f"spent at height {record['spent_block_index']:,}" if record.get('spent')
+                 else 'unspent')
+        found.append(f"coin id: {UTILS.xch_amount(record['coin']['amount'])} XCH, created at height "
+                     f"{record['confirmed_block_index']:,}, {spent}")
+    for method, label in (('get_coin_records_by_puzzle_hash', 'puzzle hash'),
+                          ('get_coin_records_by_hint', 'hint')):
+        key = 'puzzle_hash' if label == 'puzzle hash' else 'hint'
+        try:
+            records = RPC.call_rpc_node(method, **{key: '0x' + hash_hex, 'include_spent_coins': True})
+        except Exception:
+            records = None
+        if records:
+            if label == 'puzzle hash':
+                found.append(f"address: {puzzle_hash_to_address(bytes.fromhex(hash_hex))}, "
+                             f"{len(records):,} coin{'s' * (len(records) != 1)}")
+            else:
+                found.append(f"hint of {len(records):,} coin{'s' * (len(records) != 1)}")
+    return ' | '.join(found)
+
+
+def unknown_hashes_in_arg(arg: PyProgram, cat_names: dict = None) -> list:
+    """The 32 byte atoms of a curried arg (also inside a list) that are not a known puzzle
+    or a CAT asset id: the ones to look up on chain with chain_lookup_hash"""
+    hashes, stack = [], [arg]
+    while stack:
+        n = stack.pop()
+        if n.pair is not None:
+            # a curried or known puzzle is not data
+            if compare_to_known_puzzles(n.get_tree_hash().hex()) != CONF.UNKNOWN_PUZZLE:
+                continue
+            if n.uncurry()[0] != n:
+                continue
+            stack += [PyProgram.to(n.pair[1]), PyProgram.to(n.pair[0])]
+        elif len(n.atom) == 32:
+            h = n.atom.hex()
+            if compare_to_known_puzzles(h) == CONF.UNKNOWN_PUZZLE and h not in (cat_names or {}):
+                hashes.append(h)
+    return hashes
+
+
+def _short_atom_type(atom: bytes, cat_names: dict = None, chain: dict = None) -> str:
+    """Type of an atom in a few words, with what it is when known (for lists)"""
+    kind, meaning = _describe_atom(atom, cat_names, chain)
+    if not meaning or meaning == CHAIN_CHECKING or kind != 'hash 32':
+        return kind
+    if meaning.startswith(('mod or puzzle: ', 'CAT asset id: ')):
+        return f"{kind} = {meaning.split(': ', 1)[1]}"
+    # on chain: only what it is (coin id, address, hint), the details are too long for a list
+    return f"{kind} = " + ', '.join(part.split(':')[0].split(' of ')[0] for part in meaning.split(' | '))
+
+
+def _describe_atom(atom: bytes, cat_names: dict = None, chain: dict = None):
+    size = len(atom)
+    if size == 0:
+        return 'nil', ''
+    if size == 32:
+        name = compare_to_known_puzzles(atom.hex())
+        if name != CONF.UNKNOWN_PUZZLE:
+            return 'hash 32', f"mod or puzzle: {name}"
+        cat = (cat_names or {}).get(atom.hex())
+        if cat:
+            return 'hash 32', f"CAT asset id: {cat}"
+        # looked up on chain by the screen: None while it runs, '' if nothing was found
+        found = (chain or {}).get(atom.hex(), '')
+        return 'hash 32', CHAIN_CHECKING if found is None else found
+    if size == 48:
+        if atom == G1_INFINITY:
+            # a valid point, but no key: anyone can sign for it
+            return 'pubkey 48', 'infinity point (empty key)'
+        try:
+            G1Element.from_bytes(atom)
+            return 'pubkey 48', 'valid BLS public key'
+        except Exception:
+            return 'bytes 48', 'not a valid BLS public key'
+    if size == 96:
+        try:
+            G2Element.from_bytes(atom)
+            return 'signature 96', 'valid BLS signature'
+        except Exception:
+            return 'bytes 96', 'not a valid BLS signature'
+    if size >= 3 and all(32 <= b < 127 for b in atom):
+        return 'text', atom.decode()
+    if size <= 8:
+        value = int.from_bytes(atom, 'big', signed=True)
+        if TIMESTAMP_RANGE[0] <= value <= TIMESTAMP_RANGE[1]:
+            return 'int', f"{value:,}, as date: {UTILS.timestamp_to_date(value)}"
+        return 'int', f"{value:,}"
+    return f"bytes {size}", ''
+
+
+def describe_curried_arg(arg: PyProgram, cat_names: dict = None, chain: dict = None):
+    """Return (type, meaning) of a curried arg: hash 32 (with the name of a known mod, the
+    CAT name of an asset id, or what it is on chain), pubkey 48, signature 96, int, text, list,
+    puzzle (a curried puzzle or a known one).
+    cat_names: asset id hex -> 'name (TICKER)'
+    chain: hash hex -> chain_lookup_hash result, None while the lookup runs"""
+    if arg.pair is None:
+        return _describe_atom(arg.atom, cat_names, chain)
+
+    arg_hash = arg.get_tree_hash()
+    name = compare_to_known_puzzles(arg_hash.hex())
+    # a known puzzle keeps its name: uncurry also splits a puzzle that is not curried,
+    # e.g. settlement payments `(a (q . code) 1)` gives its code as a mod with no args
+    if name == CONF.UNKNOWN_PUZZLE:
+        mod, _ = arg.uncurry()
+        if mod != arg:
+            name = compare_to_known_puzzles(mod.get_tree_hash().hex())
+    if name != CONF.UNKNOWN_PUZZLE:
+        return 'puzzle', f"{name}, address: {puzzle_hash_to_address(arg_hash)}"
+
+    # a list (or pairs): the type of its first atoms
+    items, node = 0, arg
+    while node.pair is not None:
+        items += 1
+        node = node.pair[1]
+    kind = f"list ({items})" if node.atom == b'' else 'pairs'
+    atoms, stack = [], [arg]
+    while stack and len(atoms) < 5:
+        n = stack.pop()
+        if n.pair is not None:
+            stack += [n.pair[1], n.pair[0]]
+        else:
+            atoms.append(n.atom)
+    leaves = [_short_atom_type(a, cat_names, chain) for a in atoms if a != b'']
+    return kind, ', '.join(leaves) + (', ...' if stack else '')
+
+
 def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None, path: list = None):
     """Recursive function to uncurry a puzzle to list all the puzzles used and their parameters"""
     if array is None:
@@ -337,7 +508,9 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         "hash": None,
         "puzz_name": None,
         "disassembly": None,
-        "args": []
+        "puzzle_hash": puzzle_hash,  # hash of the puzzle at this level, curried args included
+        "args": [],
+        "arg_hex": []  # the curried args serialized, for describe_curried_arg
     }
 
     if mod != puzzle and puzzle_name == CONF.UNKNOWN_PUZZLE:
@@ -357,6 +530,7 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         # Recursively capture arguments and store in the node
         count = 0
         for arg in curried_args.as_iter():
+            node["arg_hex"].append(bytes(arg).hex())
             arg_hash = arg.get_tree_hash().hex()
             arg_name = compare_to_known_puzzles(arg_hash)
             if arg_name != CONF.UNKNOWN_PUZZLE:

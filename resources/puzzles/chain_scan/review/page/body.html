@@ -1,0 +1,41 @@
+<div class="wrap">
+  <header class="bar">
+    <div class="titleline">
+      <h1>Puzzle names review</h1>
+      <span class="scheme" id="scheme">&lt;TAG&gt;[_VERSION][_RUE]: &lt;what it does&gt;</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-v="names" aria-selected="true">Names <span class="tcount" id="tnames"></span></button>
+      <button class="tab" role="tab" data-v="tags" aria-selected="false">Project tags <span class="tcount" id="ttags"></span></button>
+      <button class="tab" role="tab" data-v="format" aria-selected="false">Name format</button>
+      <button class="tab" role="tab" data-v="families" aria-selected="false">Families</button>
+      <button class="tab" role="tab" data-v="ptags" aria-selected="false">Puzzle tags</button>
+    </nav>
+    <div class="progress">
+      <span id="pcount">0 of 0 reviewed</span>
+      <div class="meter" aria-hidden="true"><i class="m-ok" id="mok"></i><i class="m-ch" id="mch"></i></div>
+      <span id="pok"></span><span id="pch"></span><span id="pst" hidden></span>
+    </div>
+    <div class="controls">
+      <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" data-f="todo" aria-pressed="false">To review</button>
+      <button class="chip" data-f="ok" aria-pressed="false">OK</button>
+      <button class="chip" data-f="change" aria-pressed="false">Change</button>
+      <button class="chip" data-f="stale" aria-pressed="false">Changed after OK</button>
+      <button class="chip" data-f="notes" aria-pressed="false">With notes</button>
+      <button class="chip" data-f="unsure" aria-pressed="false">Guessed</button>
+      <button class="chip" data-f="saved" aria-pressed="false">Already named</button>
+      <button class="chip" data-f="tagchg" aria-pressed="false">Project tag changed</button>
+      <span class="sortsel" id="tagSort">Order:
+        <button class="chip" data-s="use" aria-pressed="true">Most used</button>
+        <button class="chip" data-s="name" aria-pressed="false">Name</button>
+      </span>
+      <select id="ptFilter" class="ptfilter" aria-label="Filter by puzzle tag"></select>
+      <input id="q" type="search" placeholder="Search names, files, notes" aria-label="Search">
+    </div>
+    <div id="applyPanel" hidden></div>
+    <div class="status" id="status">Connecting to the review store…</div>
+    <div class="keys"><kbd>j</kbd>/<kbd>k</kbd> move · <kbd>o</kbd> OK · <kbd>c</kbd> change · <kbd>n</kbd> note · <kbd>m</kbd> move · <kbd>u</kbd> clear · <kbd>Esc</kbd> leave a field</div>
+  </header>
+  <main id="list"></main>
+</div>

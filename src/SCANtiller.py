@@ -156,10 +156,13 @@ def puzzle_type_key(name: str) -> str:
 
 
 def save_known_puzzle(puzzle_key: str, sub_puzzle_hashes: list, sub_puzzle_names: list,
-                      name: str, family: str, example_coin_id: str = None):
+                      name: str, family: str, example_coin_id: str = None, tags: list = None):
     """Add or rename a puzzle in layered_puzzles.json, an empty name removes it.
     The family goes in puzzle_types.json with a type made from the name, a puzzle that
     already has a type with the same family keeps it (eg: a new variant of NFT_V1).
+    The family is also the first tag of the entry (PUZ.layered_puzzle_tags), the tags added
+    by hand stay. With tags (eg: from the names review page) the entry gets exactly these
+    tags, after the family.
     The files are read from disk and only this entry changes, the edits made by hand stay.
     Raise ValueError if a file is not valid json."""
     with CONF.LAYERED_PUZZLES_LOCK:
@@ -188,11 +191,14 @@ def save_known_puzzle(puzzle_key: str, sub_puzzle_hashes: list, sub_puzzle_names
             types[puzzle_type] = {'name': name, 'family': family}
 
         def add_entry(layered: dict):
+            old_tags = layered.get(puzzle_key, {}).get('tags')
             entry = {
                 'puzzle_type': puzzle_type,
                 'name': name,
                 'sub_puzzle_hashes': sub_puzzle_hashes,
                 'sub_puzzle_names': sub_puzzle_names,
+                'tags': (list(dict.fromkeys([family] + list(tags))) if tags is not None
+                         else PUZ.layered_puzzle_tags(family, sub_puzzle_names, old_tags)),
             }
             if example_coin_id:
                 entry['example_coin_id'] = example_coin_id

@@ -1,7 +1,7 @@
 {
     "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726|025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
         "puzzle_type": "NFT_V1",
-        "name": "NFT 1.0 - p2_delegated or hidden puzzle",
+        "name": "NFT_V1 - standard transaction",
         "sub_puzzle_hashes": [
             "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
             "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
@@ -10,16 +10,25 @@
             "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
         ],
         "sub_puzzle_names": [
-            "--singleton_top_layer_v1_1",
-            "--nft_puzzles-nft_state_layer",
-            "--nft_puzzles-nft_ownership_layer",
-            "--nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
-            "--p2_delegated_puzzle_or_hidden_puzzle"
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-nft_puzzles-nft_state_layer",
+            "--cni-nft_puzzles-nft_ownership_layer",
+            "--cni-nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "f441bfeaf7813ac3b867190a4b6e11840954a5e1ebe51c72fd0fbb7ba518e626",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "nft_state_layer",
+            "nft_ownership_layer",
+            "nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "p2_delegated_puzzle_or_hidden_puzzle"
         ]
     },
     "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726|025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f|cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
         "puzzle_type": "NFT_V1",
-        "name": "NFT 1.0 - settlement payments",
+        "name": "NFT_V1 - settlement payments",
         "sub_puzzle_hashes": [
             "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
             "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
@@ -28,16 +37,25 @@
             "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
         ],
         "sub_puzzle_names": [
-            "--singleton_top_layer_v1_1",
-            "--nft_puzzles-nft_state_layer",
-            "--nft_puzzles-nft_ownership_layer",
-            "--nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
-            "--settlement_payments"
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-nft_puzzles-nft_state_layer",
+            "--cni-nft_puzzles-nft_ownership_layer",
+            "--cni-nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "--cni-settlement_payments"
+        ],
+        "example_coin_id": "cd36053da17f2c3bffd294f41dfdbc1d669eb31265e92166f6128fbea877b7f8",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "nft_state_layer",
+            "nft_ownership_layer",
+            "nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "settlement_payments"
         ]
     },
     "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
         "puzzle_type": "NFT_V1",
-        "name": "NFT 1.0 - no ownership layer - p2_delegated or hidden puzzle",
+        "name": "NFT_V1 - no ownership layer, standard transaction",
         "sub_puzzle_hashes": [
             "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
             "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
@@ -48,7 +66,13 @@
             "--cni-nft_puzzles-nft_state_layer",
             "--cni-p2_delegated_puzzle_or_hidden_puzzle"
         ],
-        "example_coin_id": "9ea12b74640ea18a1662b8973775fb519f792f95f05c78c9396e42b0bbef2fd4"
+        "example_coin_id": "e9676e8ce096c5be27dee2fbf2120054d206e4df2de9ef59c24a651d3c558c95",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "nft_state_layer",
+            "p2_delegated_puzzle_or_hidden_puzzle"
+        ]
     },
     "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
         "puzzle_type": "STD_TRANSACTION",
@@ -58,30 +82,46 @@
         ],
         "sub_puzzle_names": [
             "--p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "tags": [
+            "STD",
+            "p2_delegated_puzzle_or_hidden_puzzle"
         ]
     },
     "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
         "puzzle_type": "CAT_V2",
-        "name": "CAT V2 - p2_delegated or hidden puzzle",
+        "name": "CAT_V2 - standard transaction",
         "sub_puzzle_hashes": [
             "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
             "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
         ],
         "sub_puzzle_names": [
-            "--cat_puzzles-cat_v2",
-            "--p2_delegated_puzzle_or_hidden_puzzle"
+            "--cni-cat_puzzles-cat_v2",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "864a9803feb1b703d0f81df94b3c794b3b976a462b670057f35f5d71f13d4f8f",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_delegated_puzzle_or_hidden_puzzle"
         ]
     },
     "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
         "puzzle_type": "CAT_V2",
-        "name": "CAT V2 - settlement payments",
+        "name": "CAT_V2 - settlement payments",
         "sub_puzzle_hashes": [
             "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
             "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
         ],
         "sub_puzzle_names": [
-            "--cat_puzzles-cat_v2",
-            "--settlement_payments"
+            "--cni-cat_puzzles-cat_v2",
+            "--cni-settlement_payments"
+        ],
+        "example_coin_id": "1c928e14118f8744d02429789f6b9156bf847305ffdcec0c61416a20f823ad6a",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "settlement_payments"
         ]
     },
     "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9": {
@@ -94,11 +134,16 @@
         "sub_puzzle_names": [
             "--mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
             "--mips_puzzles-member_puzzles-singleton_member"
+        ],
+        "tags": [
+            "SINGLETON",
+            "delegated_puzzle_feeder",
+            "singleton_member"
         ]
     },
     "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d|aa334c2cd5a112871498357aec327922aabd3a08f49b06e3193652c614742925": {
         "puzzle_type": "TIBET_SINGLETON_LIQUIDITY_PAIR",
-        "name": "TIBET SINGLETON LIQUIDITY PAIR",
+        "name": "TIBET_SWAP - liquidity pair v1",
         "sub_puzzle_hashes": [
             "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
             "6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d",
@@ -108,11 +153,18 @@
             "--cni-singleton_top_layer_v1_1",
             "--tibet-p2_merkle_tree_modified",
             "--tibet-pair_inner_puzzle"
+        ],
+        "example_coin_id": "1daf8ff1c869be945171059defbb1d6323a6c2f4a607fdf2bf93b08ceaa4b638",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "p2_merkle_tree_modified",
+            "pair_inner_puzzle"
         ]
     },
     "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd|a8490702e333ddd831a3ac9c22d0fa26d2bfeaf2d33608deb22f0e0123eb0494": {
         "puzzle_type": "PLOTNFT",
-        "name": "PlotNFT - pool member",
+        "name": "PLOTNFT - pool member",
         "sub_puzzle_hashes": [
             "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd",
             "a8490702e333ddd831a3ac9c22d0fa26d2bfeaf2d33608deb22f0e0123eb0494"
@@ -121,11 +173,16 @@
             "--cni-singleton_top_layer",
             "--cni-pool_puzzles-pool_member_innerpuz"
         ],
-        "example_coin_id": "1bac954ef29fa4527f45d6c40edb6ca7be1a331e85ecfa3d38f9a4d4639b08cd"
+        "example_coin_id": "7ab80f63a962d57f39ec1eae1408b345dc8abe317d8895fe84f07bcc0d65215d",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer",
+            "pool_member_innerpuz"
+        ]
     },
     "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd|a317541a765bf8375e1c6e7c13503d0d2cbf56cacad5182befe947e78e2c0307": {
         "puzzle_type": "PLOTNFT",
-        "name": "PlotNFT - waiting room",
+        "name": "PLOTNFT - waiting room",
         "sub_puzzle_hashes": [
             "24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd",
             "a317541a765bf8375e1c6e7c13503d0d2cbf56cacad5182befe947e78e2c0307"
@@ -134,7 +191,12 @@
             "--cni-singleton_top_layer",
             "--cni-pool_puzzles-pool_waitingroom_innerpuz"
         ],
-        "example_coin_id": "370d3f0bff6e39999faeb7879adb2d780f2f9ec4558f516b30039365edbaca6b"
+        "example_coin_id": "978a0e8d34bb60898f877331bb52f5c63c9a8908fdae61e9e0569854c830c7f2",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer",
+            "pool_waitingroom_innerpuz"
+        ]
     },
     "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
         "puzzle_type": "type_auto_layered_01",
@@ -144,6 +206,2096 @@
         ],
         "sub_puzzle_names": [
             "--cni-settlement_payments"
+        ],
+        "tags": [
+            "UNKNOWN",
+            "settlement_payments"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657|9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9": {
+        "puzzle_type": "CAT_V2_PAY_TO_VAULT_SINGLETON_MEMBER",
+        "name": "CAT_V2 - pay to vault (singleton member)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657",
+            "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd",
+            "6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--sdk-mips-index_wrapper",
+            "--cni-mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
+            "--cni-mips_puzzles-member_puzzles-singleton_member"
+        ],
+        "example_coin_id": "6f1c289ec324e8c0f42a777d6fa8803280837d40a9cb6f0bffadd471098eeb4e",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "index_wrapper",
+            "delegated_puzzle_feeder",
+            "singleton_member"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|00848115554ea674131f89f311707a959ad3f4647482648f3fe91ba289131f51": {
+        "puzzle_type": "CAT_V2_REVOCABLE_REVOCATION_LAYER",
+        "name": "CAT_V2 - revocable (revocation layer)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "00848115554ea674131f89f311707a959ad3f4647482648f3fe91ba289131f51"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--cni-vc_puzzles-revocation_layer"
+        ],
+        "example_coin_id": "ede3416ed7457b2342a5338358fff86f97db36a7a78494f3bd5338b5c7196e8a",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "revocation_layer"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|0ff94726f1a8dea5c3f70d3121945190778d3b2b3fcda3735a1f290977e98341": {
+        "puzzle_type": "CAT_V2_DELEGATED_CONDITIONS",
+        "name": "CAT_V2 - delegated conditions",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "0ff94726f1a8dea5c3f70d3121945190778d3b2b3fcda3735a1f290977e98341"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--cni-p2_delegated_conditions"
+        ],
+        "example_coin_id": "e290bb992244118dcfe293075207895910b496b2f29871e44b647b43b109ed92",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_delegated_conditions"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|2c78140b52765a1c063062775d31a33a452410e9777c01270c1001db6e821f37": {
+        "puzzle_type": "WARP_GREEN_MINT_AND_PAYOUT_CAT_V2",
+        "name": "WARP_GREEN - mint and payout (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "2c78140b52765a1c063062775d31a33a452410e9777c01270c1001db6e821f37"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--warp-wrapped_assets-cat_mint_and_payout"
+        ],
+        "example_coin_id": "6e02ceac19265ec7c75673c6a83c512e2c819d2664ddc0fc9e3f52b881df2f6f",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "cat_mint_and_payout"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|98613dc610e59041506a95117fb6d22f1341e445738357ca9cac1c5b6658f56a|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "98613dc610e59041506a95117fb6d22f1341e445738357ca9cac1c5b6658f56a",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?98613dc6",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "d1745a0741bea373da774f112ea435cce77e69a396fa2645a2d2061132ff0ea2",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|898f6523d50073c29b62afb5172e9d001d3a8f0648fcc5a6c06beed592a6f296|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "898f6523d50073c29b62afb5172e9d001d3a8f0648fcc5a6c06beed592a6f296",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?898f6523",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "bb986fdd983dec6f0e3185801ae1ab9de7294c355ff74c377e9f80600b751a5e",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|0dd6e6d3011155e1a6a1e3634c525baf156342e577b61901ef496b7c2f664f34|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "0dd6e6d3011155e1a6a1e3634c525baf156342e577b61901ef496b7c2f664f34",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?0dd6e6d3",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "aac63286067aa45d7cc18175858d36386d56f664851a1f211af3e9435e4ffefc",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|42d2731b52d9c5d780430782fc4adbcba248b011317d0dcf997d0556183cba78|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "42d2731b52d9c5d780430782fc4adbcba248b011317d0dcf997d0556183cba78",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?42d2731b",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "84c2bcbca81fa4e6a750ad43b4689f34e9551383edf62e8a727b51b3fa61efe6",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|7a290225cced3d169af40dc9149f57c4647dc718cf33ec0053ca4fb7d0a612fe|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "7a290225cced3d169af40dc9149f57c4647dc718cf33ec0053ca4fb7d0a612fe",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?7a290225",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "eb1cb9038639177003583df2d42f8c1e0cfef2f2e3aafaa0297ff065d17287c8",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|ebc5f70cc58ab99d4b0daff5df7d3c532dc87c5abf8b624e3d3a3adb624c7be3|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "ebc5f70cc58ab99d4b0daff5df7d3c532dc87c5abf8b624e3d3a3adb624c7be3",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?ebc5f70c",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "ec102a5ab82957676800c1469c160007fc4a64f5c0ea47d3283a54cbe05e93ff",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|f9591e4d41260205e8070a0e738d1126da03925c4155d5b4e7149d3d42ea690c|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "f9591e4d41260205e8070a0e738d1126da03925c4155d5b4e7149d3d42ea690c",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?f9591e4d",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "e6db04ab1a01710ddaa64a374896d40f90aec7e527dda95ee4ab0cd2eeb9f098",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|14c9b3ddf4bdd6a2d5bc480f7f40a81d675a272b07cd2c7c7ee0128b6a21d5b2|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "14c9b3ddf4bdd6a2d5bc480f7f40a81d675a272b07cd2c7c7ee0128b6a21d5b2",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?14c9b3dd",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "992d2d7a5e47bba7a8f5979fccf905325f0a8abae24556b556f57358e70feb37",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|5ad7b6f824f028cf6398aaa403294b08de8872ae1ab243e2322f674b08cc46ef|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "5ad7b6f824f028cf6398aaa403294b08de8872ae1ab243e2322f674b08cc46ef",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?5ad7b6f8",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "62526159c29882268f2bec65ab7c6db5c7c2d381ff9466cf23b242a564bba048",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|2b027bd5bc690e49f3c53a490134c7eae4fea39be29414461e98943ae2da38de|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "2b027bd5bc690e49f3c53a490134c7eae4fea39be29414461e98943ae2da38de",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?2b027bd5",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "5bf4b5081a0798b1556bc84da216fd8ac99f2af54f45281c2dce31412b7d95c1",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|beee27234aa2cc3b2f0f467c8e8767fba2a292731e915e62b9f8f00f2c3dca96|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "beee27234aa2cc3b2f0f467c8e8767fba2a292731e915e62b9f8f00f2c3dca96",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?beee2723",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "aa2b4fb56d9d9204158f83b1ef03edf09647cd0e0af781dfc2c34d2012f7b45c",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|9fe804e810c7e53a5837d763337852589f4e3c8a0d42824d50b75677f84943fe|69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90": {
+        "puzzle_type": "WARP_GREEN_BURN_CAT_V2",
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "9fe804e810c7e53a5837d763337852589f4e3c8a0d42824d50b75677f84943fe",
+            "69b9ac68db61a9941ff537cbb69158a7e1015ad44c42cff905159909cd8e1f90"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?9fe804e8",
+            "--warp-wrapped_assets-burn_inner_puzzle"
+        ],
+        "example_coin_id": "63319011c3927dc3d3891f7bf5be2b06741add32c23d1fdb1e4c139002a2f1af",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "burn_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|2a3922ea385178c37687a958ab9b51d698888ba6bd8782e7b6c97a771b130aa3|001521c2b8fff83342ca0e79e87e911d5d693ffafcd40b167acd855ea06a7120|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "puzzle_type": "CIRCUIT_SAVINGS_VAULT_CAT_V2",
+        "name": "CIRCUIT - savings vault (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "2a3922ea385178c37687a958ab9b51d698888ba6bd8782e7b6c97a771b130aa3",
+            "001521c2b8fff83342ca0e79e87e911d5d693ffafcd40b167acd855ea06a7120",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?2a3922ea",
+            "--circuit-circuit_puzzles-savings_vault",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "8a3b2995df45cc22407041286f3b3e424498da9303d0e8fdc43bc37bdff99288",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "savings_vault",
+            "p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|6253104cf7de1bcbbd34cd10897794737db32fcf9d57bfa9bec13c741fb4c8d2|667f7348deb7f8510d0df470c285c3de1070099ac6a0ede53d637369c5f75139": {
+        "puzzle_type": "CIRCUIT_SURPLUS_AUCTION_CAT_V2",
+        "name": "CIRCUIT - surplus auction (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "6253104cf7de1bcbbd34cd10897794737db32fcf9d57bfa9bec13c741fb4c8d2",
+            "667f7348deb7f8510d0df470c285c3de1070099ac6a0ede53d637369c5f75139"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?6253104c",
+            "--circuit-circuit_puzzles-surplus_auction"
+        ],
+        "example_coin_id": "fcf11f0086036f835d14e3a9665f9664adcc933949737c4a20d75a9fff7eca97",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "surplus_auction"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|31c9645b0d56025da61cb10c0dc64146d08b8dd6463bdc3d1ab9ba165437d291|b63f601cf3dceafe608ddef1537d7fde2ee00dd40d4d15a573c4bfba38b93c5e": {
+        "puzzle_type": "CIRCUIT_GOVERNANCE_CAT_V2",
+        "name": "CIRCUIT - governance (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "31c9645b0d56025da61cb10c0dc64146d08b8dd6463bdc3d1ab9ba165437d291",
+            "b63f601cf3dceafe608ddef1537d7fde2ee00dd40d4d15a573c4bfba38b93c5e"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?31c9645b",
+            "--circuit-circuit_puzzles-governance"
+        ],
+        "example_coin_id": "cddea9fceabbc654d406ce129fa9bab685c3b2b8bdcc23db5315cd513d2709f1",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "governance"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|2a3b7b0000d04246c67b88a57e258acc98379f5c0c3fefc8beeba500874d6150|ab3ecb4927c417e1085f78e4b73e7ada2ccfad240f3150db1d0344d6bc59ebae": {
+        "puzzle_type": "CIRCUIT_PAYOUT_CAT_V2",
+        "name": "CIRCUIT - payout (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "2a3b7b0000d04246c67b88a57e258acc98379f5c0c3fefc8beeba500874d6150",
+            "ab3ecb4927c417e1085f78e4b73e7ada2ccfad240f3150db1d0344d6bc59ebae"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?2a3b7b00",
+            "--circuit-circuit_puzzles-payout"
+        ],
+        "example_coin_id": "5986226e997dd2306a6ef8854d7fee0693ffd639f9f50ae6f0fedd111f804927",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "payout"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|39ec78540a147b1db01bee46d0d15af7a6aa099cd06749a686d71eb6ba157568": {
+        "puzzle_type": "CIRCUIT_GOVERNANCE_LAUNCHER_CAT_V2",
+        "name": "CIRCUIT - governance launcher (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "39ec78540a147b1db01bee46d0d15af7a6aa099cd06749a686d71eb6ba157568"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--circuit-circuit_puzzles-governance_launcher"
+        ],
+        "example_coin_id": "7957e3785d3d36426cc5d7ca416d39a4f811553bf8741dd4af50f6d42912ab8b",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "governance_launcher"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|81e0cc376e53e97da0ee154992a3554aa679b8818c88dc54b1fb4c2463c0c786|8758641e39505ccc42ca3e7c82ccf7cf6158b0063b7b77bee1fdb7df10b0ec3d": {
+        "puzzle_type": "CIRCUIT_RECHARGE_AUCTION_CAT_V2",
+        "name": "CIRCUIT - recharge auction (CAT_V2)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "81e0cc376e53e97da0ee154992a3554aa679b8818c88dc54b1fb4c2463c0c786",
+            "8758641e39505ccc42ca3e7c82ccf7cf6158b0063b7b77bee1fdb7df10b0ec3d"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?81e0cc37",
+            "--circuit-circuit_puzzles-recharge_auction"
+        ],
+        "example_coin_id": "a3b0e5dd0550aa332d42d743dc1233841a5e97119b6e795d8a4813dcd2e07aab",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "recharge_auction"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
+        "puzzle_type": "NFT_V1_NO_OWNERSHIP_LAYER_SETTLEMENT_PAYMENTS",
+        "name": "NFT_V1 - no ownership layer, settlement payments",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
+            "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-nft_puzzles-nft_state_layer",
+            "--cni-settlement_payments"
+        ],
+        "example_coin_id": "3389de54852cd1a22153d452f2d91fb1f9cd023a0f0f7c5b4cf60a65c15bbcce",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "nft_state_layer",
+            "settlement_payments"
+        ]
+    },
+    "72dec062874cd4d3aab892a0906688a1ae412b0109982e1797a170add88bdcdc|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "puzzle_type": "CAT_V1_STANDARD_TRANSACTION",
+        "name": "CAT_V1 - standard transaction",
+        "sub_puzzle_hashes": [
+            "72dec062874cd4d3aab892a0906688a1ae412b0109982e1797a170add88bdcdc",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--chia_blockchain_cat_v1-cat",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "98736e72a0bee80f5c1f27b53005f9feaec11fa91d4a16e629900a3e003bf01a",
+        "tags": [
+            "CAT",
+            "cat",
+            "p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "72dec062874cd4d3aab892a0906688a1ae412b0109982e1797a170add88bdcdc|0ff94726f1a8dea5c3f70d3121945190778d3b2b3fcda3735a1f290977e98341": {
+        "puzzle_type": "CAT_V1_DELEGATED_CONDITIONS",
+        "name": "CAT_V1 - delegated conditions",
+        "sub_puzzle_hashes": [
+            "72dec062874cd4d3aab892a0906688a1ae412b0109982e1797a170add88bdcdc",
+            "0ff94726f1a8dea5c3f70d3121945190778d3b2b3fcda3735a1f290977e98341"
+        ],
+        "sub_puzzle_names": [
+            "--chia_blockchain_cat_v1-cat",
+            "--cni-p2_delegated_conditions"
+        ],
+        "example_coin_id": "d7728c7acc795b1c34759a126e021f3893b623e4a3c034db76b2df8878a90fbf",
+        "tags": [
+            "CAT",
+            "cat",
+            "p2_delegated_conditions"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|33143d2bef64f14036742673afd158126b94284b4530a28c354fac202b0c910e|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "puzzle_type": "DID_V1_STANDARD_TRANSACTION",
+        "name": "DID_V1 - standard transaction",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "33143d2bef64f14036742673afd158126b94284b4530a28c354fac202b0c910e",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-did_puzzles-did_innerpuz",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "5f49ced37e6c9cd900c8b8162d980f6f59ef3b37c3035e2c291764069dac483f",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "did_innerpuz",
+            "p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|e889b0009716ec3ab166338a3785533b9c2c041f1c2e2346afe55bb1639c2904": {
+        "puzzle_type": "TIBET_SWAP_CAT_RESERVE_P2_SINGLETON_FLASHLOAN",
+        "name": "TIBET_SWAP - CAT reserve (p2 singleton flashloan)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "e889b0009716ec3ab166338a3785533b9c2c041f1c2e2346afe55bb1639c2904"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--tibet-p2_singleton_flashloan"
+        ],
+        "example_coin_id": "5a8b06281d1c58967aaf6359db9ef9ddb35925af273e92fd3141bfe9065be75c",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_singleton_flashloan"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d|23b0af536d92deddaa1b384e6d08bf1a9873f01ea970567cfb9b49a68dcd77c1": {
+        "puzzle_type": "TIBET_SWAP_LIQUIDITY_PAIR_V2",
+        "name": "TIBET_SWAP - liquidity pair v2",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d",
+            "23b0af536d92deddaa1b384e6d08bf1a9873f01ea970567cfb9b49a68dcd77c1"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--tibet-p2_merkle_tree_modified",
+            "--tibet-v2r_pair_inner_puzzle"
+        ],
+        "example_coin_id": "661d89b01b95a85bc675e357d2c344d0adf121cbad10c978e8e76af2b064fa8a",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "p2_merkle_tree_modified",
+            "v2r_pair_inner_puzzle"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d|f5b2e454f879ffbc231d7ec4aa8a61110788c628b744c027063eb753bee473f3": {
+        "puzzle_type": "TIBET_SWAP_LIQUIDITY_PAIR_V1_BETA_BEFORE_THE_APRIL_2023_FIX",
+        "name": "TIBET_SWAP - liquidity pair v1 beta (before the April 2023 fix)",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d",
+            "f5b2e454f879ffbc231d7ec4aa8a61110788c628b744c027063eb753bee473f3"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--tibet-p2_merkle_tree_modified",
+            "--tibet_v1_beta-pair_inner_puzzle"
+        ],
+        "example_coin_id": "ceb39f163766ca329fb55a837c848fef0b3cd4be4ae95eca7d1647b37d059d7b",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "p2_merkle_tree_modified",
+            "pair_inner_puzzle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|f28ec9bbf3da851ec00162fe5f189d873df9ee62370b43dcd8eba83093ff3cce": {
+        "puzzle_type": "TIBET_SWAP_CAT_RESERVE_V1_BETA",
+        "name": "TIBET_SWAP - CAT reserve v1 beta",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "f28ec9bbf3da851ec00162fe5f189d873df9ee62370b43dcd8eba83093ff3cce"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--tibet_v1_beta-p2_singleton_flashloan"
+        ],
+        "example_coin_id": "077213898f35f0ed10a43e3b213339e33592717ac49ab5b6dd33aa6af67db808",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_singleton_flashloan"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|1aa94924556f2dcd8355ffd1ef51bbea20f68422506245ff37ce5b1ca96ab868": {
+        "puzzle_type": "TIBET_SWAP_ROUTER_V1",
+        "name": "TIBET_SWAP - router v1",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "1aa94924556f2dcd8355ffd1ef51bbea20f68422506245ff37ce5b1ca96ab868"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--tibet-router"
+        ],
+        "example_coin_id": "018047b48538c2008cfbde1d012fa2b9417c4149534936d538f9bc27c7672432",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "router"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|c199c985c17b8569559cff57277530c0a5bbf288841f0da92693bb3743ad7801": {
+        "puzzle_type": "TIBET_SWAP_ROUTER_V1_BETA",
+        "name": "TIBET_SWAP - router v1 beta",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "c199c985c17b8569559cff57277530c0a5bbf288841f0da92693bb3743ad7801"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--tibet_v1_beta-router"
+        ],
+        "example_coin_id": "58d553e42b26ee9a37974ac12d47c2ed5aec8b99361c57e8fb82fb6a307cfdb5",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "router"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|78d6b0db0c5cc84349127b37683bc4d1d73ecb7f5b4f0db3554b5039887b6381": {
+        "puzzle_type": "TIBET_SWAP_ROUTER_V2",
+        "name": "TIBET_SWAP - router v2",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "78d6b0db0c5cc84349127b37683bc4d1d73ecb7f5b4f0db3554b5039887b6381"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--tibet-v2r_router"
+        ],
+        "example_coin_id": "3b5def738b4876e9981b51c70cdb785fbec58a12e1fa506e79cc825e9f07baa7",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "v2r_router"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "puzzle_type": "SINGLETON_STANDARD_TRANSACTION",
+        "name": "SINGLETON - standard transaction",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "927233ec5967174c46f3450d856596b6130566d1159ec9df53f56ecd91656a42",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|0f199d5263ac1a62b077c159404a71abd3f9691cc57520bf1d4c5cb501504457": {
+        "puzzle_type": "SINGLETON_MULTISIG_M_OF_N_KEYS",
+        "name": "SINGLETON - multisig (m of n keys)",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "0f199d5263ac1a62b077c159404a71abd3f9691cc57520bf1d4c5cb501504457"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-p2_m_of_n_delegate_direct"
+        ],
+        "example_coin_id": "1b1413aa498c4f7e3d36799af20f06ec058af7bd587d1d8b75102156498d8f6b",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "p2_m_of_n_delegate_direct"
+        ]
+    },
+    "423558462ea9a2ee0e7563c6e6998ec1585b7b04d191c21c7f3f1b80c5c1cad0|199398e932cb4a49f1f33ed0b35fb540260c4580c83f81d982ef231303fd0113": {
+        "puzzle_type": "CIRCUIT_ATOM_ANNOUNCER",
+        "name": "CIRCUIT - atom announcer",
+        "sub_puzzle_hashes": [
+            "423558462ea9a2ee0e7563c6e6998ec1585b7b04d191c21c7f3f1b80c5c1cad0",
+            "199398e932cb4a49f1f33ed0b35fb540260c4580c83f81d982ef231303fd0113"
+        ],
+        "sub_puzzle_names": [
+            "unknown_puzz_02",
+            "--circuit-circuit_puzzles-atom_announcer"
+        ],
+        "example_coin_id": "4845815b93f7fba622f8f03f0cd636184f3e18fbe156c7dba9f4962944073f7a",
+        "tags": [
+            "UNKNOWN",
+            "atom_announcer"
+        ]
+    },
+    "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55|2f977164be633bf58b7907be9c30213a8accf41d4b789e5bbcfeb056bf63a9b1|756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae": {
+        "puzzle_type": "CIRCUIT_STATUTES",
+        "name": "CIRCUIT - statutes",
+        "sub_puzzle_hashes": [
+            "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55",
+            "2f977164be633bf58b7907be9c30213a8accf41d4b789e5bbcfeb056bf63a9b1",
+            "756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae"
+        ],
+        "sub_puzzle_names": [
+            "--circuit-circuit_puzzles-singleton_top_layer_isa",
+            "?2f977164",
+            "--circuit-circuit_puzzles-statutes"
+        ],
+        "example_coin_id": "2964e60e99b30c81057e75d3a7041fc5567e717b64d726ffb499c0a05f4f08ad",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_isa",
+            "statutes"
+        ]
+    },
+    "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55|ff3437cd6626a4c9eae0dda9afbf65b14259e5ad97ae301a6d21ef45e6fc0567|756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae": {
+        "puzzle_type": "CIRCUIT_STATUTES",
+        "name": "CIRCUIT - statutes",
+        "sub_puzzle_hashes": [
+            "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55",
+            "ff3437cd6626a4c9eae0dda9afbf65b14259e5ad97ae301a6d21ef45e6fc0567",
+            "756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae"
+        ],
+        "sub_puzzle_names": [
+            "--circuit-circuit_puzzles-singleton_top_layer_isa",
+            "?ff3437cd",
+            "--circuit-circuit_puzzles-statutes"
+        ],
+        "example_coin_id": "e399d3555024e9ce4a9c36d24b04075761c935fac4bc84d314c4dd424c4cf73f",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_isa",
+            "statutes"
+        ]
+    },
+    "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55|023e01ea37fe6acff0a5b75d61b20a8276b7c15309c3a470852337160a9264d0|756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae": {
+        "puzzle_type": "CIRCUIT_STATUTES",
+        "name": "CIRCUIT - statutes",
+        "sub_puzzle_hashes": [
+            "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55",
+            "023e01ea37fe6acff0a5b75d61b20a8276b7c15309c3a470852337160a9264d0",
+            "756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae"
+        ],
+        "sub_puzzle_names": [
+            "--circuit-circuit_puzzles-singleton_top_layer_isa",
+            "?023e01ea",
+            "--circuit-circuit_puzzles-statutes"
+        ],
+        "example_coin_id": "07d7f2080a5c03fa9e6fa5f85d630eb4209a0c5d29945c88bed68079228db5b5",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_isa",
+            "statutes"
+        ]
+    },
+    "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55|501478167f4b1cd058debe366c9c3e75249347250c14e372e8592c0ae0ec242b|756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae": {
+        "puzzle_type": "CIRCUIT_STATUTES",
+        "name": "CIRCUIT - statutes",
+        "sub_puzzle_hashes": [
+            "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55",
+            "501478167f4b1cd058debe366c9c3e75249347250c14e372e8592c0ae0ec242b",
+            "756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae"
+        ],
+        "sub_puzzle_names": [
+            "--circuit-circuit_puzzles-singleton_top_layer_isa",
+            "?50147816",
+            "--circuit-circuit_puzzles-statutes"
+        ],
+        "example_coin_id": "16d8813cac5ef6a9691345194455798e864f90f896527b1c03206f6e51d2b31c",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_isa",
+            "statutes"
+        ]
+    },
+    "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55|79dac5ba8d38e6fb698a00e97f12301ae8b15e544591b9453d095a41c5d365f1|756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae": {
+        "puzzle_type": "CIRCUIT_STATUTES",
+        "name": "CIRCUIT - statutes",
+        "sub_puzzle_hashes": [
+            "498301a07b476ab50df15787617d18606a7beccedefbcc413ef6323ebc975c55",
+            "79dac5ba8d38e6fb698a00e97f12301ae8b15e544591b9453d095a41c5d365f1",
+            "756aa55252509ea538327f92913668d5db88974eb368d7123e629fc9050bccae"
+        ],
+        "sub_puzzle_names": [
+            "--circuit-circuit_puzzles-singleton_top_layer_isa",
+            "?79dac5ba",
+            "--circuit-circuit_puzzles-statutes"
+        ],
+        "example_coin_id": "8e4b7e556a74f251dc207f9c10692ba6c95d9046a5abf969472f92162ed156a6",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_isa",
+            "statutes"
+        ]
+    },
+    "c092cc686dad5f31cd3c008d2daa3b1bae044bd50c1fd01ca0af96660dc8e391|5fc89001dd4f5601fce0d8abfdfaa02503534b461014f065dcef12760f062b78": {
+        "puzzle_type": "CIRCUIT_COLLATERAL_VAULT",
+        "name": "CIRCUIT - collateral vault",
+        "sub_puzzle_hashes": [
+            "c092cc686dad5f31cd3c008d2daa3b1bae044bd50c1fd01ca0af96660dc8e391",
+            "5fc89001dd4f5601fce0d8abfdfaa02503534b461014f065dcef12760f062b78"
+        ],
+        "sub_puzzle_names": [
+            "?c092cc68",
+            "--circuit-circuit_puzzles-collateral_vault"
+        ],
+        "example_coin_id": "aac0be3dac0c343d9e3916dcb41f7d2edeb3d28783c6a4bde7491beabda74a58",
+        "tags": [
+            "UNKNOWN",
+            "collateral_vault"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|936bf057e5faf8899c8e0d63cbe75f9e230a046b544058c5c07463a911512030|c02e2a8549c1128bd8c41732090eec162dd4172dafcd87382f13e222a85ab62c": {
+        "puzzle_type": "CIRCUIT_ORACLE",
+        "name": "CIRCUIT - oracle",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "936bf057e5faf8899c8e0d63cbe75f9e230a046b544058c5c07463a911512030",
+            "c02e2a8549c1128bd8c41732090eec162dd4172dafcd87382f13e222a85ab62c"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "?936bf057",
+            "--circuit-circuit_puzzles-oracle"
+        ],
+        "example_coin_id": "bcd476868255dcb90093c0926a4a9b280fb20e8c7079df859758eed0c70f528f",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "oracle"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|1627d6169ebe6fe403c5e98cc2e7663367eae8a832d4dad0b7099366f11859cd": {
+        "puzzle_type": "CIRCUIT_RUN_CAT_TAIL",
+        "name": "CIRCUIT - run CAT tail",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "1627d6169ebe6fe403c5e98cc2e7663367eae8a832d4dad0b7099366f11859cd"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--circuit-circuit_puzzles-run_tail"
+        ],
+        "example_coin_id": "ea28699261e8a0e2fa7eb3647029b62895714f9b97fe498552ee90d246a3c167",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "run_tail"
+        ]
+    },
+    "faa2ed871f9b4f5f679cf7d4d306d8b13c9ecceb46c7b1d4f9dd8d3e86c0fc72|4d2c41e0cc40967eeae367e2a153d1d51a9049a155ea3d4e7218aec6b0d89e58": {
+        "puzzle_type": "CIRCUIT_ANNOUNCER_REGISTRY",
+        "name": "CIRCUIT - announcer registry",
+        "sub_puzzle_hashes": [
+            "faa2ed871f9b4f5f679cf7d4d306d8b13c9ecceb46c7b1d4f9dd8d3e86c0fc72",
+            "4d2c41e0cc40967eeae367e2a153d1d51a9049a155ea3d4e7218aec6b0d89e58"
+        ],
+        "sub_puzzle_names": [
+            "?faa2ed87",
+            "--circuit-circuit_puzzles-announcer_registry"
+        ],
+        "example_coin_id": "e030805505ca6ab12faab2665806ecbc19d4dd277631615742031917a5c56555",
+        "tags": [
+            "UNKNOWN",
+            "announcer_registry"
+        ]
+    },
+    "d87463530398b1b2c93ed01260932d0649c62b1df06698486ce2692f24d1a7a3|4d2c41e0cc40967eeae367e2a153d1d51a9049a155ea3d4e7218aec6b0d89e58": {
+        "puzzle_type": "CIRCUIT_ANNOUNCER_REGISTRY",
+        "name": "CIRCUIT - announcer registry",
+        "sub_puzzle_hashes": [
+            "d87463530398b1b2c93ed01260932d0649c62b1df06698486ce2692f24d1a7a3",
+            "4d2c41e0cc40967eeae367e2a153d1d51a9049a155ea3d4e7218aec6b0d89e58"
+        ],
+        "sub_puzzle_names": [
+            "?d8746353",
+            "--circuit-circuit_puzzles-announcer_registry"
+        ],
+        "example_coin_id": "046ef285dad258bd50c0b599bba62f286163fd2fdf313ba0180ff18ff986a499",
+        "tags": [
+            "UNKNOWN",
+            "announcer_registry"
+        ]
+    },
+    "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657|9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9": {
+        "puzzle_type": "VAULT_PAY_TO_VAULT_SINGLETON_MEMBER",
+        "name": "VAULT - pay to vault (singleton member)",
+        "sub_puzzle_hashes": [
+            "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657",
+            "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd",
+            "6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9"
+        ],
+        "sub_puzzle_names": [
+            "--sdk-mips-index_wrapper",
+            "--cni-mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
+            "--cni-mips_puzzles-member_puzzles-singleton_member"
+        ],
+        "example_coin_id": "cb7ddee929afea4b5591b9487e13c4847b634fa252043cd996768e61a6e9bc83",
+        "tags": [
+            "UNKNOWN",
+            "index_wrapper",
+            "delegated_puzzle_feeder",
+            "singleton_member"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657|9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|bcb9aa74893bebcfa2da87271b0330bf2773b6391144ae72262b6824d9c55939": {
+        "puzzle_type": "VAULT_VAULT_SINGLETON_1_OF_N",
+        "name": "VAULT - vault singleton, 1 of n",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657",
+            "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd",
+            "bcb9aa74893bebcfa2da87271b0330bf2773b6391144ae72262b6824d9c55939"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--sdk-mips-index_wrapper",
+            "--cni-mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
+            "--cni-mips_puzzles-architecture_puzzles-1_of_n"
+        ],
+        "example_coin_id": "bb9bd3b8e675b1744b1c3a647dcb0d36af14fba801a7f9ffe178ed020313c489",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "index_wrapper",
+            "delegated_puzzle_feeder",
+            "1_of_n"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657|9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|de27deb2ebc7f1e1b77e1d38cc2f9d90fbd54d4b13dd4e6fa1f659177e36ed4f": {
+        "puzzle_type": "VAULT_VAULT_SINGLETON_M_OF_N",
+        "name": "VAULT - vault singleton, m of n",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657",
+            "9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd",
+            "de27deb2ebc7f1e1b77e1d38cc2f9d90fbd54d4b13dd4e6fa1f659177e36ed4f"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--sdk-mips-index_wrapper",
+            "--cni-mips_puzzles-architecture_puzzles-delegated_puzzle_feeder",
+            "--cni-mips_puzzles-architecture_puzzles-m_of_n"
+        ],
+        "example_coin_id": "edd45f2debb974d3bb20a9b84cd0009da354ccda15659337b727dd5b54c6a525",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "index_wrapper",
+            "delegated_puzzle_feeder",
+            "m_of_n"
+        ]
+    },
+    "c6d65bf45831009daffe9b722c97f7d7b64db943b401c536271bfa11d0fd50fd|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "c6d65bf45831009daffe9b722c97f7d7b64db943b401c536271bfa11d0fd50fd",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?c6d65bf4",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "3aaa1f09a9630a2952d4e5f5118025cecf51c4322cfc5a4f922488e859579cd1",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "6ca6c2d81809935294b192343a12f422474a57d63dd963066c99a0ee692f4cc4|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "6ca6c2d81809935294b192343a12f422474a57d63dd963066c99a0ee692f4cc4",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?6ca6c2d8",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "edb658df84cb51445e8d89f77e7c1b665f92934bbc59423dab0464e437c30174",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "c4cc8047a78cbd86f215f97db4a17f6be9209c87dbdb67cba1b87e8730d2466f|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "c4cc8047a78cbd86f215f97db4a17f6be9209c87dbdb67cba1b87e8730d2466f",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?c4cc8047",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "6c1e29419446ac40e0c2a54f164cdc48a17b3b61bc1e0d22117a7cbac848da86",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "0d299e546a09a1362e4bdb33836e665fcf94da82198c2dece5c5c8f9fbd41325|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "0d299e546a09a1362e4bdb33836e665fcf94da82198c2dece5c5c8f9fbd41325",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?0d299e54",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "1f2912824da728fcf1aa3efe27a7a3ca1a39d3961b8fc992e6d8f4ec3332e918",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "95fb1d84bbbcf5c4a9d2059f6a3b245d77e9fb35c99fddf3b500cd758aacc629|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "95fb1d84bbbcf5c4a9d2059f6a3b245d77e9fb35c99fddf3b500cd758aacc629",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?95fb1d84",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "c11d66a5f6604a5dda966c32e3bebfc94b3b01d271a89917b4138bdc9cc4e1e3",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "a62dddd6e04ba5b6035f8922d13917e5573b360fb4e69dc63856f5957279e94c|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "a62dddd6e04ba5b6035f8922d13917e5573b360fb4e69dc63856f5957279e94c",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?a62dddd6",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "4c7b681539aa6cb5b25e5ade5f37540a8f93735694412f3e10b219969350b163",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "3d9392c987829150abb2d1da4b10317ecd2cdf6082103a7e7f5772d43f2bde01|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "3d9392c987829150abb2d1da4b10317ecd2cdf6082103a7e7f5772d43f2bde01",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?3d9392c9",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "0201a7e3744b2d9e00fa1eda6ee8ef2cd9a29968f42174ef113389cd522dff14",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "a2fe8aa1638cbe4e8e46ccef1f045bc2f0b1ab029ece43a2b1f9ba8b0845a334|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "a2fe8aa1638cbe4e8e46ccef1f045bc2f0b1ab029ece43a2b1f9ba8b0845a334",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?a2fe8aa1",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "213207503da9ffbc0bedf81fa803571feafd20cbdedfe7e9e95c33741347a511",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "433889867e1a1c5f125d2a37e95d99d9d71bd32fd9c0a41e6c716a5b0cd9efc8|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "433889867e1a1c5f125d2a37e95d99d9d71bd32fd9c0a41e6c716a5b0cd9efc8",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?43388986",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "4c898ba5212bf33f1b0d2f3dde7acefaf5a446339836155543fb82d89dfd48fa",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "0d708782f926a6851422a31cbe9b07e9ef729c89ce402e504fce430cd0ad9667|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "0d708782f926a6851422a31cbe9b07e9ef729c89ce402e504fce430cd0ad9667",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?0d708782",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "a2d8c4eb7057d752353bbf356afb77ec48c1888cf9ba210599d029eb94bbccdc",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "7b60c9a2c017735ab8f5a19ed09143ed0745df401224853903a13f9c372ba235|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "7b60c9a2c017735ab8f5a19ed09143ed0745df401224853903a13f9c372ba235",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?7b60c9a2",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "39eb633e29bfa94b44f8cdca8b0c6320d83c9e0964adb178f6fc0e14c1c6e700",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "3018e6223953cdbf5566bc6ec5377e0d3c4b3d8d28315a7b80348c848135592e|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "3018e6223953cdbf5566bc6ec5377e0d3c4b3d8d28315a7b80348c848135592e",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?3018e622",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "3b07efaf664b1e27af664d2557ea0011d4f9582f0aa6541ddc9a591060c2eec1",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "85911f0d949672fd571b0ebe3218f2f795a70890650bbf04895dae9b74d27ea9|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "85911f0d949672fd571b0ebe3218f2f795a70890650bbf04895dae9b74d27ea9",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?85911f0d",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "f14e722fe6a9b889210097a863bbd5dc16376c9c2e192fa7915c5ce32659cbcf",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "1e1fd6af4979860116146f8886d3a16784e94c2d6c7a5cbeb5b5854f857dce95|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "1e1fd6af4979860116146f8886d3a16784e94c2d6c7a5cbeb5b5854f857dce95",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?1e1fd6af",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "82cbc5da9b2378736efa9b4d2e202bdca56919bd713ac897c0799b2541be47f4",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "9acddb390a0b78158a51ffb418c3f47709b9703de23b5bacb098b99eae8cd95e|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "9acddb390a0b78158a51ffb418c3f47709b9703de23b5bacb098b99eae8cd95e",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?9acddb39",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "7c5c77aba74b1506008ebc693e76314843efddb3f6ccaa06b02eb0c72416d4b6",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "996fe2bf87a7b8e997fef4a35db83ec940767473470669bead152be140a05a9b|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "996fe2bf87a7b8e997fef4a35db83ec940767473470669bead152be140a05a9b",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?996fe2bf",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "28b9a61d7762fed690e93fce3fa9bc9793c8cad61c28ec449365cab5aa16c327",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "9b7f5e78253d64f9180947736efb1948a78ae109e3bfade89360a5a6d3dc4d21|8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
+        "puzzle_type": "SLOT_MACHINE_SLOT",
+        "name": "SLOT_MACHINE - slot",
+        "sub_puzzle_hashes": [
+            "9b7f5e78253d64f9180947736efb1948a78ae109e3bfade89360a5a6d3dc4d21",
+            "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3"
+        ],
+        "sub_puzzle_names": [
+            "?9b7f5e78",
+            "--slot_machine_rue-singleton-slot"
+        ],
+        "example_coin_id": "433fe2294736a685f0d1204db123c2720649044a94f9eb22ed0f575ca307a084",
+        "tags": [
+            "UNKNOWN",
+            "slot"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|8811d56e9efd2c9f449ea10cb00e00417b372f46d9d3a00ddf632f292de7e2c3": {
+        "puzzle_type": "SLOT_MACHINE_STATE_SCHEDULER",
+        "name": "SLOT_MACHINE - state scheduler",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "8811d56e9efd2c9f449ea10cb00e00417b372f46d9d3a00ddf632f292de7e2c3"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-state_scheduler"
+        ],
+        "example_coin_id": "872de8bd10d6bdaef302aba4c9204885741f7265557d617f76b2e7319262f3e2",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "state_scheduler"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|42962075df47c7d4bd2b35ba89f04713574dd6b0f4377176ec0ff5e402f3b4b6|6a91ad29cc7d8d16514316d20e154a393faa35d6474cec7c597a15fd017101d9": {
+        "puzzle_type": "WARP_GREEN_PORTAL_RECEIVER",
+        "name": "WARP_GREEN - portal receiver",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "42962075df47c7d4bd2b35ba89f04713574dd6b0f4377176ec0ff5e402f3b4b6",
+            "6a91ad29cc7d8d16514316d20e154a393faa35d6474cec7c597a15fd017101d9"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "?42962075",
+            "--warp-portal_receiver"
+        ],
+        "example_coin_id": "487e6811d6929194be7de7df59b2069ceb142b46c8fcb0e5c098300588fd021a",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "portal_receiver"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|011288ac768a3bf6d71ec1e71cd2856bd9f4e91c02f15978fa92c5deeff4a9c6|6a91ad29cc7d8d16514316d20e154a393faa35d6474cec7c597a15fd017101d9": {
+        "puzzle_type": "WARP_GREEN_PORTAL_RECEIVER",
+        "name": "WARP_GREEN - portal receiver",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "011288ac768a3bf6d71ec1e71cd2856bd9f4e91c02f15978fa92c5deeff4a9c6",
+            "6a91ad29cc7d8d16514316d20e154a393faa35d6474cec7c597a15fd017101d9"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "?011288ac",
+            "--warp-portal_receiver"
+        ],
+        "example_coin_id": "4d6a76c40ac08fdc701e59e628193eaeb52e0c55d00908005eac66c957664652",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "portal_receiver"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a3cd6eb0627ddc46136b16a2dbc88fdfdf1c348a3405a466f640057e6e3a5c43|6a91ad29cc7d8d16514316d20e154a393faa35d6474cec7c597a15fd017101d9": {
+        "puzzle_type": "WARP_GREEN_PORTAL_RECEIVER",
+        "name": "WARP_GREEN - portal receiver",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a3cd6eb0627ddc46136b16a2dbc88fdfdf1c348a3405a466f640057e6e3a5c43",
+            "6a91ad29cc7d8d16514316d20e154a393faa35d6474cec7c597a15fd017101d9"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "?a3cd6eb0",
+            "--warp-portal_receiver"
+        ],
+        "example_coin_id": "dedeabaa3c4c913362cb0a4760ad735f35095150f8995819eb38d6dfb235a684",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "portal_receiver"
+        ]
+    },
+    "8759e72509d19bff3ac78c2bcf3922e675f6f17a499ac5ad53d75e55bab7ff00|331e8775ee22bbb793b411071ba6d49739d8d496dff7d9eb059ac787ef7e89fc": {
+        "puzzle_type": "WARP_GREEN_MESSAGE_COIN",
+        "name": "WARP_GREEN - message coin",
+        "sub_puzzle_hashes": [
+            "8759e72509d19bff3ac78c2bcf3922e675f6f17a499ac5ad53d75e55bab7ff00",
+            "331e8775ee22bbb793b411071ba6d49739d8d496dff7d9eb059ac787ef7e89fc"
+        ],
+        "sub_puzzle_names": [
+            "?8759e725",
+            "--warp-message_coin"
+        ],
+        "example_coin_id": "3fce7c7194464f911c06089df5929d90e1e08bde58460b3cbaaab8064cbcbc3d",
+        "tags": [
+            "UNKNOWN",
+            "message_coin"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|ac3ce0079da5db4ff11cb9bc495653a52e1e2d5ae53c60e772b853f9e5483d53|9b3be8822ce5583da2987336d59cf4bdded39d2747838249fd9afe0238cab6ea": {
+        "puzzle_type": "XCHANDLES_REGISTRATION_PRECOMMIT_CAT",
+        "name": "XCHANDLES - registration precommit (CAT)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "ac3ce0079da5db4ff11cb9bc495653a52e1e2d5ae53c60e772b853f9e5483d53",
+            "9b3be8822ce5583da2987336d59cf4bdded39d2747838249fd9afe0238cab6ea"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "?ac3ce007",
+            "--slot_machine_rue-singleton-precommit"
+        ],
+        "example_coin_id": "ad5301ba10a210239efc9b6d267a957993101350df3ace7ec7fc31a3900b3a83",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "precommit"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|c3b249466cb15c51e5abb5c54ef5077c1624ae2e6a0f8f7a3fa197a943a5d62e": {
+        "puzzle_type": "DIG_DATALAYER_STORE_DELEGATION_LAYER",
+        "name": "DIG - datalayer store (delegation layer)",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
+            "c3b249466cb15c51e5abb5c54ef5077c1624ae2e6a0f8f7a3fa197a943a5d62e"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-nft_puzzles-nft_state_layer",
+            "--dig_datalayer-delegation_layer"
+        ],
+        "example_coin_id": "9aef614bc0f97977475ca3f42f8d0e61d7c7abe5129e40b8ac43beb9cf2e87e1",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "nft_state_layer",
+            "delegation_layer"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|5a084d1786fc0fe43c30bc5fc0233cc1a791cfde3a25580a9ca4883878f0ba63|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "puzzle_type": "OPTION_CONTRACT_STANDARD_TRANSACTION",
+        "name": "OPTION_CONTRACT - standard transaction",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "5a084d1786fc0fe43c30bc5fc0233cc1a791cfde3a25580a9ca4883878f0ba63",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--chip_0045-option_contract",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "ba4a849b2cd7fccf14697b70ff10965c12472beb38e6b8137d31dcecb9e8205f",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "option_contract",
+            "p2_delegated_puzzle_or_hidden_puzzle"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|5a084d1786fc0fe43c30bc5fc0233cc1a791cfde3a25580a9ca4883878f0ba63|cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
+        "puzzle_type": "OPTION_CONTRACT_SETTLEMENT_PAYMENTS",
+        "name": "OPTION_CONTRACT - settlement payments",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "5a084d1786fc0fe43c30bc5fc0233cc1a791cfde3a25580a9ca4883878f0ba63",
+            "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--chip_0045-option_contract",
+            "--cni-settlement_payments"
+        ],
+        "example_coin_id": "1fbb2342a5e49ac28544e371526404ddc275e4014bf26cd74b129f3e496100ff",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "option_contract",
+            "settlement_payments"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|f4a43e9ca725046c0da4fb8d0e37b108766795db82d4631e13a8dd01e40cfcf7|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "f4a43e9ca725046c0da4fb8d0e37b108766795db82d4631e13a8dd01e40cfcf7",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?f4a43e9c",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "f875f9ff25eb4f7a6ec6e729515eaf70f3b934e4a2a07c315c9727fb2fbc3433",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|8faea3e321e331ce408cd3a9507e4f142b7be0be11941ef90d740d554ffd7047|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "8faea3e321e331ce408cd3a9507e4f142b7be0be11941ef90d740d554ffd7047",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?8faea3e3",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "c242f0be8a05a79b3a66f3de2af6146e5707097ad0972e5fcae6c1221483107a",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|00999396a2967c4e5994f101df1eb65b63aff489746e831be1807da1a9c50f16|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "00999396a2967c4e5994f101df1eb65b63aff489746e831be1807da1a9c50f16",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?00999396",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "a7f1197a5814b53e22d2c7a7f1db3f20b6e0fab4167ea625d728c3144cb3dfb3",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|233afad386f83f093d71e6b345bc3adbf30fed5fab4fb4260e1cbbf0b7f831d3|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "233afad386f83f093d71e6b345bc3adbf30fed5fab4fb4260e1cbbf0b7f831d3",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?233afad3",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "0bc7738ff7f8d48b27f4f15100d2e4c65941f78837211ec0556368618e190dbd",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|d3261de1685edc2afd0d5667c4311063637d207846e4e7b4cc2d132e2ed4e72f|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "d3261de1685edc2afd0d5667c4311063637d207846e4e7b4cc2d132e2ed4e72f",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?d3261de1",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "50a6adb2d5783c07b43b547879e7f55d0ea31f6f4639faec97e341805e52342d",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|19384f3db4599daefe86180d5bb6d5a888de3ba70045bcb7a55158ac11aa0f72|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "19384f3db4599daefe86180d5bb6d5a888de3ba70045bcb7a55158ac11aa0f72",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?19384f3d",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "858de2d25f37db4fa201850c75b1f188bb1256d4f1144c4025844d5b27bac045",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|fdaab7158a4d9f0fe395a703577cff48637523fbc0d68d43ff1b088a7990b9fa|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "fdaab7158a4d9f0fe395a703577cff48637523fbc0d68d43ff1b088a7990b9fa",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?fdaab715",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "eddec004fd83668ecc54c5582a7410ce71e6d4ccb06ab560c8d5ea8d8c12f846",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|20f18059560061d36bf196970676158ce6580f0b263cbab6ac5eedf93eea281b|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "20f18059560061d36bf196970676158ce6580f0b263cbab6ac5eedf93eea281b",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?20f18059",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "df56170a3afad52a777ab4e4388517ce597aba67d81384b29b35b37324ba2642",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|9941c4107f5d29b73703093925f74b41bce4da425a765004c12367886ddd7cc3|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "9941c4107f5d29b73703093925f74b41bce4da425a765004c12367886ddd7cc3",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?9941c410",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "ed25ff280336550de60980675136a581907317596382a9ea223c950b013c9fd8",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|a8d33afe9f8230ba99237d940c173a5d043cf0aa4ca90f9278dcfdf520a37cbc|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "a8d33afe9f8230ba99237d940c173a5d043cf0aa4ca90f9278dcfdf520a37cbc",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?a8d33afe",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "1c856d4d7823cc93147ed691b21db6a884d3b3a21200f7e53ea1909b647aaaaf",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|f61374142be621a68e8226a89eb20ec24afa088ba50d846671c04ae3932d4a26|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "f61374142be621a68e8226a89eb20ec24afa088ba50d846671c04ae3932d4a26",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?f6137414",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "208da181ea7b62f85c4fe53db93277a679d5441fdc9c11189169a1ea50680c87",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|9d4a0a4dcdcf4ffb89008b3b21441f5b787d41d7614efc6ce8b9d51d29639375|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "9d4a0a4dcdcf4ffb89008b3b21441f5b787d41d7614efc6ce8b9d51d29639375",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?9d4a0a4d",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "e1176fad06349b86021419f00eb40c7d2b101df1892e6b2c306fa805c1cbe238",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|de34702b31a05b7c964bf6915260e6a75856a520ffb1ba67f38eac24c09bbbbe|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "de34702b31a05b7c964bf6915260e6a75856a520ffb1ba67f38eac24c09bbbbe",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?de34702b",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "4c9865b40ba7a7003c69188567c7138590680aa7a65b8da504476d016d804122",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|d4b1022710fe450430a698a2ea2a405496e89223bc2236d6f947f3a24e619986|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "d4b1022710fe450430a698a2ea2a405496e89223bc2236d6f947f3a24e619986",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?d4b10227",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "beb6949539ee0fc8bcb004bcf2132b5b2acb64c006338030d7bbe61c6d2ef49d",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|3df9bc7b5a535a72860bf9f58d221cb86c26a00c8176bcd5e409165a3494dd5b|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "3df9bc7b5a535a72860bf9f58d221cb86c26a00c8176bcd5e409165a3494dd5b",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?3df9bc7b",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "8d0b86a1eeb48089e58d3cc403d9124fdd9717206ebd6c8130b0162a13f6c3f9",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|5670203e9aa1ac4def1ac904c5257a8458340554dffa88c4a7146b1821484523|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "5670203e9aa1ac4def1ac904c5257a8458340554dffa88c4a7146b1821484523",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?5670203e",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "dfc3c6535fbfebc0489df8d51f89328a6a141dd646d69af8844e97a623875671",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|e2275415b68fadf0e2ac1733285430cbb37bb45a59bf954493fb7e920554d88d|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "e2275415b68fadf0e2ac1733285430cbb37bb45a59bf954493fb7e920554d88d",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?e2275415",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "5d569ad6312113bb6389c3489e54740ef8ff674d23a2fef49e065c2e8c43c375",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|bfdc3b501c195c48769e37f45b0ac626f58c345963ed533d3745040803f2ad26|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "bfdc3b501c195c48769e37f45b0ac626f58c345963ed533d3745040803f2ad26",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?bfdc3b50",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "4a3929e8d5649ea70c94d54f33b83aa2313a017fbdfb6cc47dffa6db172b08ef",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|8a554e3f331b58eb64b939e4f0a7d605b8bebd9d40b6ee6aae5642d8228c6764|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "8a554e3f331b58eb64b939e4f0a7d605b8bebd9d40b6ee6aae5642d8228c6764",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?8a554e3f",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "be26a83d18b5e3debeab76e7249f7b02f3f2980bf620bb967ea353760a81a1e7",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|1646cfc387072d6d392d4f43173ab7d0f400a6b0fca752266be5c5cdd655cee3|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "1646cfc387072d6d392d4f43173ab7d0f400a6b0fca752266be5c5cdd655cee3",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?1646cfc3",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "5b29f39b1772326fb13599873f150ff793010e0425fd5750f5e3dfd23a488dd1",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b|dffa7a46546ba0ab89a44fa1eb871fbc0b015765539d045ca1560c495d6f8324|45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057|1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23": {
+        "puzzle_type": "FORGE_POOL",
+        "name": "FORGE - pool",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "afa03f2903f9e4a293523237799074b13ab2361f250df10de5df884b0b09a22b",
+            "dffa7a46546ba0ab89a44fa1eb871fbc0b015765539d045ca1560c495d6f8324",
+            "45d95942c2cf03723f5429df769beb4f0f987edd4af7f90de398bd7e237bf057",
+            "1b831c9011ed79df8a0814fc892b83372fe821b23b659d53a81b82cd63327c23"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--slot_machine_rue-singleton-action",
+            "?dffa7a46",
+            "--forge_v16-forge_multi_reserve_finalizer",
+            "--forge_v16-forge_reserve_amount"
+        ],
+        "example_coin_id": "adecda15a74939cd4e47cbee97eef3249de6f621a61c76af07c5bc4852fdf06e",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "action",
+            "forge_multi_reserve_finalizer",
+            "forge_reserve_amount"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|d8e682da87fc1955b4275180dbe1e17d20a2c488855558f4366e582dce99503c": {
+        "puzzle_type": "FORGE_CAT_RESERVE_LAUNCHER",
+        "name": "FORGE - CAT reserve launcher",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "d8e682da87fc1955b4275180dbe1e17d20a2c488855558f4366e582dce99503c"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--forge_v16-forge_reserve_launcher"
+        ],
+        "example_coin_id": "f8b048b9c04eef4b7e2a3afe50370e22986f2a6aef52c986bea25b08a471eb2e",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "forge_reserve_launcher"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|638181aa0cd6ea9f042a69e578690513385e8531b361ffc26f03cc35f51018c2|d6693f7aacfeb7e6901cd71a00f5e4b318d73234fbffd5b4d84da2c1371b3181": {
+        "puzzle_type": "REWARD_DIST_CAT_PAY_TO_PARENT_RUE",
+        "name": "REWARD_DIST - CAT pay to parent (Rue)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "638181aa0cd6ea9f042a69e578690513385e8531b361ffc26f03cc35f51018c2",
+            "d6693f7aacfeb7e6901cd71a00f5e4b318d73234fbffd5b4d84da2c1371b3181"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--reward_distributor-p2_parent_v2",
+            "--slot_machine_rue-default_puzzles-default_cat_maker"
+        ],
+        "example_coin_id": "31e9077265a6254c32d3857a5cff3561c3b57d28e3bb7789b24173be6c89f14d",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_parent_v2",
+            "default_cat_maker"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|23522d15e71b71040b05a0ab6be2580ae2b62f72d70c7e83c1cd8aa515437a06": {
+        "puzzle_type": "REWARD_DIST_CAT_PAY_TO_NEXT_EPOCH",
+        "name": "REWARD_DIST - CAT pay to next epoch",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "23522d15e71b71040b05a0ab6be2580ae2b62f72d70c7e83c1cd8aa515437a06"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--reward_distributor_rue-p2_next_reward_distributor_epoch"
+        ],
+        "example_coin_id": "f461153441bbaf67519ecfd8476bddb73b2d1cd357477e6bc73317e55ca78551",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_next_reward_distributor_epoch"
+        ]
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|638181aa0cd6ea9f042a69e578690513385e8531b361ffc26f03cc35f51018c2|0370e9c0343398cbe3487fb93d4aa24357005cdd67894e1cbae14772e778a75a": {
+        "puzzle_type": "REWARD_DIST_CAT_PAY_TO_PARENT_CHIALISP",
+        "name": "REWARD_DIST - CAT pay to parent (Chialisp)",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "638181aa0cd6ea9f042a69e578690513385e8531b361ffc26f03cc35f51018c2",
+            "0370e9c0343398cbe3487fb93d4aa24357005cdd67894e1cbae14772e778a75a"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--reward_distributor-p2_parent_v2",
+            "--slot_machine-default_puzzles-default_cat_maker"
+        ],
+        "example_coin_id": "d21d539b5aee2abed19b706088290deab51529b5651b7699653948f4f78c0710",
+        "tags": [
+            "CAT",
+            "cat_v2",
+            "p2_parent_v2",
+            "default_cat_maker"
+        ]
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|d5fd32e069fda83e230ccd8f6a7c4f652231aed5c755514b3d996cbeff4182b8|4218fbebbb6f3c0907ebe8a672fa5d1e4bc655645a3a0073601e6c9b50b07c47|b982796850336aabf9ab17c3f21e299f0c633444117ab5e9ebeafadf1860d9fc|dd12ebf70feba2ee45dc25b7de7a53a8cd9e82e0b5648fabea5e998b890ed86d|6a87946257f555ae82aca6a11b5205058b844f634ecb6c7dc6b0c54eb2996308|d3a9a1fc20f247d009b4b0e941707d50b91885c99d0b27ef882e1294e771139d|00848115554ea674131f89f311707a959ad3f4647482648f3fe91ba289131f51": {
+        "puzzle_type": "VC_VERIFIED_CREDENTIAL",
+        "name": "VC - verified credential",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "d5fd32e069fda83e230ccd8f6a7c4f652231aed5c755514b3d996cbeff4182b8",
+            "4218fbebbb6f3c0907ebe8a672fa5d1e4bc655645a3a0073601e6c9b50b07c47",
+            "b982796850336aabf9ab17c3f21e299f0c633444117ab5e9ebeafadf1860d9fc",
+            "dd12ebf70feba2ee45dc25b7de7a53a8cd9e82e0b5648fabea5e998b890ed86d",
+            "6a87946257f555ae82aca6a11b5205058b844f634ecb6c7dc6b0c54eb2996308",
+            "d3a9a1fc20f247d009b4b0e941707d50b91885c99d0b27ef882e1294e771139d",
+            "00848115554ea674131f89f311707a959ad3f4647482648f3fe91ba289131f51"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-vc_puzzles-exigent_metadata_layer",
+            "--cni-vc_puzzles-eml_transfer_program_covenant_adapter",
+            "--cni-vc_puzzles-covenant_layer",
+            "?dd12ebf7",
+            "--cni-vc_puzzles-eml_covenant_morpher",
+            "--cni-vc_puzzles-eml_update_metadata_with_DID",
+            "--cni-vc_puzzles-revocation_layer"
+        ],
+        "example_coin_id": "30d17c837437f76a630bc06ba860b7fc6254207ee15357b0ec6ed57eab689fcb",
+        "tags": [
+            "SINGLETON",
+            "singleton_top_layer_v1_1",
+            "exigent_metadata_layer",
+            "eml_transfer_program_covenant_adapter",
+            "covenant_layer",
+            "eml_covenant_morpher",
+            "eml_update_metadata_with_DID",
+            "revocation_layer"
         ]
     }
 }

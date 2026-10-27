@@ -30,5 +30,193 @@
     "PLOTNFT": {
         "name": "PlotNFT",
         "family": "SINGLETON"
+    },
+    "CAT_V2_PAY_TO_VAULT_SINGLETON_MEMBER": {
+        "name": "CAT_V2 - pay to vault (singleton member)",
+        "family": "CAT"
+    },
+    "CAT_V2_REVOCABLE_REVOCATION_LAYER": {
+        "name": "CAT_V2 - revocable (revocation layer)",
+        "family": "CAT"
+    },
+    "CAT_V2_DELEGATED_CONDITIONS": {
+        "name": "CAT_V2 - delegated conditions",
+        "family": "CAT"
+    },
+    "WARP_GREEN_MINT_AND_PAYOUT_CAT_V2": {
+        "name": "WARP_GREEN - mint and payout (CAT_V2)",
+        "family": "CAT"
+    },
+    "WARP_GREEN_BURN_CAT_V2": {
+        "name": "WARP_GREEN - burn (CAT_V2)",
+        "family": "CAT"
+    },
+    "CIRCUIT_SAVINGS_VAULT_CAT_V2": {
+        "name": "CIRCUIT - savings vault (CAT_V2)",
+        "family": "CAT"
+    },
+    "CIRCUIT_SURPLUS_AUCTION_CAT_V2": {
+        "name": "CIRCUIT - surplus auction (CAT_V2)",
+        "family": "CAT"
+    },
+    "CIRCUIT_GOVERNANCE_CAT_V2": {
+        "name": "CIRCUIT - governance (CAT_V2)",
+        "family": "CAT"
+    },
+    "CIRCUIT_PAYOUT_CAT_V2": {
+        "name": "CIRCUIT - payout (CAT_V2)",
+        "family": "CAT"
+    },
+    "CIRCUIT_GOVERNANCE_LAUNCHER_CAT_V2": {
+        "name": "CIRCUIT - governance launcher (CAT_V2)",
+        "family": "CAT"
+    },
+    "CIRCUIT_RECHARGE_AUCTION_CAT_V2": {
+        "name": "CIRCUIT - recharge auction (CAT_V2)",
+        "family": "CAT"
+    },
+    "NFT_V1_NO_OWNERSHIP_LAYER_SETTLEMENT_PAYMENTS": {
+        "name": "NFT_V1 - no ownership layer, settlement payments",
+        "family": "SINGLETON"
+    },
+    "CAT_V1_STANDARD_TRANSACTION": {
+        "name": "CAT_V1 - standard transaction",
+        "family": "CAT"
+    },
+    "CAT_V1_DELEGATED_CONDITIONS": {
+        "name": "CAT_V1 - delegated conditions",
+        "family": "CAT"
+    },
+    "DID_V1_STANDARD_TRANSACTION": {
+        "name": "DID_V1 - standard transaction",
+        "family": "SINGLETON"
+    },
+    "TIBET_SWAP_CAT_RESERVE_P2_SINGLETON_FLASHLOAN": {
+        "name": "TIBET_SWAP - CAT reserve (p2 singleton flashloan)",
+        "family": "CAT"
+    },
+    "TIBET_SWAP_LIQUIDITY_PAIR_V2": {
+        "name": "TIBET_SWAP - liquidity pair v2",
+        "family": "SINGLETON"
+    },
+    "TIBET_SWAP_LIQUIDITY_PAIR_V1_BETA_BEFORE_THE_APRIL_2023_FIX": {
+        "name": "TIBET_SWAP - liquidity pair v1 beta (before the April 2023 fix)",
+        "family": "SINGLETON"
+    },
+    "TIBET_SWAP_CAT_RESERVE_V1_BETA": {
+        "name": "TIBET_SWAP - CAT reserve v1 beta",
+        "family": "CAT"
+    },
+    "TIBET_SWAP_ROUTER_V1": {
+        "name": "TIBET_SWAP - router v1",
+        "family": "SINGLETON"
+    },
+    "TIBET_SWAP_ROUTER_V1_BETA": {
+        "name": "TIBET_SWAP - router v1 beta",
+        "family": "SINGLETON"
+    },
+    "TIBET_SWAP_ROUTER_V2": {
+        "name": "TIBET_SWAP - router v2",
+        "family": "SINGLETON"
+    },
+    "SINGLETON_STANDARD_TRANSACTION": {
+        "name": "SINGLETON - standard transaction",
+        "family": "SINGLETON"
+    },
+    "SINGLETON_MULTISIG_M_OF_N_KEYS": {
+        "name": "SINGLETON - multisig (m of n keys)",
+        "family": "SINGLETON"
+    },
+    "CIRCUIT_ATOM_ANNOUNCER": {
+        "name": "CIRCUIT - atom announcer",
+        "family": "UNKNOWN"
+    },
+    "CIRCUIT_STATUTES": {
+        "name": "CIRCUIT - statutes",
+        "family": "SINGLETON"
+    },
+    "CIRCUIT_COLLATERAL_VAULT": {
+        "name": "CIRCUIT - collateral vault",
+        "family": "UNKNOWN"
+    },
+    "CIRCUIT_ORACLE": {
+        "name": "CIRCUIT - oracle",
+        "family": "SINGLETON"
+    },
+    "CIRCUIT_RUN_CAT_TAIL": {
+        "name": "CIRCUIT - run CAT tail",
+        "family": "CAT"
+    },
+    "CIRCUIT_ANNOUNCER_REGISTRY": {
+        "name": "CIRCUIT - announcer registry",
+        "family": "UNKNOWN"
+    },
+    "VAULT_PAY_TO_VAULT_SINGLETON_MEMBER": {
+        "name": "VAULT - pay to vault (singleton member)",
+        "family": "UNKNOWN"
+    },
+    "VAULT_VAULT_SINGLETON_1_OF_N": {
+        "name": "VAULT - vault singleton, 1 of n",
+        "family": "SINGLETON"
+    },
+    "VAULT_VAULT_SINGLETON_M_OF_N": {
+        "name": "VAULT - vault singleton, m of n",
+        "family": "SINGLETON"
+    },
+    "SLOT_MACHINE_SLOT": {
+        "name": "SLOT_MACHINE - slot",
+        "family": "UNKNOWN"
+    },
+    "SLOT_MACHINE_STATE_SCHEDULER": {
+        "name": "SLOT_MACHINE - state scheduler",
+        "family": "SINGLETON"
+    },
+    "WARP_GREEN_PORTAL_RECEIVER": {
+        "name": "WARP_GREEN - portal receiver",
+        "family": "SINGLETON"
+    },
+    "WARP_GREEN_MESSAGE_COIN": {
+        "name": "WARP_GREEN - message coin",
+        "family": "UNKNOWN"
+    },
+    "XCHANDLES_REGISTRATION_PRECOMMIT_CAT": {
+        "name": "XCHANDLES - registration precommit (CAT)",
+        "family": "CAT"
+    },
+    "DIG_DATALAYER_STORE_DELEGATION_LAYER": {
+        "name": "DIG - datalayer store (delegation layer)",
+        "family": "SINGLETON"
+    },
+    "OPTION_CONTRACT_STANDARD_TRANSACTION": {
+        "name": "OPTION_CONTRACT - standard transaction",
+        "family": "SINGLETON"
+    },
+    "OPTION_CONTRACT_SETTLEMENT_PAYMENTS": {
+        "name": "OPTION_CONTRACT - settlement payments",
+        "family": "SINGLETON"
+    },
+    "FORGE_POOL": {
+        "name": "FORGE - pool",
+        "family": "SINGLETON"
+    },
+    "FORGE_CAT_RESERVE_LAUNCHER": {
+        "name": "FORGE - CAT reserve launcher",
+        "family": "CAT"
+    },
+    "REWARD_DIST_CAT_PAY_TO_PARENT_RUE": {
+        "name": "REWARD_DIST - CAT pay to parent (Rue)",
+        "family": "CAT"
+    },
+    "REWARD_DIST_CAT_PAY_TO_NEXT_EPOCH": {
+        "name": "REWARD_DIST - CAT pay to next epoch",
+        "family": "CAT"
+    },
+    "REWARD_DIST_CAT_PAY_TO_PARENT_CHIALISP": {
+        "name": "REWARD_DIST - CAT pay to parent (Chialisp)",
+        "family": "CAT"
+    },
+    "VC_VERIFIED_CREDENTIAL": {
+        "name": "VC - verified credential",
+        "family": "SINGLETON"
     }
 }
