@@ -19,6 +19,7 @@ import json
 #from chia.types.spend_bundle import SpendBundle
 #from clvm_tools.binutils import disassemble
 from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
+from chia_rs import SpendBundle
 from chia_rs.sized_bytes import bytes32, bytes48
 from chia_rs.sized_ints import uint16, uint32, uint64, uint128
 from chia.types.blockchain_format.program import Program as PyProgram
@@ -1668,10 +1669,13 @@ def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: Ful
     def load_watch_later(thread_db_lock, sleep=0):
         time.sleep(sleep)
         conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-        bundles = WDB.load_spend_bundles(conn, group_name='watch later')
-        print("load watch")
-        print(bundles)
-        print(len(bundles))
+        bundles = WDB.load_spend_bundles(conn, group_name='watch later') or []
+        # a pending bundle can be confirmed or lost since the last check
+        for bundle in bundles:
+            if bundle.status == 'pending':
+                result = WDB.refresh_bundle_status(conn, bundle.id)
+                if result:
+                    bundle.status, bundle.block_height = result
         with thread_db_lock:
             main_scope.data['watch_later_cache'] = bundles
         conn.close()
@@ -1688,21 +1692,14 @@ def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: Ful
     if not thread_db.is_alive():
         sleep = 10  # seconds
         main_scope.data['thread_db'] = threading.Thread(target=load_watch_later, args=(thread_db_lock, sleep), daemon=True)
+        main_scope.data['thread_db'].start()
+        screenState.running_threads.append(main_scope.data['thread_db'])
 
 
     with thread_db_lock:
         watch_later_bundles = main_scope.data['watch_later_cache']
 
-    attrs = {
-        "id": "id",
-        "sql-id": "id",
-        "transaction id": "spend_bundle_hash",
-        "timestamp": "timestamp"
-    }
-
-    legend = []
-    for key, attribute in attrs.items():
-        legend.append(key)
+    legend = ["id", "sql-id", "transaction id", "saved at", "status", "height"]
 
 
     P_text = screenState.colorPairs['tab_soft']
@@ -1724,6 +1721,8 @@ def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: Ful
             sp_t.append(sp.id)
             sp_t.append(sp.spend_bundle_hash)
             sp_t.append(datetime.fromtimestamp(sp.timestamp))
+            sp_t.append(sp.status)
+            sp_t.append('' if sp.block_height is None else f"{sp.block_height:,}")
             sps.append(sp_t)
             sb_names.append(sp.spend_bundle_hash)
 
@@ -1745,7 +1744,7 @@ def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: Ful
                                     pos,
                                     tab_size,
                                     keyboardState,
-                                    open_transaction,
+                                    ScopeActions.open_transaction,
                                     True,
                                     False,
                                     legend)
@@ -1813,7 +1812,7 @@ def screen_sb_archive(stdscr, keyboardState, screenState, fullNodeState: FullNod
                                     pos,
                                     tab_size,
                                     keyboardState,
-                                    open_transaction,
+                                    ScopeActions.open_transaction,
                                     True,
                                     False,
                                     legend,
@@ -1826,10 +1825,21 @@ def screen_sb_archive(stdscr, keyboardState, screenState, fullNodeState: FullNod
 
 def screen_spend_bundles(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
     menu_items = [
-        ('watch later', screen_sb_watch_later, ScopeActions.activate_scope),
-        ('archive', screen_sb_archive, ScopeActions.activate_scope),
-        ('mempool', screen_mempool, ScopeActions.activate_scope)
+        ('watch later', screen_sb_watch_later, ScopeActions.activate_scope, None),
+        # archive: off until FullNodeState creates spend_bundle_archive_loader again
+        # ('archive', screen_sb_archive, ScopeActions.activate_scope, None),
+        ('mempool', screen_mempool, ScopeActions.activate_scope, None)
     ]
+
+    active_scope: Scope = screenState.activeScope
+    if len(active_scope.sub_scopes) == 0:
+        for name, handler, exec_fun, exec_key in menu_items:
+            new_scope: Scope = Scope(name, handler, screenState)
+            new_scope.exec = exec_fun
+            new_scope.parent_scope = active_scope
+            active_scope.sub_scopes[name] = new_scope
+            if exec_key:
+                new_scope.keyboard_exec = exec_key
 
     factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
 
@@ -4744,17 +4754,6 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
         conn.close()
 
 
-    if keyboardState.key == 'w':
-        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-        if WDB.load_spend_bundle(conn, spend_bundle_hash, "watch later") is None:
-            WDB.add_spend_bundles_to_watch_later(conn, spend_bundle_hash)
-            main_scope.data['watch_later'] = True
-        else:
-            pass
-            # remove
-        conn.close()
-
-
     if "tx_cache" not in main_scope.data:
         main_scope.data["tx_cache"] = None
 
@@ -4771,27 +4770,31 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
             if spend_bundle_hash in mempool_archive:
                 tx_cache["tx"] = mempool_archive[spend_bundle_hash]
             else:
-                archive_loader = fullNodeState.spend_bundle_archive_loader
-                items, first_idx = archive_loader.get_items_hot_chunks()
-                transactions = {}
-                for i in items:
-                    if i is None:
-                        continue
-                    name = i.spend_bundle_hash
-                    try:
-                        sp: SpendBundle = SpendBundle.from_bytes(i.raw_spend_bundle)
-                        sp_json = sp.to_json_dict()
-                        print(sp_json)
-                        transactions[i.spend_bundle_hash] = WDB.MempoolItem(raw_json_spendbundle=sp_json, timestamp=i.timestamp)
-                    except Exception as e:
-                        logging(debug_logger, "DEBUG", f"mempool ERROR{e}")
-                        UTILS.logging_traceback("MEME")
-
-                tx_cache["tx"] = transactions[spend_bundle_hash]
+                # not in the mempool anymore: the saved copy (e.g. a watched bundle)
+                conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+                saved = WDB.load_spend_bundle(conn, spend_bundle_hash)
+                conn.close()
+                if saved:
+                    sp: SpendBundle = SpendBundle.from_bytes(saved[0].raw_spend_bundle)
+                    tx_cache["tx"] = WDB.MempoolItem(raw_json_spendbundle=sp.to_json_dict(),
+                                                     timestamp=saved[0].timestamp)
+                else:
+                    tx_cache["tx"] = None
 
     main_scope.data["tx_cache"] = tx_cache
 
     tx = tx_cache["tx"]
+    if tx is None:
+        ELEMENTS.create_text(tx_win, UIgraph.Point(2, 2), f"bundle {spend_bundle_hash} not found: "
+                             "it left the mempool and it was not saved", screenState.colorPairs['tab_soft'])
+        return
+
+    # save the bundle, then add it to the group: the group only references saved bundles
+    if keyboardState.key == 'w' and not main_scope.data['watch_later']:
+        conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+        WDB.insert_spend_bundle(conn, SpendBundle.from_json_dict(tx.spend_bundle))
+        main_scope.data['watch_later'] = WDB.add_spend_bundles_to_watch_later(conn, spend_bundle_hash)
+        conn.close()
     P_text = screenState.colorPairs['tab_soft']
     P_watch = screenState.colorPairs['error']
     pos = UIgraph.Point(2,2)
@@ -4815,7 +4818,7 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
         #pos += UIgraph.Point(0,2)
         #ELEMENTS.create_text(tx_win, pos, str(rem), P_text, bold=False)
 
-        coin_id = calc_coin_id(uint64(rem['amount']), rem['parent_coin_info'], rem['puzzle_hash'])
+        coin_id = UTILS.calc_coin_id(rem['parent_coin_info'], rem['puzzle_hash'], uint64(rem['amount']))
         rem = ['removal', coin_id, rem['amount'], rem['parent_coin_info'], rem['puzzle_hash']]
         coins.append(rem)
 
@@ -4823,7 +4826,7 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
 
     # additions
     for add in tx.additions:
-        coin_id = calc_coin_id(uint64(add['amount']), add['parent_coin_info'], add['puzzle_hash'])
+        coin_id = UTILS.calc_coin_id(add['parent_coin_info'], add['puzzle_hash'], uint64(add['amount']))
         add = ['addition', coin_id, add['amount'], add['parent_coin_info'], add['puzzle_hash']]
         coins.append(add)
 
@@ -4845,7 +4848,10 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
                                          ScopeActions.exit_scope,
                                          True,
                                          False,
-                                         legend)
+                                         legend,
+                                         # fixed widths: create_tab would drop the columns
+                                         # that do not fit, but not from its cached colors
+                                         column_widths=[9, 64, 16, 40, 40])
 
     sp = tx.spend_bundle
 
@@ -4857,16 +4863,13 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
     c_solution = "not found"
     for c in sp_coins:
         c_coin = c['coin']
-        c_id = calc_coin_id(uint64(c_coin['amount']), c_coin['parent_coin_info'], c_coin['puzzle_hash'])
+        c_id = UTILS.calc_coin_id(c_coin['parent_coin_info'], c_coin['puzzle_hash'], uint64(c_coin['amount']))
         if c_id == selected_id:
-            c_puzzle = Program.fromhex(c['puzzle_reveal'])
-            c_solution = Program.fromhex(c['solution'])
+            c_puzzle = PyProgram.fromhex(c['puzzle_reveal'])
+            c_solution = PyProgram.fromhex(c['solution'])
 
             # unroll puzzle
-            c_puzzle_unrolled = PUZ.unroll_coin_puzzle_to_puzzle_hashes(c_puzzle)
-            c_puzzle_names = []
-            for p in c_puzzle_unrolled:
-                c_puzzle_names.append(PUZ.compare_to_known_puzzle(p))
+            c_puzzle_names, _ = PUZ.unroll_puzzle_to_names(c_puzzle)
 
 
             pos += UIgraph.Point(0, tab_size.y + 1)

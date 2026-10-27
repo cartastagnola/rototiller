@@ -1017,6 +1017,7 @@ class ScopeActions():
 
     @staticmethod
     def open_transaction(scope: Scope, screenState: ScreenState, spend_bundle_hash):
+        from src.SCREENStiller import screen_transaction
         new_name = f"{scope.parent_scope.name}_{spend_bundle_hash}"
         new_scope = Scope(new_name, screen_transaction, screenState)
         new_scope.parent_scope = scope  # parent_scope

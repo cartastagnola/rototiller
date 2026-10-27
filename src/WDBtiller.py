@@ -767,12 +767,47 @@ def insert_address(conn, pk_state_id, hd_path, address, hardened):
 
 ######################## spend bundles db ##########################
 
+# tables whose old schema allowed one bundle per coin and one group per bundle
+_OLD_SPEND_BUNDLE_TABLES = {
+    'coin_spends': ('coin_id BLOB NOT NULL UNIQUE',
+                    'spend_bundle_id, coin_id, parent_id, amount, puzzle_reveal_hash, solution'),
+    'spend_bundle_groups': ('spend_bundle_id BLOB NOT NULL UNIQUE', 'group_id, spend_bundle_id'),
+}
+
+
+def _rename_old_spend_bundle_tables(cursor):
+    """Rename the tables with the old constraints to <table>_old, so they are created again
+    with the new ones. Returns the renamed tables."""
+    renamed = []
+    for table, (old_column, _) in _OLD_SPEND_BUNDLE_TABLES.items():
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?;", (table,))
+        row = cursor.fetchone()
+        if row is not None and old_column in row[0]:
+            cursor.execute(f"ALTER TABLE {table} RENAME TO {table}_old;")
+            renamed.append(table)
+    if 'coin_spends' in renamed:
+        # the indexes move with the renamed table, drop them so they are created on the new one
+        cursor.execute("DROP INDEX IF EXISTS idx_coin_spend_bundle_id;")
+        cursor.execute("DROP INDEX IF EXISTS idx_coin_id;")
+    return renamed
+
+
+def _copy_old_spend_bundle_tables(cursor, renamed):
+    for table in renamed:
+        columns = _OLD_SPEND_BUNDLE_TABLES[table][1]
+        cursor.execute(f"INSERT OR IGNORE INTO {table} ({columns}) SELECT {columns} FROM {table}_old;")
+        cursor.execute(f"DROP TABLE {table}_old;")
+
+
 def create_spend_bundle_db(conn):
     """Creates a database to store spend bundles and puzzles if it doesn't already exist.
     Puzzle reveals are store in a separate table and referenced by hash. """
 
     try:
         cursor = conn.cursor()
+        if not conn.in_transaction:
+            cursor.execute("BEGIN;")  # the migration renames and copies tables: all or nothing
+        renamed = _rename_old_spend_bundle_tables(cursor)
 
         # puzzle table
         # i think i shoud get the hash of the first uncurried puzzle. The last curried stuff
@@ -793,7 +828,7 @@ def create_spend_bundle_db(conn):
             "CREATE TABLE IF NOT EXISTS coin_spends("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "spend_bundle_id INT NOT NULL, "
-            "coin_id BLOB NOT NULL UNIQUE, "
+            "coin_id BLOB NOT NULL, "
             "parent_id BLOB NOT NULL, "
             "amount INT NOT NULL, "
             #"puzzle_hash BLOB NOT NULL,"
@@ -801,7 +836,9 @@ def create_spend_bundle_db(conn):
             "solution BLOB NOT NULL, "
 
             "FOREIGN KEY (puzzle_reveal_hash) REFERENCES puzzles(puzzle_hash), "
-            "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id));"
+            "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id), "
+            # a coin can be spent by more bundles (a fee bump, a double spend)
+            "UNIQUE (spend_bundle_id, coin_id));"
 
         )
 
@@ -814,8 +851,12 @@ def create_spend_bundle_db(conn):
             "block_height INT, "
             "status TEXT NOT NULL, "  # change to INT: 0-pending, 1-confirmed, 2-invalid
             "aggregated_signature BLOB NOT NULL, "
-            "raw_spend_bundle BLOB NOT NULL);"
+            "raw_spend_bundle BLOB NOT NULL, "
+            "replaced_by INT REFERENCES spend_bundles(id));"  # the fee bump that took its place
         )
+        cursor.execute("PRAGMA table_info(spend_bundles);")
+        if 'replaced_by' not in [column[1] for column in cursor.fetchall()]:
+            cursor.execute("ALTER TABLE spend_bundles ADD COLUMN replaced_by INT REFERENCES spend_bundles(id);")
 
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS spend_bundle_group_names ("
@@ -828,9 +869,11 @@ def create_spend_bundle_db(conn):
             "CREATE TABLE IF NOT EXISTS spend_bundle_groups ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "group_id INT NOT NULL, "
-            "spend_bundle_id BLOB NOT NULL UNIQUE, "
-            "FOREIGN KEY (group_id) REFERENCES group_names(id),"
-            "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id));"
+            "spend_bundle_id INT NOT NULL, "
+            "FOREIGN KEY (group_id) REFERENCES spend_bundle_group_names(id), "
+            "FOREIGN KEY (spend_bundle_id) REFERENCES spend_bundles(id), "
+            # a bundle can be in more groups
+            "UNIQUE (group_id, spend_bundle_id));"
         )
 
         # Indexing for quick lookups
@@ -841,9 +884,11 @@ def create_spend_bundle_db(conn):
             "CREATE INDEX IF NOT EXISTS idx_coin_id ON coin_spends(coin_id); "
         )
 
+        _copy_old_spend_bundle_tables(cursor, renamed)
         conn.commit()
 
     except sqlite3.Error as e:
+        conn.rollback()
         print(f"Error creating the spend bundle database: {e}")
         logging(debug_logger, "DEBUG", f"WDB error while creating the spend bundle database: {e}")
         logging(debug_logger, "DEBUG", "WDB error _________________________________________")
@@ -863,11 +908,20 @@ def insert_puzzle(contable_namen, puzzle_hash, puzzle, size):
     )
 
 
-def add_spend_bundles_to_watch_later(conn, spend_bundle_hash):
+def _bundle_hash_bytes(spend_bundle_hash) -> bytes:
+    """Bundle hashes come as bytes or as hex, with or without 0x."""
+    if isinstance(spend_bundle_hash, str):
+        return bytes.fromhex(spend_bundle_hash.removeprefix('0x'))
+    return bytes(spend_bundle_hash)
+
+
+def add_spend_bundles_to_watch_later(conn, spend_bundle_hash) -> bool:
+    """Add a bundle already saved with insert_spend_bundle to the watch later group.
+    False if the bundle is not in the DB."""
     cursor = conn.cursor()
     group_name = "watch later"
 
-    spend_bundle_hash = bytes.fromhex(spend_bundle_hash)
+    spend_bundle_hash = _bundle_hash_bytes(spend_bundle_hash)
 
     # retrive the id of the sb
     cursor.execute(
@@ -875,9 +929,9 @@ def add_spend_bundles_to_watch_later(conn, spend_bundle_hash):
         (spend_bundle_hash,)
     )
     item = cursor.fetchone()
-    spend_bundle_id = None
-    if item:
-        spend_bundle_id = item[0]
+    if item is None:
+        return False
+    spend_bundle_id = item[0]
 
     # add the group name or retrive the id
     cursor.execute(
@@ -900,8 +954,7 @@ def add_spend_bundles_to_watch_later(conn, spend_bundle_hash):
     )
 
     conn.commit()
-
-    # SHould return something?
+    return True
 
 
 def remove_spend_bundle_from_group(spend_bundle_hash):
@@ -942,17 +995,13 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
         spend_bundle_id = cursor.lastrowid
 
     except Exception as e:
-        print(f"we have and exception guys... do something please!!! {e}")
         logging(debug_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
+        return None
 
 
     for spend in coin_spends:
         puzzle_reveal = spend.puzzle_reveal
         puzzle_hash = puzzle_reveal.get_tree_hash()
-        print()
-        print("puzzle hash")
-        print(f"hash: {puzzle_reveal.get_hash()}")
-        print(f"tree hash: {puzzle_reveal.get_tree_hash()}")
         if puzzle_hash not in puzzles:
             puzzles[puzzle_hash] = puzzle_reveal
 
@@ -966,7 +1015,6 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
                     (puzzle_hash, puzzle_reveal.to_bytes(), 0)  # for now the size is 0
                 )
             except Exception as e:
-                print(f"we have and exception guys... puzzle insertion do something please!!! {e}")
                 logging(debug_logger, "DEBUG", f"WDB error while inserting the "
                         f" a new puzzle in the database: {e}")
 
@@ -991,7 +1039,6 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
             )
 
         except Exception as e:
-            print(f"we have and exception guys... coin spend insertion do something please!!! {e}")
             logging(debug_logger, "DEBUG", f"WDB error while inserting the SP in the database: {e}")
 
         # check if the puzzle hash of the coin is the same of the tree hash,
@@ -1012,11 +1059,9 @@ def insert_spend_bundle(conn, spend_bundle: SpendBundle):
         # Program.get_tree_hash  # the one used in the puzzles
 
     conn.commit()
-    print("done")
     # aggregated_signature are not needed to be directily accessible...
 
-
-    return "bye bye..."
+    return spend_bundle_id
 
 
 def load_spend_bundles(conn, group_name=None):
@@ -1076,16 +1121,16 @@ def load_spend_bundle(conn, bundle_hash, group_name=None):
 
 
         cursor. execute(
-            " SELECT s.raw_spend_bundle, s.timestamp FROM "
+            " SELECT s.* FROM "
             " spend_bundles s JOIN spend_bundle_groups g "
-            " ON s.id = g.spend_bundle_id WHERE g.id = ? AND s.spend_bundle_hash = ? ",
-            (group_id, bundle_hash)
+            " ON s.id = g.spend_bundle_id WHERE g.group_id = ? AND s.spend_bundle_hash = ? ",
+            (group_id, _bundle_hash_bytes(bundle_hash))
         )
 
     else:
         cursor.execute(
-            "SELECT raw_spend_bundle, timestamp FROM spend_bundles WHERE spend_bundle_hash = ? ",
-            (bundle_hash,)
+            "SELECT s.* FROM spend_bundles s WHERE spend_bundle_hash = ? ",
+            (_bundle_hash_bytes(bundle_hash),)
         )
 
     raw_spend_bundles = cursor.fetchall()
@@ -1098,6 +1143,46 @@ def load_spend_bundle(conn, bundle_hash, group_name=None):
         bundle_states.append(spend_bundle_state)
 
     return bundle_states
+
+
+def refresh_bundle_status(conn, spend_bundle_id):
+    """Check a pending bundle's coins on chain and update its status:
+    - confirmed: all its coins are spent with its solutions, block_height is where;
+    - conflict: a coin was spent with another solution (another bundle won);
+    - pending: some coins are not spent yet (or the node does not know them).
+    Slow (2 RPC calls per coin): run it in a thread. Returns (status, block_height),
+    or None when the node does not answer."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT coin_id, solution FROM coin_spends WHERE spend_bundle_id = ?;",
+                   (spend_bundle_id,))
+    spends = cursor.fetchall()
+    if len(spends) == 0:
+        return None
+
+    status, block_height = 'confirmed', None
+    for coin_id, solution in spends:
+        try:
+            record = RPC.call_rpc_node('get_coin_record_by_name', name='0x' + coin_id.hex())
+        except Exception:
+            record = None  # not on chain yet (e.g. a coin created in the bundle itself)
+        if not record or not record.get('spent'):
+            status, block_height = 'pending', None
+            break
+        height = record['spent_block_index']
+        try:
+            out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=coin_id.hex(), height=height)
+        except Exception:
+            return None
+        chain_solution = PyProgram.fromhex(out['solution'].removeprefix('0x'))
+        if chain_solution.get_tree_hash() != PyProgram.from_bytes(solution).get_tree_hash():
+            status, block_height = 'conflict', height
+            break
+        block_height = height if block_height is None else max(block_height, height)
+
+    cursor.execute("UPDATE spend_bundles SET status = ?, block_height = ? WHERE id = ?;",
+                   (status, block_height, spend_bundle_id))
+    conn.commit()
+    return status, block_height
 
 
 ############### mempool structure ######################
@@ -1227,6 +1312,7 @@ class BundleState:
         self.status = raw_data[4]
         self.aggregated_signature = raw_data[5]
         self.raw_spend_bundle = raw_data[6]
+        self.replaced_by = raw_data[7] if len(raw_data) > 7 else None
 
 # block state type
 class BlockState:
