@@ -1849,6 +1849,7 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
             ('mempool', screen_mempool, ScopeActions.activate_scope, None),
             ('search puzzles and addresses', screen_full_node_search, ScopeActions.activate_scope, None),
             ('address_watchlist', screen_address_watchlist, ScopeActions.activate_scope, None),
+            ('reorgs', screen_reorgs, ScopeActions.activate_scope, None),
         ]
 
     active_scope: Scope = screenState.activeScope
@@ -5361,3 +5362,210 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
         for i, fn in screenState.pending_action:
             fn()
         screenState.pending_action = []
+
+
+REORG_VIEWS = ['timeline', 'by depth']
+REORG_REFRESH = 30  # sec between two scans of the last blocks
+REORG_CHART_MAX_ROWS = 8
+
+
+def human_age_days(seconds: float) -> str:
+    """human_age, with days for the ages over one day"""
+    if seconds < 86400:
+        return human_age(seconds)
+    seconds = int(seconds)
+    return f"{seconds // 86400}d {seconds % 86400 // 3600:02d}h"
+
+
+def reorg_depth_color(screenState: ScreenState, depth: int):
+    if depth <= 1:
+        return screenState.colorPairs["body"]
+    if depth == 2:
+        return screenState.colorPairs["xch"]
+    return screenState.colorPairs["error"]
+
+
+def draw_reorg_timeline(win, screenState: ScreenState, pos: UIgraph.Point, width: int, chart_rows: int,
+                        forks: list, selected):
+    """Forks on a time axis, from the oldest one to now: one column for each time bucket,
+    the bar is the depth of the deepest fork in it. A ▼ marks the selected fork.
+    Returns the number of lines used"""
+    P_text = screenState.colorPairs["body"]
+    P_title = screenState.colorPairs["xch"]
+    label_width = 5  # depth labels on the left, then the axis
+    cols = max(width - label_width - 1, 10)
+
+    now = datetime.now().timestamp()
+    timestamps = [f.timestamp for f in forks if f.timestamp is not None]
+    start = min(timestamps) if timestamps else now - 86400
+    span = max(now - start, 3600) * 1.02  # a small margin before the oldest fork
+    start = now - span
+
+    def column(timestamp):
+        return min(int((timestamp - start) / span * cols), cols - 1)
+
+    deepest = {}
+    for f in forks:
+        if f.timestamp is not None:
+            c = column(f.timestamp)
+            deepest[c] = max(deepest.get(c, 0), f.depth)
+
+    x0 = pos.x + label_width
+    # marker row
+    if selected is not None and selected.timestamp is not None:
+        put_text(win, UIgraph.Point(x0 + column(selected.timestamp), pos.y), '▼', P_title, True)
+    # bars, from the top row down
+    for r in range(chart_rows):
+        level = chart_rows - r
+        y = pos.y + 1 + r
+        label = f"{level}+" if level == chart_rows and max(deepest.values(), default=0) > chart_rows else str(level)
+        put_text(win, UIgraph.Point(pos.x, y), f"{label:>3} │", P_text)
+        for c, depth in deepest.items():
+            if depth >= level:
+                put_text(win, UIgraph.Point(x0 + c, y), '█', reorg_depth_color(screenState, depth))
+
+    # time axis with a tick every few columns
+    y_axis = pos.y + 1 + chart_rows
+    # dates only when the ticks are at least one day apart
+    tick_every = 11
+    date_format = '%m-%d'
+    if tick_every / cols * span < 86400:
+        tick_every = 17
+        date_format = '%m-%d %H:%M'
+    axis = ['─'] * cols
+    for c in range(0, cols - tick_every // 2, tick_every):
+        axis[c] = '┬'
+        tick_time = datetime.fromtimestamp(start + c / cols * span).strftime(date_format)
+        put_text(win, UIgraph.Point(x0 + c, y_axis + 1), tick_time, P_text)
+    put_text(win, UIgraph.Point(pos.x, y_axis), '    └' + ''.join(axis), P_text)
+    return chart_rows + 3
+
+
+def screen_reorgs(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """Forks seen by the node, from the blocks of its DB that are not in the main chain"""
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error"]
+    P_title = screenState.colorPairs["xch"]
+
+    pos = UIgraph.Point(1,1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'reorgs', P_title, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0,3)
+
+    # the first scan reads the whole node DB, the next ones only the last blocks
+    scanner = WDB.REORG_SCANNER
+    if not scanner.lock.locked() and time.time() - scanner.last_scan > REORG_REFRESH:
+        scan_thread = threading.Thread(target=scanner.refresh, daemon=True)
+        scan_thread.start()
+        scan_thread.setName("scanning reorgs")
+        with screenState.lock:
+            screenState.running_threads.append(scan_thread)
+
+    if scanner.scanned_height is None:
+        if scanner.error:
+            put_text(win, pos, scanner.error, P_error, bold=True)
+        else:
+            put_text(win, pos, "scanning the whole node DB for blocks out of the main chain...", P_text, bold=True)
+        return
+
+    forks = list(scanner.forks)
+    deepest = max((f.depth for f in forks), default=0)
+    text = (f"{len(scanner.orphans)} blocks out of the main chain in {len(forks)} forks | "
+            f"deepest: {deepest} blocks | scanned up to height {scanner.scanned_height:,}")
+    if scanner.lock.locked():
+        text += " | scanning..."
+    put_text(win, pos, text, P_text)
+    pos += UIgraph.Point(0,1)
+    if scanner.error:
+        put_text(win, pos, scanner.error, P_error)
+    else:
+        put_text(win, pos, "a fork of depth 1 can also be a block that lost the race and was never the peak", P_text)
+    pos += UIgraph.Point(0,2)
+
+    view = REORG_VIEWS[main_scope.cursor_x % len(REORG_VIEWS)]
+    pos_tab_title = pos
+    pos += UIgraph.Point(0, 2)
+    screenState.footer_text += "| switch view=←→ "
+
+    if view == 'by depth':
+        forks.sort(key=lambda f: (f.depth, f.tip_height), reverse=True)
+
+    legend = ['time', 'ago', 'fork at height', 'depth', 'orphaned blocks', 'orphaned tip']
+    now = datetime.now().timestamp()
+    rows = []
+    keys = []
+    for f in forks:
+        rows.append([
+            UTILS.timestamp_to_date(f.timestamp) if f.timestamp else '-',
+            human_age_days(now - f.timestamp) if f.timestamp else '-',
+            f"{f.fork_height:,}",
+            f.depth,
+            f.orphaned_blocks,
+            '0x' + f.tip_hash.hex(),
+        ])
+        keys.append(f.tip_hash.hex())
+
+    tab_name = f"reorgs_{view.replace(' ', '_')}"
+    selected = None
+    if view == 'timeline':
+        # the line under the tabs, the chart has no border of its own
+        put_text(win, pos, '─' * (main_win_size.x - 2), P_text)
+        chart_rows = min(max(deepest, 3), REORG_CHART_MAX_ROWS)
+        tab_scope = main_scope.sub_scopes.get(f"{main_scope.id}_{tab_name}")  # the name create_tab gives it
+        if tab_scope is not None and forks:
+            selected = forks[tab_scope.cursor % len(forks)]
+        used = draw_reorg_timeline(win, screenState, pos + UIgraph.Point(0, 1), main_win_size.x - 2,
+                                   chart_rows, forks, selected)
+        pos += UIgraph.Point(0, used + 2)
+
+    if rows:
+        tab_size = UIgraph.Point(main_win_size.x - 2, max(main_win_size.y - pos.y - 2, 5))
+        ELEMENTS.create_tab(win,
+                            screenState,
+                            main_scope,
+                            tab_name,
+                            rows,
+                            keys,
+                            fresh_table_colors(rows),
+                            False,
+                            pos,
+                            tab_size,
+                            keyboardState,
+                            scopeAction_nothing,
+                            True,
+                            False,
+                            legend,
+                            [None, None, None, None, None, 70])
+    else:
+        put_text(win, pos + UIgraph.Point(0, 1), "no fork in the node DB", P_text)
+
+    P_tab_title = screenState.colorPairs["title"]
+    P_tab_soft = screenState.colorPairs["tab_soft"]
+    pos = pos_tab_title
+    for name in REORG_VIEWS:
+        text = f" {name.upper()} " if name == 'timeline' else f" {name.upper()} ({len(forks)}) "
+        selected_tab = name == view
+        P_used = P_title if selected_tab else P_tab_title
+        ELEMENTS.create_text_double_space(win, screenState, pos, text, P_used, C_background, 3, True)
+        underline_pos = pos + UIgraph.Point(0, 2)
+        if selected_tab:
+            ELEMENTS.create_text(win, underline_pos, u'▀' * (len(text) + 2), P_tab_soft, True)
+        else:
+            ELEMENTS.create_text(win, underline_pos, ' ' * (len(text) + 2), P_used, True)
+        pos += UIgraph.Point(len(text) + 2, 0)
+
+

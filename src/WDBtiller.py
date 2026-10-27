@@ -3654,6 +3654,113 @@ class CacheUpdater:
                            "VALUES (0, ?, ?)", (height, header_hash))
 
 
+@dataclass
+class Fork:
+    """A branch of blocks that left the main chain: from the orphaned tip down to the
+    main chain block it starts from. With depth 1 it can also be a block that lost the
+    race and was never the peak of the node"""
+    tip_hash: bytes
+    tip_height: int
+    fork_height: int  # the last block shared with the main chain
+    orphaned_blocks: int
+    timestamp: int = None  # of the main chain transaction block at the tip height or under it
+
+    @property
+    def depth(self):
+        return self.tip_height - self.fork_height
+
+
+class ReorgScanner:
+    """Find the forks in the node DB: the blocks of full_blocks with in_main_chain = 0.
+    The first scan reads the whole table (no index on in_main_chain = 0, ~30 sec cold),
+    the next ones only the last blocks, with the height index"""
+    RESCAN_DEPTH = 64  # a reorg can flip the main chain blocks under the last scanned height
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.orphans = {}  # header_hash -> (height, prev_hash)
+        self.timestamps = {}  # tip_hash -> timestamp, they do not change
+        self.scanned_height = None  # main chain peak at the last scan
+        self.forks: list[Fork] = []
+        self.status = 'not started'
+        self.error = None
+        self.last_scan = 0
+
+    def refresh(self):
+        """Scan the node DB, one scan at a time. Returns False if a scan is already running"""
+        if not self.lock.acquire(blocking=False):
+            return False
+        try:
+            self.status = 'scanning the whole node DB' if self.scanned_height is None else 'scanning the last blocks'
+            db_conn = get_connection(CONF.DB_BLOCKCHAIN_RO)
+            try:
+                self._scan(db_conn)
+            finally:
+                db_conn.close()
+            self.error = None
+            self.status = 'done'
+        except Exception as e:
+            UTILS.logging_traceback("REORG SCANNER")
+            self.error = f"reorg scan error: {e}"
+            self.status = 'error'
+        finally:
+            self.last_scan = time.time()
+            self.lock.release()
+        return True
+
+    def _scan(self, db_conn):
+        peak = db_conn.execute("SELECT max(height) FROM full_blocks WHERE in_main_chain = 1").fetchone()[0] or 0
+        if self.scanned_height is None:
+            rows = db_conn.execute("SELECT header_hash, prev_hash, height FROM full_blocks "
+                                   "WHERE in_main_chain = 0").fetchall()
+            orphans = {}
+        else:
+            from_height = max(self.scanned_height - self.RESCAN_DEPTH, 0)
+            rows = db_conn.execute("SELECT header_hash, prev_hash, height FROM full_blocks "
+                                   "WHERE height > ? AND in_main_chain = 0", (from_height,)).fetchall()
+            # the blocks above from_height are read again, also the ones back in the main chain
+            orphans = {h: v for h, v in self.orphans.items() if v[0] <= from_height}
+        for header_hash, prev_hash, height in rows:
+            orphans[bytes(header_hash)] = (height, bytes(prev_hash))
+
+        # a fork for each orphan that is not the parent of another orphan
+        parents = {prev_hash for height, prev_hash in orphans.values() if prev_hash in orphans}
+        forks = []
+        for tip_hash, (tip_height, prev_hash) in orphans.items():
+            if tip_hash in parents:
+                continue
+            count = 1
+            base_height = tip_height
+            while prev_hash in orphans:
+                base_height, prev_hash = orphans[prev_hash]
+                count += 1
+            fork = Fork(tip_hash, tip_height, base_height - 1, count)
+            if tip_hash not in self.timestamps:
+                self.timestamps[tip_hash] = self._timestamp_at(db_conn, tip_height)
+            fork.timestamp = self.timestamps[tip_hash]
+            forks.append(fork)
+        forks.sort(key=lambda f: f.tip_height, reverse=True)
+
+        self.orphans = orphans
+        self.forks = forks
+        self.scanned_height = peak
+
+    @staticmethod
+    def _timestamp_at(db_conn, height):
+        """Timestamp of the main chain transaction block at height or the closest one under it"""
+        rows = db_conn.execute("SELECT block_record FROM full_blocks WHERE in_main_chain = 1 "
+                               "AND height <= ? AND height > ? ORDER BY height DESC",
+                               (height, height - 50)).fetchall()
+        for (raw,) in rows:
+            timestamp = BlockRecord.from_bytes(raw).timestamp
+            if timestamp is not None:
+                return int(timestamp)
+        return None
+
+
+REORG_SCANNER = ReorgScanner()
+
+
 class DataChunkLoader:
     def __init__(self, db_path: str, table_name: str, chunk_size: int, fetch_fun: callable,
                  fetch_first_last_count_fun: callable, offset: int = 0, sorting_column=None,
