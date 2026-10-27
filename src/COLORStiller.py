@@ -217,6 +217,46 @@ def init_colors(screen_state):  # UItiller.ScreenState
     screen_state.colorPairs["scope_selected"] = UIgraph.addCustomColorTuple(
         (screen_state.colors["gray"], screen_state.colors["tab_dark"]),
         screen_state.cursesColors)
+    # vdf chains
+    screen_state.colorPairs["vdf_cc"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["azure_up"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_icc"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["light_azure"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_rc"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["azure_up"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_overflow"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["yellow_bee"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_dim"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["dark_gray"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_sub_slot_a"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["chia_green"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_sub_slot_b"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["mini_block"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_block_tx"] = UIgraph.addCustomColorTuple(
+        (curses.COLOR_BLACK, screen_state.colors["chia_green"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_block_no_tx"] = UIgraph.addCustomColorTuple(
+        (curses.COLOR_BLACK, screen_state.colors["mini_block"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_block_tx_half"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["chia_green"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_block_no_tx_half"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["mini_block"], screen_state.colors["background"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_selected"] = UIgraph.addCustomColorTuple(
+        (curses.COLOR_BLACK, screen_state.colors["white"]),
+        screen_state.cursesColors)
+    screen_state.colorPairs["vdf_selected_half"] = UIgraph.addCustomColorTuple(
+        (screen_state.colors["white"], screen_state.colors["background"]),
+        screen_state.cursesColors)
     # title white on soft background
     screen_state.colorPairs["title"] = UIgraph.addCustomColorTuple(
         (screen_state.colors["white"], screen_state.colors["tab_soft"]),

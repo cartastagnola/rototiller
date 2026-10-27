@@ -5,6 +5,7 @@ import traceback
 import curses
 import sqlite3
 import threading
+import time
 import multiprocessing
 from math import floor
 
@@ -2837,6 +2838,7 @@ def create_block_band(stdscr,
         scope.data["thread_update_loader"] = None
 
     scope: Scope = screenState.scopes[name]
+    screenState.block_band_name = name
     scope.visible = False  # not selectable...
     scope_is_active = False
     scope_exec_args = [screenState]
@@ -3373,4 +3375,612 @@ def create_block_band(stdscr,
     lapper.end()
 
     return scope
+
+
+VDF_LANES = 5     # rows of blocks (2 lines each), always kept so the graph does not change height;
+                  # where more are needed, the top one says "+N more"
+VDF_COMPACT_LANES = 2  # rows of blocks in the compact graph (1 line each), plus one for "+N more"
+VDF_BAR_ROWS = 8  # VDF bars of the selected block: 5 of the block, 3 of the sub-slot end it carries (none if not)
+
+
+def create_vdf_chains(win, screenState: ScreenState, pos: UIgraph.Point, width: int, max_lines: int,
+                      sub_slots: list, peak_total_iters, selected, block_vdfs: dict, compact: bool = False):
+    """Draw the blocks, the slots, the sub-slots and the three VDF chains on a real time axis
+    (iterations), newest on the left like the block band, and the VDFs of the selected block.
+    sub_slots: list of WDB.VdfSubSlot, sorted, with their blocks
+    peak_total_iters: infusion point of the peak (the tip of the chains). None if the peak is
+        not in sub_slots
+    selected: WDB.VdfBlockPoint of the selected block, or None (the tip is shown)
+    block_vdfs: WDB.load_block_vdfs of the selected block, or None. The first block of a sub-slot
+        carries the end of the sub-slots finished before it: their links are highlighted and
+        their VDFs shown with the block's ones
+    The height is fixed: VDF_LANES rows of blocks (the blocks that do not fit are counted in a
+    "+N more" label in the top row) and
+    VDF_BAR_ROWS bars (more if the block carries sub-slot ends).
+    compact: for small windows, one row for each row of blocks (no "▀▀▀"), one row between the
+    chains for the ▼ ▲ links (no ip and sp labels) and no VDF bars
+    Return (lines used, rows of the VDF table: [vdf, from, to, iterations], legend items to
+    highlight) for create_vdf_tabs."""
+
+    P_text = screenState.colorPairs["body"]
+    P_white = screenState.colorPairs["down"]
+    P_cc = screenState.colorPairs["vdf_cc"]
+    P_icc = screenState.colorPairs["vdf_icc"]
+    P_rc = screenState.colorPairs["vdf_rc"]
+    P_dim = screenState.colorPairs["vdf_dim"]
+    P_slot = [screenState.colorPairs["vdf_sub_slot_a"], screenState.colorPairs["vdf_sub_slot_b"]]
+    P_slot_long = screenState.colorPairs["btc_text"]
+    P_block = {True: screenState.colorPairs["vdf_block_tx"], False: screenState.colorPairs["vdf_block_no_tx"]}
+    P_block_half = {True: screenState.colorPairs["vdf_block_tx_half"], False: screenState.colorPairs["vdf_block_no_tx_half"]}
+    P_selected = screenState.colorPairs["vdf_selected"]
+    P_selected_half = screenState.colorPairs["vdf_selected_half"]
+
+    if len(sub_slots) == 0:
+        return 0, [], set()
+
+    label_width = 12
+    plot_x = pos.x + label_width
+    plot_width = width - label_width
+    if plot_width < 10:
+        return 0, [], set()
+    sp_intervals = 64  # signage points in a sub-slot
+    cols_per_sp = 3    # about 3 s for each column
+
+    sub_slot_iters = (selected.sub_slot_iters if selected is not None else sub_slots[-1].sub_slot_iters)
+    iters_per_col = sub_slot_iters / sp_intervals / cols_per_sp
+
+    # time on the left edge (column 2; column 0 is left empty, column 1 has the tip mark):
+    # the selected block at a third of the width, or the tip of the chains
+    newest = peak_total_iters if peak_total_iters is not None else sub_slots[-1].end
+    left_iters = newest
+    if selected is not None:
+        left_iters = min(newest, selected.ip_total_iters + int(plot_width // 3 * iters_per_col))
+    at_tip = left_iters == peak_total_iters
+
+    def col(iters):
+        """column in the plot (0 = plot_x) of an iteration, it can be outside the plot"""
+        return 2 + int((left_iters - iters) // iters_per_col)
+
+    def visible(c):
+        return 0 <= c < plot_width
+
+    # the plot is drawn in a grid of cells (char, color pair, inverse) and then written in runs
+    blank = (' ', P_text, False)
+
+    def new_row():
+        return [blank] * plot_width
+
+    def put(r, c, text, P_color, inv=False):
+        for k, ch in enumerate(text):
+            if visible(c + k):
+                r[c + k] = (ch, P_color, inv)
+
+    oldest_iters = left_iters - (plot_width - 3) * iters_per_col
+    blocks = [b for sub_slot in sub_slots for b in sub_slot.blocks
+              if oldest_iters <= b.ip_total_iters <= left_iters]
+
+    # blocks: 2 rows x 3 columns ("~NN", then the lower half of the block), at their infusion point;
+    # newest first, each one in the lowest row where it does not touch another block
+    lanes = []
+    placed = []
+    for block in sorted(blocks, key=lambda b: -b.ip_total_iters):
+        x0 = col(block.ip_total_iters) - 1
+        x1 = x0 + 2
+        for n_lane, lane in enumerate(lanes):
+            if all(x1 + 1 < a or x0 > z + 1 for a, z in lane):
+                lane.append((x0, x1))
+                placed.append((n_lane, x0, block))
+                break
+        else:
+            lanes.append([(x0, x1)])
+            placed.append((len(lanes) - 1, x0, block))
+    # VDF_LANES rows of blocks (VDF_COMPACT_LANES if compact). The blocks that do not fit are
+    # counted in a label, "+N more" (or the selected block if it is one of them), where the first
+    # of them is: compact in a row of its own above the blocks, full in the top row of blocks,
+    # whose blocks under the label are counted with the others
+    n_lanes = VDF_COMPACT_LANES if compact else VDF_LANES
+
+    def label_groups(hidden):
+        """the hidden blocks close to each other share one label"""
+        groups = []
+        for n_lane, x0, block in sorted(hidden, key=lambda p: p[1]):
+            if groups and x0 <= groups[-1]['end'] + 1:
+                groups[-1]['blocks'].append(block)
+            else:
+                groups.append({'x0': x0, 'blocks': [block]})
+            g = groups[-1]
+            g['end'] = g['x0'] + len(f"+{len(g['blocks'])} more")
+        return groups
+
+    hidden = [p for p in placed if p[0] >= n_lanes]
+    while hidden and not compact:
+        spans = [(g['x0'], g['end']) for g in label_groups(hidden)]
+        under = [p for p in placed if p[0] == n_lanes - 1 and p not in hidden
+                 and any(p[1] <= z + 1 and p[1] + 3 >= a for a, z in spans)]
+        if not under:
+            break
+        hidden += under
+    placed = [p for p in placed if p not in hidden]
+
+    heights_row = new_row()
+    spacer_row = new_row()
+    rows_per_lane = 1 if compact else 2
+    label_rows = 1 if compact else 0  # the row of the labels, compact only
+    lane_rows = [new_row() for _ in range(n_lanes * rows_per_lane + label_rows)]
+    # full height every 10 blocks, with "▕" just before its first digit, down through all the block rows
+    for n_lane, x0, block in placed:
+        if block.height % 10 == 0:
+            label = f"{block.height:_}"
+            lx = max(1, min(x0, plot_width - len(label)))
+            put(heights_row, lx - 1, '▕' + label, P_white)
+            for r in [spacer_row] + lane_rows:
+                put(r, lx - 1, '▕', P_white)
+    for n_lane, x0, block in placed:
+        top = (n_lanes - 1 - n_lane) * rows_per_lane + label_rows
+        is_selected = selected is not None and block.height == selected.height
+        P_body = P_selected if is_selected else P_block[block.is_transaction_block]
+        P_half = P_selected_half if is_selected else P_block_half[block.is_transaction_block]
+        put(lane_rows[top], x0, f"~{block.height % 100:02d}", P_body)
+        if not compact:
+            put(lane_rows[top + 1], x0, "▀▀▀", P_half)
+
+    # the labels of the hidden blocks, in the first row (the top row of blocks if not compact)
+    for g in label_groups(hidden):
+        sel = [b for b in g['blocks'] if selected is not None and b.height == selected.height]
+        if sel:
+            more = len(g['blocks']) - 1
+            put(lane_rows[0], g['x0'], f"~{sel[0].height % 100:02d}", P_selected)
+            if more:
+                put(lane_rows[0], g['x0'] + 3, f" +{more}", P_white)
+        else:
+            put(lane_rows[0], g['x0'], f"+{len(g['blocks'])} more", P_white)
+
+    # slots: one or more sub-slots, a slot ends where the infused challenge chain goes into the challenge chain
+    slot_row = new_row()
+    sub_slot_row = new_row()
+    done = peak_total_iters if peak_total_iters is not None else sub_slots[-1].end
+    slot_groups = [[]]
+    for sub_slot in sub_slots:
+        slot_groups[-1].append(sub_slot)
+        if sub_slot.icc_into_cc and sub_slot.end <= done:
+            slot_groups.append([])
+    slot_groups = [g for g in slot_groups if g]
+
+    def draw_band(r, start, end, finished, char, P_color, labels):
+        """a full row band from start to end (iterations), with the first label that fits in it
+        and a gap at the end"""
+        c_end, c_start = col(end), col(start)
+        if c_start < 0 or c_end >= plot_width:
+            return
+        put(r, max(c_end, 0), char * (c_start - max(c_end, 0)), P_color)
+        lx = max(c_end, 0) + 3
+        for label in labels:
+            if lx + len(label) < min(plot_width, c_start):
+                put(r, lx, label, P_color, inv=True)
+                break
+        if finished:
+            put(r, c_end, ' ', P_text)
+
+    # time of the sub-slots and slots, from the timestamps of the blocks around them
+    all_points = [b for sub_slot in sub_slots for b in sub_slot.blocks]
+    now = time.time()
+
+    def duration(m_start, m_end, ssi):
+        """seconds from m_start to m_end (finished), or None"""
+        clock = WDB.VdfClock.fit(all_points, m_start - ssi // 2, m_end + ssi // 2)
+        return None if clock is None else (m_end - m_start) / clock.speed
+
+    def running(m_start, m_end, ssi):
+        """(seconds so far, seconds left) from m_start to m_end (not finished yet), or None"""
+        clock = WDB.VdfClock.fit(all_points, m_start - ssi, done)
+        if clock is None:
+            return None
+        so_far = now - clock.time_at(m_start)
+        return so_far, (m_end - m_start) / clock.speed - so_far
+
+    def time_labels(m_start, m_end, ssi, with_left=True):
+        """texts to add to a band label, the longest first"""
+        if m_end <= done:
+            seconds = duration(m_start, m_end, ssi)
+            return [] if seconds is None else [f"~{UTILS.mm_ss(seconds)}"]
+        times = running(m_start, m_end, ssi)
+        if times is None:
+            return []
+        so_far, left = times
+        if not with_left:
+            return [UTILS.mm_ss(so_far)]
+        if left > 0:
+            return [f"{UTILS.mm_ss(so_far)}, ~{UTILS.mm_ss(left)} left", UTILS.mm_ss(so_far)]
+        return [f"{UTILS.mm_ss(so_far)}, ending", UTILS.mm_ss(so_far)]
+
+    def band_labels(text, m_start, m_end, ssi, with_left=True):
+        return [f" {text} · {t} " for t in time_labels(m_start, m_end, ssi, with_left)] + [f" {text} "]
+
+    for n, g in enumerate(slot_groups):
+        text = f"slot  {len(g)} sub-slot{'s' if len(g) > 1 else ''}"
+        # the color of its first sub-slot, so slot and sub-slot match after a slot of 2+ sub-slots;
+        # orange: a slot that needed 2 or more sub-slots
+        P_band = P_slot_long if len(g) > 1 else P_slot[sub_slots.index(g[0]) % 2]
+        draw_band(slot_row, g[0].start, g[-1].end, g[-1].end <= done, '█', P_band,
+                  # a running slot can go on after its sub-slot, so no time left
+                  band_labels(text, g[0].start, g[-1].end, g[-1].sub_slot_iters, with_left=False))
+    for n, sub_slot in enumerate(sub_slots):
+        P_band = P_slot[n % 2]
+        text = f"deficit {sub_slot.deficit_start}→{sub_slot.deficit_end}" if sub_slot.blocks else "empty"
+        draw_band(sub_slot_row, sub_slot.start, sub_slot.end, sub_slot.end <= done, '▇', P_band,
+                  band_labels(text, sub_slot.start, sub_slot.end, sub_slot.sub_slot_iters))
+
+    # chains: 3 rows each, the line in the middle row; compact: right under the sub-slots, one row
+    # between them for the links
+    if compact:
+        chain_rows = [new_row() for _ in range(5)]
+        CC, ICC, RC = 0, 2, 4
+    else:
+        chain_rows = [new_row() for _ in range(9)]
+        CC, ICC, RC = 1, 4, 7
+    cc, icc, rc = chain_rows[CC], chain_rows[ICC], chain_rows[RC]
+
+    def vertical(c, row_from, row_to, P_color):
+        for n_row in range(row_from, row_to + 1):
+            put(chain_rows[n_row], c, '┃', P_color)
+
+    def between(n_row, c, text, P_color):
+        """arrows in the rows between the chains"""
+        put(chain_rows[n_row], c, text, P_color)
+
+    def ip_sp_label(n_row, c, text, P_color):
+        """the ip and sp labels of the selected block, not in the compact graph"""
+        if not compact:
+            put(chain_rows[n_row], c, text, P_color)
+
+    def chain_line(r, start, end, P_color):
+        c_end, c_start = max(col(end), 0), min(col(start), plot_width)
+        if c_start > c_end:
+            put(r, c_end, '━' * (c_start - c_end), P_color)
+
+    for sub_slot in sub_slots:
+        end = min(sub_slot.end, done)
+        chain_line(cc, sub_slot.start, end, P_cc)
+        chain_line(rc, sub_slot.start, end, P_rc)
+        if sub_slot.icc_start is not None and sub_slot.icc_start <= end:
+            chain_line(icc, sub_slot.icc_start, end, P_icc)
+            c_icc = col(sub_slot.icc_start)
+            if sub_slot.icc_start > sub_slot.start:
+                # the infused challenge chain starts from the challenge chain
+                put(cc, c_icc, '┳', P_cc)
+                vertical(c_icc, CC + 1, ICC - 1, P_cc)
+                between(ICC - 1, c_icc, '▼', P_cc)
+                put(icc, c_icc, '┛', P_icc)
+            # blocks infused in the infused challenge chain
+            for block in sub_slot.blocks:
+                if block.ip_total_iters > sub_slot.icc_start:
+                    put(icc, col(block.ip_total_iters), '●', P_icc)
+        if sub_slot.end <= done:
+            c_end = col(sub_slot.end)
+            # challenge chain into the reward chain; the infused challenge chain crosses it when it goes on
+            put(cc, c_end, '┳', P_cc)
+            vertical(c_end, CC + 1, RC - 1, P_cc)
+            between(RC - 1, c_end, '▼', P_cc)
+            put(rc, c_end, '┻', P_cc)
+            if sub_slot.icc_start is not None and not sub_slot.icc_into_cc:
+                put(icc, c_end, '╋', P_cc)
+            if sub_slot.icc_into_cc:
+                # infused challenge chain into the challenge chain
+                put(cc, c_end + 1, '┳', P_cc)
+                vertical(c_end + 1, CC + 1, ICC - 1, P_icc)
+                between(CC + 1, c_end + 1, '▲', P_icc)
+                put(icc, c_end + 1, '┗', P_icc)
+    for block in blocks:
+        put(rc, col(block.ip_total_iters), '●', P_rc)
+
+    has_vdfs = selected is not None and block_vdfs is not None and block_vdfs['height'] == selected.height
+    end_of_sub_slots = block_vdfs['end_of_sub_slots'] if has_vdfs else []
+
+    # sub-slot ends carried by the selected block: their links in the selection color
+    for eos in end_of_sub_slots:
+        c_end = col(eos['end'])
+        put(cc, c_end, '┳', P_selected_half)
+        vertical(c_end, CC + 1, RC - 1, P_selected_half)
+        between(RC - 1, c_end, '▼', P_selected_half)
+        put(rc, c_end, '┻', P_selected_half)
+        if eos['icc_into_cc']:
+            put(cc, c_end + 1, '┳', P_selected_half)
+            vertical(c_end + 1, CC + 1, ICC - 1, P_selected_half)
+            between(CC + 1, c_end + 1, '▲', P_selected_half)
+            put(icc, c_end + 1, '┗', P_selected_half)
+        elif eos['icc'] is not None:
+            put(icc, c_end, '╋', P_selected_half)
+
+    # selected block: its infusion points and its signage point in the selection color, with their
+    # label, "ip" above the line and "sp" below
+    if selected is not None:
+        c_ip = col(selected.ip_total_iters)
+        c_sp = col(selected.sp_total_iters)
+        ip_rows = [RC]
+        if block_vdfs is not None and block_vdfs.get('icc_ip') is not None:
+            ip_rows.append(ICC)
+        for n_row in ip_rows:
+            put(chain_rows[n_row], c_ip, '●', P_selected_half)
+            ip_sp_label(n_row - 1, c_ip, 'ip', P_selected_half)
+        if any(sub_slot.icc_start == selected.ip_total_iters for sub_slot in sub_slots):
+            # challenge block: the infused challenge chain starts at its infusion point, the link
+            # stays and "ip" goes next to it
+            put(cc, c_ip, '┳', P_selected_half)
+            vertical(c_ip, CC + 1, ICC - 1, P_selected_half)
+            between(ICC - 1, c_ip, '▼', P_selected_half)
+            put(icc, c_ip, '┛', P_selected_half)
+            ip_sp_label(ICC - 1, c_ip + 1, 'ip', P_selected_half)
+        for n_row in (CC, RC):
+            put(chain_rows[n_row], c_sp, '◆', P_selected_half)
+            ip_sp_label(n_row + 1, c_sp, 'sp', P_selected_half)
+
+    # edges: the tip of the chains (or newer blocks off screen) on the left, older ones on the right;
+    # column 0 stays empty, for the "▕" lines of the full heights
+    for r in [slot_row, sub_slot_row] + chain_rows:
+        r[0] = blank
+        if not at_tip:
+            r[1] = blank
+    for r, P_color in ((cc, P_cc), (icc, P_icc), (rc, P_rc)):
+        if r[2][0] != ' ':
+            put(r, 1, '╸' if at_tip else '◀', P_color)
+        if r[plot_width - 2][0] != ' ':
+            put(r, plot_width - 1, '▶', P_color)
+    # the bands go on off screen: their end is cut diagonally (◢ newer, ◤ older), in the band color
+    for r in (slot_row, sub_slot_row):
+        if not at_tip and r[2][0] != ' ':
+            put(r, 1, '◢', r[2][1])
+        # the band color from the last cells (one can be the space after a label)
+        band = [r[c] for c in (plot_width - 1, plot_width - 2) if r[c][0] != ' ']
+        if band:
+            put(r, plot_width - 1, '◤', band[0][1])
+
+    # write the grid
+    # compact: no spacer between the heights and the blocks
+    rows = [('', heights_row)] if compact else [('', heights_row), ('', spacer_row)]
+    rows += [('blocks' if n == len(lane_rows) - rows_per_lane else '', r) for n, r in enumerate(lane_rows)]
+    rows += [('slot', slot_row), ('sub-slot', sub_slot_row)]
+    chain_labels = {CC: ('challenge', P_cc), ICC: ('infused ch.', P_icc), RC: ('reward', P_rc)}
+    rows += [(chain_labels.get(n, ('', P_text)), r) for n, r in enumerate(chain_rows)]
+
+    line = 0
+    for label, r in rows:
+        if line >= max_lines:
+            break
+        label, P_label = label if isinstance(label, tuple) else (label, P_text)
+        y = pos.y + line
+        if label:
+            create_text(win, UIgraph.Point(pos.x, y), label, P_label)
+        n = 0
+        while n < plot_width:
+            ch, P_color, inv = r[n]
+            k = n
+            text = ''
+            while k < plot_width and r[k][1] == P_color and r[k][2] == inv:
+                text += r[k][0]
+                k += 1
+            if text.strip() or inv:
+                create_text(win, UIgraph.Point(plot_x + n, y), text, P_color, inv_color=inv)
+            n = k
+        line += 1
+
+    # VDFs of the selected block, from where to where. The rows are always there, also with no
+    # block selected or while its VDFs load, so the graph does not jump when the block changes;
+    # the end rows say none when the block carries no sub-slot end
+    def block_vdf(key):
+        return block_vdfs[key] if has_vdfs else None
+    vdf_rows = [
+        ("cc sp vdf", block_vdf('cc_sp'), P_cc),
+        ("cc ip vdf", block_vdf('cc_ip'), P_cc),
+        ("icc ip vdf", block_vdf('icc_ip'), P_icc),
+        ("rc sp vdf", block_vdf('rc_sp'), P_rc),
+        ("rc ip vdf", block_vdf('rc_ip'), P_rc),
+    ]
+    for eos in end_of_sub_slots or [{'cc': None, 'icc': None, 'rc': None}]:
+        vdf_rows += [
+            ("cc end vdf", eos['cc'], P_cc),
+            ("icc end vdf", eos['icc'], P_icc),
+            ("rc end vdf", eos['rc'], P_rc),
+        ]
+
+    # right under the row of the sp labels; none in the compact graph (the VDF tab has them)
+    bars_end = line if compact else line + max(VDF_BAR_ROWS, len(vdf_rows))
+    for label, vdf, P_vdf in vdf_rows:
+        if compact or line >= max_lines:
+            break
+        y = pos.y + line
+        create_text(win, UIgraph.Point(pos.x, y), label, P_vdf)
+        if has_vdfs and vdf is None:
+            create_text(win, UIgraph.Point(plot_x + 2, y), "none", P_dim)
+        elif has_vdfs:
+            # newest on the left: the bar goes from the end (left) to the start (right)
+            c_left = col(vdf['end'])
+            c_right = col(vdf['end'] - vdf['iterations'])
+            bar = '┃' if c_right <= c_left else '┣' + '━' * (c_right - c_left - 1) + '┫'
+            if c_right >= plot_width:
+                bar = bar[:plot_width - 1 - c_left] + '▶'
+            if 0 <= c_left < plot_width:
+                create_text(win, UIgraph.Point(plot_x + c_left, y), bar, P_vdf)
+        line += 1
+
+    # the VDFs in numbers, for the VDF tab
+    table = []
+    if has_vdfs:
+        idx_selected = 0
+        for n, sub_slot in enumerate(sub_slots):
+            if sub_slot.start == selected.ip_sub_slot_start:
+                idx_selected = n
+
+        def where(iters, is_end):
+            """is_end: a VDF that ends at the end of a sub-slot is in that sub-slot, one that starts there is in the next"""
+            for n, sub_slot in enumerate(sub_slots):
+                if sub_slot.start <= iters < sub_slot.end or (is_end and iters == sub_slot.end):
+                    sp = (iters - sub_slot.start) / (sub_slot.sub_slot_iters / sp_intervals)
+                    rel = n - idx_selected
+                    if is_end and iters == sub_slot.end:
+                        return "end of sub-slot" + (f" ({rel:+})" if rel != 0 else "")
+                    text = f"sp {sp:4.1f}"
+                    if rel != 0:
+                        text += f" (sub-slot {rel:+})"
+                    return text
+            return "?"
+
+    # all the rows, like the bars: none where there is no VDF, so the table keeps its size
+    for label, vdf, P_vdf in vdf_rows:
+        if vdf is None:
+            table.append([label, 'none', 'none', 'none'])
+        else:
+            table.append([label, where(vdf['end'] - vdf['iterations'], False), where(vdf['end'], True),
+                          f"{vdf['iterations']:,}"])
+
+    # the legend items the selected block uses, in the selection color
+    active = set()
+    if selected is not None:
+        active.add("◆ ●")
+        if any(sub_slot.icc_start == selected.ip_total_iters for sub_slot in sub_slots):
+            active.add("┳ ▼ ┛")
+    for eos in end_of_sub_slots:
+        active.update(("end vdfs", "┳ ▼ ┻"))
+        if eos['icc_into_cc']:
+            active.add("┳ ▲ ┗")
+        elif eos['icc'] is not None:
+            active.add("╋")
+
+    return bars_end, table, active
+
+
+VDF_LEGEND_TERMS = [
+    ("sp", "signage point"),
+    ("ip", "infusion point"),
+    ("cc", "challenge chain"),
+    ("icc", "infused challenge chain"),
+    ("rc", "reward chain"),
+    ("cc sp vdf", "cc, from the sub-slot start to the sp"),
+    ("cc ip vdf", "cc, from the sub-slot start to the ip"),
+    ("icc ip vdf", "icc, from the previous block to the ip"),
+    ("rc sp vdf", "rc, from the previous block to the sp"),
+    ("rc ip vdf", "rc, from the previous block to the ip"),
+    ("end vdfs", "sub-slot ends carried by the block"),
+]
+VDF_LEGEND_SYMBOLS = [
+    ("●", "a block infused in the chain"),
+    ("◆ ●", "sp and ip of the selected block"),
+    ("┳ ▼ ┻", "end of sub-slot: cc goes into rc"),
+    ("┳ ▲ ┗", "end of slot: icc goes into cc"),
+    ("╋", "end of sub-slot: icc goes on"),
+    ("┳ ▼ ┛", "challenge block: icc starts from cc"),
+    ("╸", "tip of the chains (the peak)"),
+    ("◀ ▶", "newer / older off screen"),
+    ("◢ ◤", "slot / sub-slot goes on off screen"),
+    ("deficit", "blocks needed before icc goes into cc"),
+    ("slot", "sub-slots to icc into cc, orange if 2+"),
+    ("sub-slot", "64 signage points, about 10 minutes"),
+]
+
+
+VDF_TABLE_ROWS = 8  # rows of the VDF table: 5 of the block, 3 of the sub-slot end it carries
+
+
+def create_vdf_tabs(win, screenState: ScreenState, keyboardState, parent_scope: Scope, pos: UIgraph.Point,
+                    max_y: int, vdf_table: list, active: set, tab_selected: int) -> bool:
+    """The VDF table and the legend of the blocks and vdf chains screen, two tables like the
+    address viewer ones (enter goes in, the rows can be selected and copied). One on top of the
+    other if there is room, otherwise tabs, and only the selected one is drawn (tab_selected:
+    0 vdf, 1 legend).
+    max_y: last line the tables can use, their bottom frame included
+    vdf_table and active: from create_vdf_chains
+    Return True if they are tabs to switch."""
+
+    P_title = screenState.colorPairs["title"]
+    P_title_selected = screenState.colorPairs["xch"]
+    P_tab_soft = screenState.colorPairs["tab_soft"]
+    C_background = screenState.colors["background"]
+    C_white = screenState.colors["white"]
+
+    vdf_legend = ['vdf', 'from', 'to', 'iterations']
+    # before the chains are loaded
+    vdf_data = vdf_table or [[label, 'none', 'none', 'none'] for label in (
+        "cc sp vdf", "cc ip vdf", "icc ip vdf", "rc sp vdf", "rc ip vdf", "cc end vdf", "icc end vdf", "rc end vdf")]
+    # the cells padded to the same length, so the columns do not move when the block changes
+    # (create_tab sizes the columns from their longest value)
+    vdf_data = [[str(v).ljust(w) for v, w in zip(row, (11, 22, 22, 13))] for row in vdf_data]
+
+    # terms and symbols side by side, the ones the selected block uses in white
+    legend_legend = ['term', 'meaning', 'symbol', 'meaning']
+    legend_data, legend_colors = [], []
+    for n in range(max(len(VDF_LEGEND_TERMS), len(VDF_LEGEND_SYMBOLS))):
+        row, colors = [], []
+        for items in (VDF_LEGEND_TERMS, VDF_LEGEND_SYMBOLS):
+            item = items[n] if n < len(items) else ('', '')
+            row += list(item)
+            colors += [C_white if item[0] in active else None] * 2
+        legend_data.append(row)
+        legend_colors.append(colors)
+
+    # a table: legend (3 lines) + rows + bottom bar, and its frame under it
+    vdf_height = 4 + max(VDF_TABLE_ROWS, len(vdf_data))
+    legend_height = 4 + len(legend_data)
+    stacked = pos.y + 2 + vdf_height + 2 + 2 + legend_height <= max_y
+
+    def vdf_tab(p, h):
+        create_tab(win, screenState, parent_scope, "vdf_table", vdf_data, None, None, False, p,
+                   UIgraph.Point(80, h), keyboardState, ScopeActions.exit_scope, False, False, vdf_legend)
+
+    def legend_tab(p, h):
+        # the rows never change, only their colors: no frame cache, and new column sizes on resize
+        name = f"{parent_scope.id}_vdf_legend"
+        if screenState.screen_resized and name in screenState.scopes:
+            screenState.scopes[name].data['column_sizes'] = None
+        create_tab(win, screenState, parent_scope, "vdf_legend", legend_data, None, legend_colors, False, p,
+                   UIgraph.Point(80, h), keyboardState, ScopeActions.exit_scope, False, False, legend_legend,
+                   no_cache=True)
+
+    def title(p, text, selected):
+        P_used = P_title_selected if selected else P_title
+        create_text_double_space(win, screenState, p, text, P_used, C_background, 3, True)
+        # its bottom row joins the table top, like the address viewer tabs
+        if selected:
+            create_text(win, p + UIgraph.Point(0, 2), '▀' * (len(text) + 2), P_tab_soft, True)
+        else:
+            create_text(win, p + UIgraph.Point(0, 2), ' ' * (len(text) + 2), P_used, True)
+        return len(text) + 2
+
+    # the tab titles after the tables, so the selected one joins its table
+    if stacked:
+        pos_legend = pos + UIgraph.Point(0, 2 + vdf_height + 2)
+        vdf_tab(pos + UIgraph.Point(0, 2), vdf_height)
+        legend_tab(pos_legend + UIgraph.Point(0, 2), legend_height)
+        title(pos, " VDF ", True)
+        title(pos_legend, " LEGEND ", True)
+    else:
+        height = max_y - pos.y - 2
+        if height > 4:
+            (vdf_tab if tab_selected == 0 else legend_tab)(pos + UIgraph.Point(0, 2), height)
+        x = title(pos, " VDF ", tab_selected == 0)
+        title(pos + UIgraph.Point(x, 0), " LEGEND ", tab_selected == 1)
+
+    return not stacked
+
+
+def create_vdf_header(win, screenState: ScreenState, pos: UIgraph.Point, width: int, parts: list,
+                      compact: bool = False) -> int:
+    """One line of text on the grey background of the table legends, with half a block above
+    and below (not if compact). parts: (text, text color or None). Return the number of lines used."""
+    C_background = screenState.colors["background"]
+    C_soft = screenState.colors["tab_soft"]
+    P_soft = screenState.colorPairs["tab_soft"]
+    P_frame = UIgraph.addCustomColorTuple((C_soft, C_background), screenState.cursesColors)
+
+    y = 0 if compact else 1
+    if not compact:
+        create_text(win, pos, '▄' * width, P_frame, True)
+        create_text(win, pos + UIgraph.Point(0, 2), '▀' * width, P_frame, True)
+    create_text(win, pos + UIgraph.Point(0, y), ' ' * width, P_soft, True)
+    x = 1
+    for text, color in parts:
+        text = text[:max(0, width - x - 1)]
+        P_part = P_soft if color is None else UIgraph.addCustomColorTuple((color, C_soft), screenState.cursesColors)
+        create_text(win, pos + UIgraph.Point(x, y), text, P_part, True)
+        x += len(text)
+    return 1 if compact else 3
+
 

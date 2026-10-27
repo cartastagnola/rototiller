@@ -250,6 +250,12 @@ def convert_ts_to_date(ts):
     return datetime.fromtimestamp(ts/1000).strftime('%Y-%m-%d %H:%M:%S')
 
 
+def mm_ss(seconds) -> str:
+    """Seconds as minutes and seconds, like 10m03s, or 38s under a minute"""
+    m, s = divmod(max(0, int(round(seconds))), 60)
+    return f"{m}m{s:02d}s" if m > 0 else f"{s}s"
+
+
 def time_ago(ts):
     now = datetime.now()
     delta = now - ts

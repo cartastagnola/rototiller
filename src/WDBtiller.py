@@ -1520,6 +1520,198 @@ class BlockState:
         return [keys, values]
 
 
+# VDF chains: blocks on the three VDF chains, from the block records of the node DB
+class VdfBlockPoint:
+    """A block on the VDF chains. Only the block record is decoded (no full block),
+    so many blocks can be loaded fast. Iterations are total iterations (absolute)."""
+
+    def __init__(self, height: int, raw_block_record: bytes):
+        br = BlockRecord.from_bytes(raw_block_record)
+        self.height = height
+        self.is_transaction_block = br.is_transaction_block
+        self.signage_point_index = br.signage_point_index
+        self.deficit = br.deficit
+        self.overflow = br.overflow
+        self.is_challenge_block = br.is_challenge_block(DEFAULT_CONSTANTS)  # the infused challenge chain starts here
+        self.first_in_sub_slot = br.first_in_sub_slot
+        self.sub_slot_iters = br.sub_slot_iters
+        self.required_iters = br.required_iters
+        self.ip_iters = br.ip_iters(DEFAULT_CONSTANTS)  # infusion point, in its sub-slot
+        self.sp_iters = br.sp_iters(DEFAULT_CONSTANTS)  # signage point, in its sub-slot
+        self.ip_total_iters = br.total_iters
+        self.sp_total_iters = br.sp_total_iters(DEFAULT_CONSTANTS)
+        self.ip_sub_slot_start = br.ip_sub_slot_total_iters(DEFAULT_CONSTANTS)
+        self.sp_sub_slot_start = br.sp_sub_slot_total_iters(DEFAULT_CONSTANTS)
+        self.timestamp = br.timestamp  # only transaction blocks have it, None for the others
+
+
+class VdfSubSlot:
+    """A sub-slot on the VDF chains, with the blocks infused in it."""
+
+    def __init__(self, start: int, sub_slot_iters: int):
+        self.start = start
+        self.sub_slot_iters = sub_slot_iters
+        self.end = start + sub_slot_iters
+        self.blocks: list[VdfBlockPoint] = []
+        self.deficit_start = None
+        self.deficit_end = None
+        self.icc_start = None  # where the infused challenge chain starts, None if there is none
+        self.icc_into_cc = False  # the infused challenge chain goes into the challenge chain at the end
+
+
+class VdfClock:
+    """Time of the VDF iterations, from the timestamps of the transaction blocks. A timestamp
+    is set by the farmer when it makes the block, after the signage point, and it is off by a
+    few seconds, so the times come from a line fitted on many blocks."""
+
+    def __init__(self, speed: float, iters0: float, time0: float):
+        self.speed = speed  # iterations per second
+        self.iters0 = iters0
+        self.time0 = time0
+
+    def time_at(self, iters) -> float:
+        return self.time0 + (iters - self.iters0) / self.speed
+
+    @staticmethod
+    def fit(points, start: int, end: int, min_blocks: int = 6):
+        """Fit the transaction blocks of points with the signage point between start and end
+        (total iterations). Return a VdfClock, or None if there are too few blocks."""
+        xs, ys = [], []
+        for p in points:
+            if p.timestamp is not None and start <= p.sp_total_iters <= end:
+                xs.append(p.sp_total_iters)
+                ys.append(p.timestamp)
+        if len(xs) < min_blocks:
+            return None
+        mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+        sxx = sum((x - mx) ** 2 for x in xs)
+        sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+        if sxy <= 0:
+            return None
+        return VdfClock(sxx / sxy, mx, my)
+
+
+def load_vdf_block_points(conn, start_height: int, end_height: int) -> dict:
+    """Load the blocks of the main chain from start_height to end_height (included)"""
+    cur = conn.cursor()
+    cur.execute("SELECT height, block_record FROM full_blocks "
+                "WHERE in_main_chain = 1 AND height >= ? AND height <= ?",
+                (start_height, end_height))
+    return {height: VdfBlockPoint(height, raw) for height, raw in cur.fetchall()}
+
+
+def find_previous_vdf_block(conn, before_height: int, kind: str, max_blocks: int = 50_000, chunk: int = 1000):
+    """The newest block under before_height that is:
+    - kind 'overflow': an overflow block (infused in the sub-slot after the one of its signage point);
+    - kind 'long_slot': the first block of a sub-slot when the slot goes on from the previous
+      sub-slot (the infused challenge chain started and the deficit did not reach 0, as in
+      build_vdf_sub_slots): it carries the end of that sub-slot.
+    Look at max_blocks blocks at most. Return its height or None."""
+    cur = conn.cursor()
+    newer = None  # the block after the one checked, for long_slot
+    hi = before_height - 1
+    lowest = max(0, before_height - max_blocks)
+    while hi >= lowest:
+        lo = max(lowest, hi - chunk + 1)
+        cur.execute("SELECT height, block_record FROM full_blocks "
+                    "WHERE in_main_chain = 1 AND height >= ? AND height <= ? ORDER BY height DESC", (lo, hi))
+        for height, raw in cur.fetchall():
+            point = VdfBlockPoint(height, raw)
+            if kind == 'overflow' and point.overflow:
+                return height
+            if (kind == 'long_slot' and newer is not None and newer.ip_sub_slot_start > point.ip_sub_slot_start
+                    and 0 < point.deficit < DEFAULT_CONSTANTS.MIN_BLOCKS_PER_CHALLENGE_BLOCK):
+                return newer.height
+            newer = point
+        hi = lo - 1
+    return None
+
+
+def build_vdf_sub_slots(points: list[VdfBlockPoint]) -> list[VdfSubSlot]:
+    """Group the blocks by the sub-slot of their infusion point, add the empty sub-slots
+    between them, and follow the deficit and the infused challenge chain.
+    The points must be consecutive blocks, sorted by height. The first sub-slot can
+    miss its first blocks, so its deficit and infused challenge chain can be wrong."""
+    sub_slots: list[VdfSubSlot] = []
+    for point in points:
+        if not sub_slots or point.ip_sub_slot_start >= sub_slots[-1].end:
+            # empty sub-slots before the new one
+            while sub_slots and point.ip_sub_slot_start >= sub_slots[-1].end + sub_slots[-1].sub_slot_iters:
+                sub_slots.append(VdfSubSlot(sub_slots[-1].end, sub_slots[-1].sub_slot_iters))
+            sub_slots.append(VdfSubSlot(point.ip_sub_slot_start, point.sub_slot_iters))
+        sub_slots[-1].blocks.append(point)
+
+    prev = None
+    for sub_slot in sub_slots:
+        # the infused challenge chain goes on from the previous sub-slot if the deficit did not reach 0
+        icc_carried = prev is not None and prev.icc_start is not None and prev.deficit_end != 0
+        if icc_carried:
+            sub_slot.icc_start = sub_slot.start
+            sub_slot.deficit_start = prev.deficit_end
+        else:
+            sub_slot.deficit_start = DEFAULT_CONSTANTS.MIN_BLOCKS_PER_CHALLENGE_BLOCK
+        for block in sub_slot.blocks:
+            if block.is_challenge_block and sub_slot.icc_start is None:
+                sub_slot.icc_start = block.ip_total_iters
+        if sub_slot.blocks:
+            sub_slot.deficit_end = sub_slot.blocks[-1].deficit
+            if prev is None and sub_slot.icc_start is None and sub_slot.blocks[0].deficit < DEFAULT_CONSTANTS.MIN_BLOCKS_PER_CHALLENGE_BLOCK - 1:
+                # first sub-slot loaded: the challenge block is before the first block loaded
+                sub_slot.icc_start = sub_slot.start
+        else:
+            sub_slot.deficit_end = sub_slot.deficit_start
+        sub_slot.icc_into_cc = sub_slot.icc_start is not None and sub_slot.deficit_end == 0
+        prev = sub_slot
+
+    return sub_slots
+
+
+def load_block_vdfs(conn, height: int) -> dict:
+    """The VDFs of a block, from its full block: for each VDF the total iterations where
+    it ends and its number of iterations (it starts at end - iterations).
+    'end_of_sub_slots' are the sub-slots finished before the block (their end VDFs)."""
+    cur = conn.cursor()
+    cur.execute("SELECT block, block_record FROM full_blocks WHERE in_main_chain = 1 AND height = ?", (height,))
+    row = cur.fetchone()
+    if row is None:
+        return None
+    block = FullBlock.from_bytes(zstd.decompress(row[0]))
+    br = BlockRecord.from_bytes(row[1])
+    rcb = block.reward_chain_block
+    sp_total_iters = br.sp_total_iters(DEFAULT_CONSTANTS)
+    ip_total_iters = br.total_iters
+
+    def vdf(info, end):
+        if info is None:
+            return None
+        return {'end': end, 'iterations': info.number_of_iterations}
+
+    vdfs = {
+        'height': height,
+        'cc_sp': vdf(rcb.challenge_chain_sp_vdf, sp_total_iters),
+        'rc_sp': vdf(rcb.reward_chain_sp_vdf, sp_total_iters),
+        'cc_ip': vdf(rcb.challenge_chain_ip_vdf, ip_total_iters),
+        'rc_ip': vdf(rcb.reward_chain_ip_vdf, ip_total_iters),
+        'icc_ip': vdf(rcb.infused_challenge_chain_ip_vdf, ip_total_iters),
+        'end_of_sub_slots': [],
+    }
+
+    # the finished sub-slots end where the infusion sub-slot of the block starts, one after the other
+    sub_slot_end = br.ip_sub_slot_total_iters(DEFAULT_CONSTANTS) - br.sub_slot_iters * (len(block.finished_sub_slots) - 1)
+    for sub_slot in block.finished_sub_slots:
+        cc = sub_slot.challenge_chain
+        icc = sub_slot.infused_challenge_chain
+        vdfs['end_of_sub_slots'].append({
+            'end': sub_slot_end,
+            'cc': vdf(cc.challenge_chain_end_of_slot_vdf, sub_slot_end),
+            'icc': vdf(icc.infused_challenge_chain_end_of_slot_vdf, sub_slot_end) if icc is not None else None,
+            'rc': vdf(sub_slot.reward_chain.end_of_slot_vdf, sub_slot_end),
+            'icc_into_cc': cc.infused_challenge_chain_sub_slot_hash is not None,
+            'deficit': sub_slot.reward_chain.deficit,
+        })
+        sub_slot_end += br.sub_slot_iters
+    return vdfs
+
 
 class FetchMaker:
     # TODO: merge first_last_count with the main fetcher...

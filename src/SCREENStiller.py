@@ -1845,6 +1845,7 @@ def screen_full_node(stdscr, keyboardState, screenState, fullNodeState: FullNode
     else:
         menu_items = [
             ('blocks', screen_blocks, ScopeActions.activate_scope, KEYBOARD.block_band_execution),
+            ('blocks and vdf chains', screen_blocks_vdf, ScopeActions.activate_scope, KEYBOARD.block_band_execution),
             ('mempool', screen_mempool, ScopeActions.activate_scope, None),
             ('search puzzles and addresses', screen_full_node_search, ScopeActions.activate_scope, None),
             ('address_watchlist', screen_address_watchlist, ScopeActions.activate_scope, None),
@@ -3895,6 +3896,88 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         scope_search_button.data['pressed_enter'] = False
 
 
+def build_mempool_blocks(fullNodeState: FullNodeState):
+    """Split the mempool in blocks, with the items sorted by fee per cost"""
+    ## TODO: move the sorting of the mempool outside the UI loop
+    mempool_items = fullNodeState.deepcopy_mempool()
+
+    sorted_mempool = sorted(list(mempool_items.values()), key=lambda item: item.fee_per_cost)  # sorted by fee per cost
+
+    # create mempool block
+    mempool_blocks = [WDB.MempoolBlock()]
+    for item in sorted_mempool:
+        current_block: WDB.MempoolBlock = mempool_blocks[-1]
+        if current_block.total_cost + item.cost <= BLOCK_MAX_COST:
+            current_block.add_item(item)
+        else:
+            mempool_blocks.append(WDB.MempoolBlock())
+    return mempool_blocks
+
+
+def go_to_block(scope_go_to: Scope, main_scope: Scope, block_band_scope: Scope, blocks_loader: WDB.DataChunkLoader,
+                height_last_block: int, screenState: ScreenState):
+    """When enter is pressed in the go to block prompt, select the height or the hash written
+    (main_scope.cursor_x), and move the block band there if there is one (block_band_scope)"""
+    if not scope_go_to.data.get('pressed_enter'):
+        return
+    scope_go_to.data['pressed_enter'] = False
+    prompt = scope_go_to.data['prompt']
+    input_type = UTILS.classify_number(prompt)
+    height = None
+
+    match input_type:
+        case 'int':
+            input = int(prompt)
+            if input <= height_last_block and input >= 0:
+                height = input
+            else:
+                scope_go_to.data['valid_data'] = False
+                scope_go_to.data["invalid_data_message"] = 'height out of range'
+
+        case 'hex':
+
+            prompt = prompt.removeprefix("0x").removeprefix("0X")
+            if len(prompt) == 64:
+                hash = bytes32.fromhex(prompt)
+                conn = blocks_loader.create_sql_conneciton()
+                try:
+                    table = 'full_blocks'
+                    fetcher = WDB.make_sql_fetcher(table)
+                    block = fetcher(conn, 0, 1, filters={'header_hash':hash})
+                    if len(block) < 1:
+                        scope_go_to.data['valid_data'] = False
+                        scope_go_to.data["invalid_data_message"] = 'hash not found'
+                    else:
+                        height = block[0][2]  # from the tuple select the third element > block_height
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"block band validate input{e}")
+                    UTILS.logging_traceback("BLOCK_BAND")
+                finally:
+                    conn.close()
+            else:
+                scope_go_to.data['valid_data'] = False
+                scope_go_to.data["invalid_data_message"] = 'hash must be 32 bytes'
+
+        case 'invalid':
+            scope_go_to.data['valid_data'] = False
+            scope_go_to.data["invalid_data_message"] = 'invalid input. Use int or hash'
+
+    if height or height == 0:
+        scope_go_to.data['prompt'] = ''
+        scope_go_to.data['cursor'] = 0
+        main_scope.cursor_x = height
+        if block_band_scope is not None:
+            blocks_loader.update_offset(height)
+            blocks_loader.start_updater_thread()
+
+            # offset selected block on the right if possible
+            right_block_offset = 2
+            if height_last_block - height < right_block_offset:
+                right_block_offset = 0
+            block_band_scope.data["idx_last_item"] = height + right_block_offset
+        ScopeActions.select_next_scope(scope_go_to, screenState)
+
+
 def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     active_scope: Scope = screenState.activeScope
@@ -3915,23 +3998,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
     height_last_block = full_node_meta.peak_height
 
-    # load memepool
-    ## TODO: move the sorting of the mempool outside the UI loop
-    mempool_items = fullNodeState.deepcopy_mempool()
-
-    sorted_mempool = sorted(list(mempool_items.values()), key=lambda item: item.fee_per_cost)  # sorted by fee per cost
-
-    # create mempool block
-    max_cost = 0
-    mempool_blocks = [WDB.MempoolBlock()]
-    for item in sorted_mempool:
-        current_block: WDB.MempoolBlock = mempool_blocks[-1]
-        if max_cost < item.cost:
-            max_cost = item.cost
-        if current_block.total_cost + item.cost <= BLOCK_MAX_COST:
-            current_block.add_item(item)
-        else:
-            mempool_blocks.append(WDB.MempoolBlock())
+    mempool_blocks = build_mempool_blocks(fullNodeState)
 
     lapper.clocking('meme')
     # load blocks
@@ -4045,63 +4112,7 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                                                       "block_band", pos, block_band_size, mempool_blocks,
                                                       blocks_loader, height_last_block, synced)
 
-        if 'pressed_enter' in scope_go_to.data and scope_go_to.data['pressed_enter']:
-            scope_go_to.data['pressed_enter'] = False
-            prompt = scope_go_to.data['prompt']
-            input_type = UTILS.classify_number(prompt)
-            height = None
-
-            match input_type:
-                case 'int':
-                    input = int(prompt)
-                    if input <= height_last_block and input >= 0:
-                        height = input
-                    else:
-                        scope_go_to.data['valid_data'] = False
-                        scope_go_to.data["invalid_data_message"] = 'height out of range'
-
-                case 'hex':
-
-                    prompt = prompt.removeprefix("0x").removeprefix("0X")
-                    if len(prompt) == 64:
-                        hash = bytes32.fromhex(prompt)
-                        conn = blocks_loader.create_sql_conneciton()
-                        try:
-                            table = 'full_blocks'
-                            fetcher = WDB.make_sql_fetcher(table)
-                            block = fetcher(conn, 0, 1, filters={'header_hash':hash})
-                            if len(block) < 1:
-                                scope_go_to.data['valid_data'] = False
-                                scope_go_to.data["invalid_data_message"] = 'hash not found'
-                            else:
-                                height = block[0][2]  # from the tuple select the third element > block_height
-                        except Exception as e:
-                            logging(debug_logger, "DEBUG", f"block band validate input{e}")
-                            UTILS.logging_traceback("BLOCK_BAND")
-                        finally:
-                            conn.close()
-                    else:
-                        scope_go_to.data['valid_data'] = False
-                        scope_go_to.data["invalid_data_message"] = 'hash must be 32 bytes'
-
-                case 'invalid':
-                    scope_go_to.data['valid_data'] = False
-                    scope_go_to.data["invalid_data_message"] = 'invalid input. Use int or hash'
-
-            if height or height == 0:
-                scope_go_to.data['prompt'] = ''
-                scope_go_to.data['cursor'] = 0
-                blocks_loader.update_offset(height)
-                blocks_loader.start_updater_thread()
-                #block_band_scope.cursor = height
-                main_scope.cursor_x = height
-
-                # offset selected block on the right if possible
-                right_block_offset = 2
-                if height_last_block - height < right_block_offset:
-                    right_block_offset = 0
-                block_band_scope.data["idx_last_item"] = height + right_block_offset
-                ScopeActions.select_next_scope(scope_go_to, screenState)
+        go_to_block(scope_go_to, main_scope, block_band_scope, blocks_loader, height_last_block, screenState)
 
 
     pos += UIgraph.Point(0, block_band_size.y + 0)
@@ -4332,6 +4343,376 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     lapper.clocking('block data')
     lapper.end()
     print(lapper)
+
+
+VDF_BLOCKS_AROUND = 160  # blocks loaded on each side of the selected one, about 5 sub-slots
+VDF_FULL_FROM_ROWS = 52  # terminal rows for the full graph (it needs 44, the tabs some more); below, the compact one
+VDF_TABS_FROM_ROWS = 33  # terminal rows for the tabs under the compact graph; below, enter on the graph shows them
+VDF_DETAILS_AROUND = 3  # VDFs loaded also for the blocks next to the selected one, so ←→ find them ready
+VDF_DETAILS_KEPT = 200  # VDFs of blocks kept in memory
+
+
+def start_vdf_chains_load(main_scope: Scope, screenState: ScreenState, blocks_loader: WDB.DataChunkLoader,
+                          center_height: int, selected_height, peak_height: int):
+    """Load in a thread the blocks around center_height (block records only) and the VDFs of the
+    selected block and of the VDF_DETAILS_AROUND blocks on each side (data['vdf_details']: height ->
+    WDB.load_block_vdfs). Nothing to do if they are loaded already, or if a load is running."""
+    data = main_scope.data
+    if data.get('vdf_loading'):
+        return
+
+    points = data.get('vdf_points', {})
+    details = data.get('vdf_details', {})
+    if data.get('vdf_peak') != peak_height:
+        # the last blocks can change with a reorg, load them again
+        points = {h: p for h, p in points.items() if h < peak_height - 10}
+        details = {h: d for h, d in details.items() if h < peak_height - 10}
+        data['vdf_points'] = points
+        data['vdf_details'] = details
+        data['vdf_peak'] = peak_height
+
+    start = max(0, center_height - VDF_BLOCKS_AROUND)
+    end = min(peak_height, center_height + VDF_BLOCKS_AROUND)
+    missing = [h for h in range(start, end + 1) if h not in points]
+
+    missing_details = []
+    if selected_height is not None:
+        # the selected block first
+        around = sorted(range(max(0, selected_height - VDF_DETAILS_AROUND),
+                              min(peak_height, selected_height + VDF_DETAILS_AROUND) + 1),
+                        key=lambda h: abs(h - selected_height))
+        missing_details = [h for h in around if h not in details]
+
+    if not missing and not missing_details:
+        return
+    data['vdf_loading'] = True
+
+    def load():
+        conn = blocks_loader.create_sql_conneciton()
+        try:
+            new_points = dict(points) if len(points) < 5000 else {}
+            if missing:
+                new_points.update(WDB.load_vdf_block_points(conn, min(missing), max(missing)))
+                data['vdf_points'] = new_points
+
+            if missing_details:
+                new_details = dict(details)
+                if len(new_details) > VDF_DETAILS_KEPT:
+                    new_details = {h: d for h, d in new_details.items()
+                                   if abs(h - selected_height) <= VDF_DETAILS_KEPT // 2}
+                for h in missing_details:
+                    new_details[h] = WDB.load_block_vdfs(conn, h)
+                    data['vdf_details'] = dict(new_details)  # the selected one is shown before the others load
+            data['vdf_error'] = None
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"vdf chains ERROR {e}")
+            UTILS.logging_traceback("VDF CHAINS")
+            data['vdf_error'] = f"vdf chains error: {e}"
+        finally:
+            conn.close()
+            data['vdf_loading'] = False
+
+    load_thread = threading.Thread(target=load, daemon=True)
+    load_thread.start()
+    load_thread.name = "loading vdf chains"
+    with screenState.lock:
+        screenState.running_threads.append(load_thread)
+
+
+VDF_SEARCH_NAMES = {'overflow': "overflow block", 'long_slot': "slot of 2+ sub-slots"}
+
+
+def open_vdf_tabs(scope: Scope, screen_state: ScreenState, *args):
+    """Enter on the graph when the tabs are hidden: the VDF and legend tabs in its place, the vdf one selected"""
+    main_scope = scope.main_scope
+    main_scope.data['vdf_tabs_open'] = True
+    main_scope.data['vdf_select'] = f"{main_scope.id}_vdf_{('table', 'legend')[main_scope.data.get('vdf_tab', 0)]}"
+    screen_state.activeScope = main_scope
+
+
+def close_vdf_tabs(scope: Scope, screen_state: ScreenState, *args):
+    """Esc on the screen while the tabs are open: back to the graph, selected"""
+    scope.data['vdf_tabs_open'] = False
+    scope.data['vdf_select'] = f"{scope.id}_vdf_graph"
+    screen_state.activeScope = scope
+
+
+def start_vdf_search(data: dict, screenState: ScreenState, blocks_loader: WDB.DataChunkLoader, kind: str,
+                     before_height: int):
+    """Find in a thread the newest block of kind (WDB.find_previous_vdf_block) under before_height.
+    data['vdf_search']: the kind while it runs; data['vdf_found']: the height found, the screen
+    selects it; data['vdf_search_msg']: what to show when nothing is found or on error."""
+    data['vdf_search'] = kind
+    data['vdf_search_msg'] = None
+    max_blocks = 50_000
+
+    def search():
+        conn = blocks_loader.create_sql_conneciton()
+        try:
+            height = WDB.find_previous_vdf_block(conn, before_height, kind, max_blocks)
+            if height is None:
+                data['vdf_search_msg'] = f"no {VDF_SEARCH_NAMES[kind]} in the {max_blocks:,} blocks before {before_height:,}"
+            else:
+                data['vdf_found'] = height
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"vdf search ERROR {e}")
+            UTILS.logging_traceback("VDF SEARCH")
+            data['vdf_search_msg'] = f"search error: {e}"
+        finally:
+            conn.close()
+            data['vdf_search'] = None
+
+    search_thread = threading.Thread(target=search, daemon=True)
+    search_thread.start()
+    search_thread.name = "vdf search"
+    with screenState.lock:
+        screenState.running_threads.append(search_thread)
+
+
+def vdf_sub_slots_around(points: dict, center_height: int, peak_height: int):
+    """Sub-slots of the consecutive loaded blocks around center_height. The first and last
+    sub-slots can miss some blocks, so they are removed (the last one is kept at the peak)."""
+    if center_height not in points:
+        return []
+    first = center_height
+    while first - 1 in points:
+        first -= 1
+    last = center_height
+    while last + 1 in points:
+        last += 1
+    sub_slots = WDB.build_vdf_sub_slots([points[h] for h in range(first, last + 1)])
+    if first > 0 and len(sub_slots) > 1:
+        sub_slots = sub_slots[1:]
+    if last < peak_height and len(sub_slots) > 1:
+        sub_slots = sub_slots[:-1]
+    return sub_slots
+
+
+def screen_blocks_vdf(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
+    """The blocks on a real time axis, the slots, the sub-slots and the three VDF chains (challenge,
+    infused challenge and reward), and the VDFs of the selected block.
+    main_scope.cursor_x is the height of the selected block; on the peak it follows the new peaks.
+    Below VDF_FULL_FROM_ROWS terminal rows the graph is compact, below VDF_TABS_FROM_ROWS also the
+    VDF and legend tabs are hidden: enter on the graph shows
+    them in its place, esc goes back to the graph"""
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+    data = main_scope.data
+
+    full_node_meta: FullNodeMeta = fullNodeState.deepcopy_meta()
+    height_last_block = full_node_meta.peak_height
+    with fullNodeState.lock:
+        blocks_loader: WDB.DataChunkLoader = fullNodeState.blocks_loader  # only for its DB connection
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error"]
+    P_title_selected = screenState.colorPairs["xch"]
+    P_overflow = screenState.colorPairs["vdf_overflow"]
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(P_text))
+
+    main_win_size = win.getmaxyx()
+    main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
+    pos = UIgraph.Point(1, 1)
+
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'blocks and vdf chains', P_title_selected, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0, 3)
+
+    if blocks_loader is None or height_last_block is None:
+        ELEMENTS.create_text(win, pos, "no blocks: the node is not reachable", P_error, bold=True)
+        return
+
+    pre_text = "Go to block: "
+    prompt_lenght = min(80, width - 4)
+    scope_go_to = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'go to block vdf', pos,
+                                         pre_text, prompt_lenght, P_text, True, False,
+                                         custom_scope_function=ScopeActions.press_enter)
+    pos += UIgraph.Point(0, 2)  # a row for the frame of the selected prompt
+
+    # the graph is an element of its own: enter goes into it, then ←→ select a block (newest on
+    # the left) and home goes back to the peak; graph_scope.cursor_x is the selected height.
+    # A block is always selected: on the peak it follows the new peaks, elsewhere it stays
+    graph_name = f"{main_scope.id}_vdf_graph"
+    if graph_name not in screenState.scopes:
+        graph_scope = Scope(graph_name, main_scope.screen, screenState)
+        graph_scope.parent_scope = main_scope
+        graph_scope.main_scope = main_scope
+        graph_scope.exec = ScopeActions.activate_scope
+        graph_scope.exec_own = ScopeActions.activate_scope
+        graph_scope.keyboard_exec = KEYBOARD.block_band_execution
+        graph_scope.cursor_x = height_last_block
+        main_scope.cursor = 1  # the graph is selected when the screen opens
+    graph_scope: Scope = screenState.scopes[graph_name]
+    compact = stdscr.getmaxyx()[0] < VDF_FULL_FROM_ROWS
+    tabs_hidden = stdscr.getmaxyx()[0] < VDF_TABS_FROM_ROWS
+    if not tabs_hidden or screenState.activeScope is graph_scope:
+        data['vdf_tabs_open'] = False
+    tabs_open = data.get('vdf_tabs_open', False)
+    # tabs hidden: enter on the graph (selected or entered) opens the tabs, esc on the screen closes
+    # them; ←→ select the block also with the graph only selected
+    graph_scope.exec = graph_scope.exec_own = open_vdf_tabs if tabs_hidden else ScopeActions.activate_scope
+    if 'vdf_main_esc' not in data:
+        data['vdf_main_esc'] = main_scope.exec_esc
+    main_scope.exec_esc = close_vdf_tabs if tabs_open else data['vdf_main_esc']
+    # the scope to select after opening or closing the tabs, once main_scope.update() has dropped
+    # the ones hidden by the switch (a frame later), so its index does not change
+    if data.get('vdf_select') in main_scope.sub_scopes:
+        main_scope.cursor = list(main_scope.sub_scopes).index(data.pop('vdf_select'))
+    if not tabs_open:
+        graph_scope.set_visible()
+    graph_scope.base_point = pos
+
+    # ←→ move the selection also from outside the graph: main_scope.cursor_x follows it
+    # (main_scope has the same flipped ←→ of the graph). When the vdf and legend tables are tabs
+    # and one is selected, ←→ switch them instead
+    tab_names = (f"{main_scope.id}_vdf_table", f"{main_scope.id}_vdf_legend")
+    tab_is_selected = (data.get('vdf_tabs_toggle', False) and screenState.activeScope is main_scope
+                       and main_scope.sub_scope_selected is not None
+                       and main_scope.sub_scope_selected.name in tab_names)
+    if screenState.activeScope is main_scope and 'vdf_main_x' in data:
+        delta = main_scope.cursor_x - data['vdf_main_x']
+        if tab_is_selected:
+            data['vdf_tab'] = (data.get('vdf_tab', 0) + delta) % 2
+        else:
+            graph_scope.cursor_x += delta
+    if tab_is_selected:
+        screenState.footer_text += "| vdf / legend=←→ "
+    elif screenState.activeScope in (main_scope, graph_scope):
+        screenState.footer_text += "| select block=←→ | go to peak=home "
+        if keyboardState.home:
+            graph_scope.cursor_x = height_last_block
+    if compact:
+        screenState.footer_text += f"| full view from {VDF_FULL_FROM_ROWS} rows "
+    if tabs_open and screenState.activeScope is main_scope:
+        screenState.footer_text += "| back to the graph=esc "
+    elif tabs_hidden and (screenState.activeScope is graph_scope
+                      or (screenState.activeScope is main_scope and graph_scope.selected())):
+        screenState.footer_text += "| vdf tables=enter "
+
+    # o / s: go to the previous overflow block, or to the previous slot of 2 or more sub-slots,
+    # older than the selected block; found in a thread, it can take some seconds
+    if screenState.activeScope in (main_scope, graph_scope):
+        screenState.footer_text += "| last overflow=o | last slot of 2+ sub-slots=s "
+        for key, kind in (('o', 'overflow'), ('s', 'long_slot')):
+            if key in keyboardState.keys and not data.get('vdf_search'):
+                data['vdf_search_at'] = graph_scope.cursor_x
+                start_vdf_search(data, screenState, blocks_loader, kind, graph_scope.cursor_x)
+    if data.get('vdf_found') is not None:
+        graph_scope.cursor_x = data.pop('vdf_found')
+    elif data.get('vdf_search_msg') and graph_scope.cursor_x != data.get('vdf_search_at'):
+        data['vdf_search_msg'] = None  # another block selected
+    if data.get('vdf_last_peak') is not None and graph_scope.cursor_x == data['vdf_last_peak']:
+        graph_scope.cursor_x = height_last_block  # it was on the peak: follow the new peak
+    data['vdf_last_peak'] = height_last_block
+    graph_scope.cursor_x = max(0, min(graph_scope.cursor_x, height_last_block))
+    height_before = graph_scope.cursor_x
+    go_to_block(scope_go_to, graph_scope, None, blocks_loader, height_last_block, screenState)
+    if graph_scope.cursor_x != height_before:
+        # a block was found: go into the graph, to move from there
+        main_scope.cursor = list(main_scope.sub_scopes).index(graph_name)
+        screenState.activeScope = graph_scope
+
+    main_scope.cursor_x = data['vdf_main_x'] = graph_scope.cursor_x
+    selected_height = center_height = graph_scope.cursor_x
+
+    start_vdf_chains_load(main_scope, screenState, blocks_loader, center_height, selected_height, height_last_block)
+
+    points = data.get('vdf_points', {})
+    sub_slots = vdf_sub_slots_around(points, center_height, height_last_block)
+    selected = points.get(selected_height)
+
+    # speed of the VDFs, around the selected block or at the tip
+    vdf_speed = ""
+    if sub_slots:
+        all_points = [b for sub_slot in sub_slots for b in sub_slot.blocks]
+        around = selected if selected is not None else all_points[-1]
+        clock = WDB.VdfClock.fit(all_points, around.sp_total_iters - around.sub_slot_iters,
+                                 around.sp_total_iters + around.sub_slot_iters)
+        if clock is not None:
+            vdf_speed = f"~{clock.speed / 1000:,.0f}k it/s"
+
+    # header of the graph: the selected block
+    graph_top = pos.y
+    if data.get('vdf_error'):
+        header = [(data['vdf_error'], screenState.colors["red"])]
+    elif not sub_slots:
+        header = [("loading vdf chains...", None)]
+    elif selected is None:
+        header = [(f"block {selected_height:,}  |  loading...", None)]
+    else:
+        sp_interval = selected.sub_slot_iters / 64
+        header = [(f"block {selected.height:,}  |  signage point {selected.signage_point_index}  |  "
+                   f"infusion point sp {selected.ip_iters / sp_interval:.1f}  |  deficit {selected.deficit}", None)]
+        if selected.is_challenge_block:
+            header.append(("  |  challenge block", None))
+        if selected.overflow:
+            header.append(("  |  ", None))
+            header.append(("overflow block", screenState.colors["yellow_bee"]))
+    if vdf_speed and sub_slots:
+        header.append((f"  |  vdf speed {vdf_speed}", None))
+    if data.get('vdf_search'):
+        header.append((f"  |  searching the last {VDF_SEARCH_NAMES[data['vdf_search']]}...", None))
+    elif data.get('vdf_search_msg'):
+        header.append((f"  |  {data['vdf_search_msg']}", screenState.colors["red"]))
+    header_height = ELEMENTS.create_vdf_header(win, screenState, pos, main_win_size.x - 3, header, compact)
+    pos += UIgraph.Point(0, header_height + 1)
+
+    graph_width = main_win_size.x - 3
+    graph_start = pos
+    table, legend_active = [], set()
+    graph_lines = 0
+    block_vdfs = None
+    if sub_slots:
+        peak_point = points.get(height_last_block)
+        peak_total_iters = peak_point.ip_total_iters if peak_point is not None else None
+        if selected is not None:
+            block_vdfs = data.get('vdf_details', {}).get(selected.height)
+        max_lines = main_win_size.y - pos.y - 1
+        # graph_width - 1: an empty column between the chains and the frame on the right
+        graph_lines, table, legend_active = ELEMENTS.create_vdf_chains(
+            win, screenState, pos, graph_width - 1, max_lines, sub_slots, peak_total_iters, selected, block_vdfs,
+            compact=compact)
+    pos += UIgraph.Point(0, graph_lines)
+
+    # a frame on the right and the bottom of the graph, like the block band: grey, highlighted
+    # when the graph is selected, in the active color when it is entered
+    P_frame = screenState.colorPairs["tab_soft_bg"]
+    if screenState.activeScope is graph_scope:
+        P_frame = screenState.colorPairs["scope_selected"]
+    elif graph_scope.selected():
+        P_frame = screenState.colorPairs["win_selected"]
+    if tabs_open:
+        # the tabs in place of the graph (drawn for its VDF table), under the header of the block
+        for y in range(graph_start.y, main_win_size.y - 1):
+            ELEMENTS.create_text(win, UIgraph.Point(0, y), ' ' * (main_win_size.x - 1), P_text)
+        pos = graph_start
+    else:
+        for y in range(graph_top, min(pos.y, main_win_size.y - 2)):
+            ELEMENTS.create_text(win, UIgraph.Point(pos.x + graph_width, y), '▌', P_frame)
+        if pos.y < main_win_size.y - 1:
+            ELEMENTS.create_text(win, UIgraph.Point(pos.x, pos.y), '▀' * graph_width + '▘', P_frame)
+        pos += UIgraph.Point(0, 2)
+
+    # vdf data and legend: one on top of the other, or tabs switched with ←→; in a very small
+    # window hidden until enter is pressed on the graph
+    if (tabs_open or not tabs_hidden) and pos.y + 2 < main_win_size.y - 2:
+        data['vdf_tabs_toggle'] = ELEMENTS.create_vdf_tabs(win, screenState, keyboardState, main_scope, pos,
+                                                           main_win_size.y - 2, table, legend_active,
+                                                           data.get('vdf_tab', 0))
+
+    # run copy/paste action or other pending stuffs
+    if len(screenState.pending_action) > 0:
+        for i, fn in screenState.pending_action:
+            fn()
+        screenState.pending_action = []
 
 
 def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):

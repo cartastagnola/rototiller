@@ -629,7 +629,8 @@ class FullNodeState:
                 traceback.print_exc()
 
             try:
-                if "block_band" not in screenState.scopes or screenState.scopes["block_band"].data['on_peak']:
+                block_band = screenState.scopes.get(screenState.block_band_name)
+                if block_band is None or block_band.data['on_peak']:
                     # if the band is not created it keep up with the peak.
                     # here it should update also the offset with the peak to do a real update
                     self.update_blocks()
@@ -681,6 +682,7 @@ class ScreenState:
     #session_search_list: List[str]
     running_threads: List[threading.Thread]
     lock: threading.Lock
+    block_band_name: str
 
     def __init__(self):
         self.init = False
@@ -710,6 +712,8 @@ class ScreenState:
         #self.session_search_list = []
         self.running_threads = []
         self.lock = threading.Lock()
+        # the block band drawn last (two screens have one): the blocks loader follows the peak only when it is on the peak
+        self.block_band_name = "block_band"
 
         # init copy/paste
         self.roto_clipboard = deque(maxlen=5)
