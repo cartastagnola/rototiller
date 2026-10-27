@@ -28,6 +28,7 @@ import src.CONFtiller as CONF
 import src.TYPEStiller as TYPES
 import src.UTILStiller as UTILS
 import src.SCANtiller as SCAN
+import src.CHIALOGtiller as CHIALOG
 
 import src.DEBUGtiller as DEBUGtiller
 
@@ -143,6 +144,7 @@ def interFace(stdscr):
                                                 daemon=True)
         cache_updater_thread.setName("cache updater start")
         cache_updater_thread.start()
+        CHIALOG.start_archive_thread()
         daemon_dispatcher.subscribe(TYPES.DaemonEvent.NEW_BLOCK, cache_updater.on_new_block)
 
         def chain_state(data):
