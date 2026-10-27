@@ -182,3 +182,18 @@ def block_band_execution(screen_state: TYPE.ScreenState, keyboard_state: TYPE.Ke
         active_scope.cursor_x += 1
     if keyboard_state.moveRight:
         active_scope.cursor_x -= 1
+
+
+def heatmap_execution(screen_state: TYPE.ScreenState, keyboard_state: TYPE.KeyboardState,
+                      active_scope: TYPE.Scope):
+    """Only enter and esc: ELEMENTS.create_time_heatmap reads the other keys itself.
+    esc in square mode goes back to column mode"""
+    if keyboard_state.enter is True:
+        active_scope.exec_child(*screen_state.scope_exec_args)
+        return
+    if keyboard_state.esc is True:
+        view = active_scope.data.get('view')
+        if view is not None and view.mode == 'square':
+            view.mode = 'column'
+            return
+        active_scope.exec_esc(active_scope, *screen_state.scope_exec_args)

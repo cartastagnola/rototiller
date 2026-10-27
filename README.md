@@ -65,3 +65,8 @@ Run it:
 or
 python rototiller
 ```
+
+---
+
+<sub>The log heat map (one column per time interval, cut into rows and colored by how often an event happened) is inspired by
+[chiaharvestgraph](https://github.com/stolk/chiaharvestgraph) by Bram Stolk. Thanks Bram!</sub>
