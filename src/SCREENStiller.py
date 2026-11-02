@@ -39,6 +39,7 @@ import src.TYPEStiller as TYPES
 import src.SCANtiller as SCAN
 import src.HEATMAPtiller as HEAT
 import src.CHIALOGtiller as CHIALOG
+import src.PLATFORMtiller as PLAT
 from src.TYPEStiller import (
     FingerState, CoinPriceData, ScreenState, FullNodeState, Scope, KeyboardState,
     FullNodeState, ScreenState, ScopeActions)
@@ -5930,10 +5931,10 @@ COUNT_STYLE = HEAT.HeatmapStyle(
 
 # (tab name, regex of the lines that are events, style, column scale when the tab opens)
 LOG_HEATMAP_FILTERS = [
-    ('harvester', r'eligible for farming', HARVEST_STYLE, HEAT.SCALE_INDEX['20m']),
+    ('harvester', r'eligible for farming', HARVEST_STYLE, HEAT.SCALE_INDEX['15m']),
     ('errors', r': ERROR ', COUNT_STYLE, HEAT.SCALE_INDEX['24h']),
     ('warnings', r': WARNING ', COUNT_STYLE, HEAT.SCALE_INDEX['24h']),
-    ('all lines', None, COUNT_STYLE, HEAT.SCALE_INDEX['1h']),
+    ('all lines', None, COUNT_STYLE, HEAT.SCALE_INDEX['6h']),
 ]
 LOG_HEATMAP_SOURCES = {}  # tab name -> HEAT.LogFileSource, kept while the app runs
 
@@ -5954,16 +5955,21 @@ def heatmap_source_job(screenState: ScreenState, source: HEAT.LogFileSource):
             screenState.running_threads.append(thread)
 
 
+def all_lines_source():
+    """The source of every log line (the filter without a regex), for the lines of a selection"""
+    name = next(name for name, regex, *_ in LOG_HEATMAP_FILTERS if regex is None)
+    if name not in LOG_HEATMAP_SOURCES:
+        LOG_HEATMAP_SOURCES[name] = HEAT.LogFileSource(name, CHIA_LOG_PATHS, None)
+    return LOG_HEATMAP_SOURCES[name]
+
+
 def scopeAction_open_heatmap_cell(scope: Scope, screenState: ScreenState, *args):
-    """enter on a cell of the log heat map: its log lines and its events"""
+    """enter on the log heat map: the log lines of the selected time, on the tab of all the lines"""
     t0, t1 = scope.data['cell']
-    source = scope.data.get('source')
-    if source is None:
-        return scope
-    new_scope = Scope(f"heatmap_cell_{source.name}_{t0}", screen_heatmap_cell, screenState)
+    new_scope = Scope(f"log_lines_{t0}_{t1}", screen_log_lines, screenState)
     new_scope.parent_scope = scope
-    new_scope.data['source'] = source
     new_scope.data['cell'] = (t0, t1)
+    new_scope.cursor_x = next(i for i, (_, regex, *_) in enumerate(LOG_HEATMAP_FILTERS) if regex is None)
     new_scope.exec = None
     screenState.activeScope = new_scope
     return new_scope
@@ -6041,15 +6047,14 @@ def screen_log_heatmap(stdscr, keyboardState, screenState, fullNodeState: FullNo
     if screenState.activeScope is main_scope:
         screenState.footer_text += "| switch log lines=←→ "
 
-    # the line under the tabs, the graph has no border of its own
-    put_text(win, pos, '─' * (main_win_size.x - 2), P_text)
+    # the half line under the tabs goes on to the right end of the graph, which starts right under it
+    put_text(win, pos, '▀' * (main_win_size.x - 2), screenState.colorPairs["tab_dark_bg"])
     pos += UIgraph.Point(0, 1)
     if source.loaded:
         graph_scope, used = ELEMENTS.create_time_heatmap(
             win, screenState, keyboardState, main_scope, f"log_heatmap_{tab_name}", pos,
             UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2),
             series, view, style, scopeAction_open_heatmap_cell)
-        graph_scope.data['source'] = source
     elif not source.error:
         put_text(win, pos + UIgraph.Point(0, 1), "reading the log...", P_text, bold=True)
 
@@ -6069,11 +6074,10 @@ def screen_log_heatmap(stdscr, keyboardState, screenState, fullNodeState: FullNo
         pos += UIgraph.Point(len(text) + 2, 0)
 
 
-HEATMAP_CELL_VIEWS = ['log', 'events']
-
-
-def screen_heatmap_cell(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
-    """The source of a heat map cell: the log around its events, and its events in a table"""
+def screen_log_lines(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """The chia log lines of a time selected on the log heat map: a tab for each filter of
+    LOG_HEATMAP_FILTERS (all lines, errors, warnings, ...), and a button that copies the lines
+    of the tab"""
 
     height = screenState.screen_size.y
     width = screenState.screen_size.x
@@ -6083,7 +6087,6 @@ def screen_heatmap_cell(stdscr, keyboardState, screenState, fullNodeState: FullN
     screenState.scope_exec_args = [screenState]
     main_scope.update()
     data = main_scope.data
-    source: HEAT.LogFileSource = data['source']
     t0, t1 = data['cell']
 
     win = createFullSubWin(stdscr, screenState, height, width)
@@ -6091,51 +6094,33 @@ def screen_heatmap_cell(stdscr, keyboardState, screenState, fullNodeState: FullN
     main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
 
     C_background = screenState.colors["background"]
-    C_event = screenState.colors["yellow_bee"]
     P_text = screenState.colorPairs["body"]
     P_error = screenState.colorPairs["error"]
     P_title = screenState.colorPairs["xch"]
 
     pos = UIgraph.Point(1, 1)
-    ELEMENTS.create_text_double_space(win, screenState, pos, f'{source.name} log lines', P_title, C_background,
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'log lines', P_title, C_background,
                                       3, True, inv_color=False)
     pos += UIgraph.Point(0, 3)
-
-    series = source.series
-    i0, i1 = series.index_range(t0, t1)
     step = t1 - t0
-    put_text(win, pos, (f"{ELEMENTS.heatmap_time_text(t0, step)} → {ELEMENTS.heatmap_time_text(t1, step)} | "
-                        f"{i1 - i0:,} events"), P_text)
+    put_text(win, pos, f"{ELEMENTS.heatmap_time_text(t0, step)} → {ELEMENTS.heatmap_time_text(t1, step)}", P_text)
     pos += UIgraph.Point(0, 1)
 
-    # read the lines once, in a thread
+    # read the lines once, in a thread: the files of all the lines, filtered in one pass
     if 'loading' not in data:
         data['loading'] = True
 
         def load():
             try:
-                log_rows = source.lines_around(i0, i1, HEATMAP_DETAIL_CONTEXT, HEATMAP_DETAIL_CONTEXT,
-                                               HEATMAP_DETAIL_MAX)
-                if i0 == i1:  # no event: the lines around the start of the cell
-                    near = min(i0, len(series) - 1)
-                    if near >= 0:
-                        log_rows = source.lines_around(near, near + 1, HEATMAP_DETAIL_CONTEXT,
-                                                       HEATMAP_DETAIL_CONTEXT, HEATMAP_DETAIL_MAX)
-                        log_rows = [r[:3] + (False,) for r in log_rows]
-                events = []
-                for i in range(i0, min(i1, i0 + HEATMAP_DETAIL_MAX)):
-                    gap = series.times[i] - series.times[i - 1] if i > 0 else None
-                    events.append([
-                        datetime.fromtimestamp(series.times[i]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-                        f"{gap:.3f}s" if gap is not None else '-',
-                        os.path.basename(source.files[series.file_idx[i]]),
-                        series.lines[i],
-                        source.line_text(i)[24:],
-                    ])
-                data['log_rows'] = log_rows
-                data['event_rows'] = events
+                source = all_lines_source()
+                if not source.loaded:
+                    source.load()
+                if source.error:
+                    raise RuntimeError(source.error)
+                filters = [(name, regex) for name, regex, *_ in LOG_HEATMAP_FILTERS]
+                data['lines'] = source.lines_between(t0, t1, filters, LOG_LINES_MAX)
             except Exception as e:
-                UTILS.logging_traceback("HEATMAP CELL")
+                UTILS.logging_traceback("LOG LINES")
                 data['error'] = f"reading the log: {e}"
             finally:
                 data['loading'] = False
@@ -6152,61 +6137,80 @@ def screen_heatmap_cell(stdscr, keyboardState, screenState, fullNodeState: FullN
     if data['loading']:
         put_text(win, pos, "reading the log lines...", P_text, bold=True)
         return
-    if i1 - i0 > HEATMAP_DETAIL_MAX:
-        put_text(win, pos, f"only the first {HEATMAP_DETAIL_MAX:,} events and their lines are shown", P_text)
-    elif i0 == i1:
-        put_text(win, pos, "no event in this cell: the lines around its start", P_text)
+
+    names = [name for name, *_ in LOG_HEATMAP_FILTERS]
+    tab_name = names[main_scope.cursor_x % len(names)]
+    rows, total = data['lines'][tab_name]
+    text = f"{total:,} lines" if tab_name == 'all lines' else f"{total:,} lines in {tab_name}"
+    if total > len(rows):
+        text += f", the first {len(rows):,} are shown"
+    put_text(win, pos, text, P_text)
     pos += UIgraph.Point(0, 2)
 
-    view = HEATMAP_CELL_VIEWS[main_scope.cursor_x % len(HEATMAP_CELL_VIEWS)]
+    # copy the lines of the tab, in a thread (the clipboard tool can be slow)
+    if data.get('copy_job'):
+        put_text(win, pos + UIgraph.Point(0, 1), "copying...", P_text, bold=True)
+    else:
+        copy_button = ELEMENTS.create_button(win, screenState, main_scope, 'copy', pos,
+                                             custom_scope_function=ScopeActions.press_enter,
+                                             button_type='execution')
+        if copy_button.data.get('pressed_enter'):
+            copy_button.data['pressed_enter'] = False
+            data['copy_job'] = True
+            lines = [line for _, _, line in rows]
+
+            def copy():
+                try:
+                    if PLAT.write_clipboard('\n'.join(lines)):
+                        data['copy_message'] = f"{len(lines):,} lines copied ({tab_name})"
+                    else:
+                        data['copy_message'] = "copy failed: no clipboard tool (wl-copy, xclip or xsel)"
+                except Exception as e:
+                    data['copy_message'] = f"copy failed: {e}"
+                finally:
+                    data['copy_job'] = False
+
+            thread = threading.Thread(target=copy, daemon=True)
+            thread.start()
+            thread.setName("copying log lines")
+            with screenState.lock:
+                screenState.running_threads.append(thread)
+    if data.get('copy_message'):
+        put_text(win, pos + UIgraph.Point(14, 1), data['copy_message'], P_text)
+    pos += UIgraph.Point(0, 3)
+
     pos_tab_title = pos
     pos += UIgraph.Point(0, 2)
     if screenState.activeScope is main_scope:
-        screenState.footer_text += "| switch view=←→ "
+        screenState.footer_text += "| switch filter=←→ "
 
     tab_size = UIgraph.Point(main_win_size.x - 2, max(main_win_size.y - pos.y - 2, 5))
-    if view == 'log':
-        log_rows = data['log_rows']
-        rows = [[name, line, text] for name, line, text, _ in log_rows]
-        colors = [[C_event] * 3 if is_event else [None] * 3 for *_, is_event in log_rows]
-        legend = ['file', 'line', 'text']
-        widths = [None, None, max(main_win_size.x - 30, 20)]
-    else:
-        rows = data['event_rows']
-        colors = fresh_table_colors(rows)
-        legend = ['time', 'after previous', 'file', 'line', 'text']
-        widths = [None, None, None, None, max(main_win_size.x - 95, 20)]
     if rows:
-        tab_scope = ELEMENTS.create_tab(win,
-                                        screenState,
-                                        main_scope,
-                                        f"heatmap_cell_{view}",
-                                        rows,
-                                        None,
-                                        colors,
-                                        False,
-                                        pos,
-                                        tab_size,
-                                        keyboardState,
-                                        scopeAction_nothing,
-                                        True,
-                                        False,
-                                        legend,
-                                        widths)
-        # the log opens on the first event of the cell
-        if view == 'log' and not data.get('log_cursor_set'):
-            data['log_cursor_set'] = True
-            first = next((k for k, r in enumerate(data['log_rows']) if r[3]), 0)
-            tab_scope.cursor = first
+        ELEMENTS.create_tab(win,
+                            screenState,
+                            main_scope,
+                            f"log_lines_{tab_name.replace(' ', '_')}",
+                            [list(row) for row in rows],
+                            None,
+                            None,
+                            False,
+                            pos,
+                            tab_size,
+                            keyboardState,
+                            scopeAction_nothing,
+                            True,
+                            False,
+                            ['file', 'line', 'text'],
+                            [None, None, max(main_win_size.x - 30, 20)])
     else:
         put_text(win, pos + UIgraph.Point(0, 1), "no line", P_text)
 
     P_tab_title = screenState.colorPairs["title"]
     P_tab_soft = screenState.colorPairs["tab_soft"]
     pos = pos_tab_title
-    for name in HEATMAP_CELL_VIEWS:
-        text = f" {name.upper()} " if name == 'log' else f" {name.upper()} ({len(data['event_rows'])}) "
-        selected = name == view
+    for name in names:
+        text = f" {name.upper()} ({data['lines'][name][1]:,}) "
+        selected = name == tab_name
         P_used = P_title if selected else P_tab_title
         ELEMENTS.create_text_double_space(win, screenState, pos, text, P_used, C_background, 3, True)
         underline_pos = pos + UIgraph.Point(0, 2)

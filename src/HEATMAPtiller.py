@@ -7,7 +7,8 @@ left to right, the newest on the right. A square is colored by the number of eve
 The idea comes from chiaharvestgraph by Bram Stolk (https://github.com/stolk/chiaharvestgraph).
 
 This module has no curses code: the scales and the time buckets, the color ramps, the cursor and
-the zoom of a view (HeatmapView) and a source of events read from log files (LogFileSource).
+the zoom of a view (HeatmapView), a source of events read from log files (LogFileSource) and a
+series of times with a value each (TimeSeries, e.g. the depth of a fork).
 The drawing is ELEMENTS.create_time_heatmap.
 
 The buckets follow the local wall clock: a day starts at local midnight, a week on Monday (see
@@ -29,29 +30,26 @@ WEEK = 7 * DAY
 
 # the durations of one column: (name, seconds, months). A month column is a calendar month, so its
 # length changes. Each scale is cut into a whole number of columns of the scale before it, so a
-# zoom (HeatmapView.zoom_in) turns one column into 2 or more; the month is cut into days (ZOOM_IN)
+# zoom (HeatmapView.zoom_in) turns one column into 2 or more.
+# Five scales, by their macro column: 24 minutes (4 columns of 6m), the hour (4 of 15m), the day
+# (4 of 6h), the month (a column each day), the year (a column each month)
 COLUMN_SCALES = [
-    ('1s', 1, 0),
-    ('10s', 10, 0),
-    ('1m', 60, 0),
-    ('5m', 5 * 60, 0),
-    ('10m', 10 * 60, 0),
-    ('20m', 20 * 60, 0),
-    ('1h', 3600, 0),
+    ('6m', 6 * 60, 0),
+    ('15m', 15 * 60, 0),
     ('6h', 6 * 3600, 0),
-    ('12h', 12 * 3600, 0),
     ('24h', DAY, 0),
-    ('7d', WEEK, 0),
     ('1mo', 0, 1),
-    ('3mo', 0, 3),
-    ('1y', 0, 12),
 ]
 SCALE_INDEX = {name: i for i, (name, _, _) in enumerate(COLUMN_SCALES)}
-ZOOM_IN = {SCALE_INDEX['1mo']: SCALE_INDEX['24h']}  # the scale a zoom goes to, when not the one before
 
-# round steps for the row labels, in seconds
-LABEL_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 2 * 3600,
-               3 * 3600, 6 * 3600, 12 * 3600, DAY, 2 * DAY, WEEK, 2 * WEEK, 4 * WEEK, 13 * WEEK]
+# the bands of two alternating shades that show the passing of time: seconds, 'month' or 'year'.
+# COLUMN_BAND: the columns of a band have one background shade in the graph and on the labels.
+# TOP_BAND: the bigger band, on the labels above the column bands (the day of the hours).
+# ROW_BAND: the bands of a column, shown only on the legend of the y axis
+COLUMN_BAND = {'6m': 24 * 60, '15m': 3600, '6h': DAY, '24h': 'month', '1mo': 'year'}
+TOP_BAND = {'6m': 3600, '15m': DAY, '6h': 'month', '24h': 'year', '1mo': None}  # None: no top band
+ROW_BAND = {'6m': 2 * 60, '15m': 5 * 60, '6h': 3600, '24h': 6 * 3600, '1mo': 7 * DAY}
+BAND_LIGHTNESS = 0.035  # how much lighter the second shade is, in OKLab
 
 # the buckets are counted on the local wall clock (the time with the UTC offset of that moment), from
 # Monday 2024-01-01 00:00: an hour starts at :00 and a day at midnight also with summer time, and a
@@ -71,8 +69,6 @@ def from_wall(w: float) -> float:
 
 def zoom_in_scale(scale_idx: int):
     """The scale that cuts a column of scale_idx in columns; None for the smallest"""
-    if scale_idx in ZOOM_IN:
-        return ZOOM_IN[scale_idx]
     return scale_idx - 1 if scale_idx > 0 else None
 
 
@@ -80,6 +76,15 @@ def column_index(t: float, scale_idx: int) -> int:
     """Index of the column of scale_idx that holds the time t"""
     _, seconds, months = COLUMN_SCALES[scale_idx]
     w = to_wall(t)
+    if seconds:
+        return math.floor((w - WALL_ORIGIN) / seconds)
+    d = time.gmtime(math.floor(w))
+    return ((d.tm_year - 2024) * 12 + d.tm_mon - 1) // months
+
+
+def wall_column(w: float, scale_idx: int) -> int:
+    """Index of the column of scale_idx that holds the wall clock time w"""
+    _, seconds, months = COLUMN_SCALES[scale_idx]
     if seconds:
         return math.floor((w - WALL_ORIGIN) / seconds)
     d = time.gmtime(math.floor(w))
@@ -104,6 +109,35 @@ def column_bounds(col: int, scale_idx: int):
     return from_wall(w0), from_wall(w1)
 
 
+def band_id(w: float, unit) -> int:
+    """The number of the band of `unit` (seconds, 'month' or 'year') that holds the wall clock
+    time w; two bands next to each other have a different parity"""
+    if unit == 'month':
+        d = time.gmtime(math.floor(w))
+        return d.tm_year * 12 + d.tm_mon - 1
+    if unit == 'year':
+        return time.gmtime(math.floor(w)).tm_year
+    return math.floor((w - WALL_ORIGIN) / unit)
+
+
+def band_wall(w: float, unit):
+    """[b0, b1) on the wall clock of the band of `unit` that holds w"""
+    if unit in ('month', 'year'):
+        d = time.gmtime(math.floor(w))
+        if unit == 'year':
+            return calendar.timegm((d.tm_year, 1, 1, 0, 0, 0)), calendar.timegm((d.tm_year + 1, 1, 1, 0, 0, 0))
+        m = d.tm_year * 12 + d.tm_mon - 1
+        return (calendar.timegm((m // 12, m % 12 + 1, 1, 0, 0, 0)),
+                calendar.timegm(((m + 1) // 12, (m + 1) % 12 + 1, 1, 0, 0, 0)))
+    b0 = WALL_ORIGIN + band_id(w, unit) * unit
+    return b0, b0 + unit
+
+
+def column_band(col: int, scale_idx: int) -> int:
+    """0 or 1: the background band of a column"""
+    return band_id(column_wall(col, scale_idx)[0], COLUMN_BAND[COLUMN_SCALES[scale_idx][0]]) % 2
+
+
 def human_duration(seconds) -> str:
     """2d, 4.6d, 27h, 45s, 12ms"""
     for unit, s in (('d', DAY), ('h', 3600), ('m', 60), ('s', 1)):
@@ -111,20 +145,6 @@ def human_duration(seconds) -> str:
             value = seconds / s
             return f"{value:.0f}{unit}" if abs(value - round(value)) < 0.05 else f"{value:.1f}{unit}"
     return f"{seconds * 1000:.0f}ms"
-
-
-def short_offset(seconds) -> str:
-    """An offset in a column for the row labels: 0, 45s, 2m30, 1h, 2h30"""
-    if seconds < 1:
-        return f"{seconds:.1f}s" if seconds else '0'
-    seconds = round(seconds)
-    h, rest = divmod(seconds, 3600)
-    m, s = divmod(rest, 60)
-    if h:
-        return f"{h}h{m:02d}" if m else f"{h}h"
-    if m:
-        return f"{m}m{s:02d}" if s else f"{m}m"
-    return f"{s}s"
 
 
 # ---------------------------------------------------------------- colors
@@ -188,13 +208,17 @@ class HeatmapStyle:
     ramp: the colors, from few events to many
     expected_rate: events per second when all is fine. The count of a cell is compared with the
         expected one (ratio 1 is the last ramp color). None: compared with the busiest cell in view
+    fixed_max: compared with this value instead of the busiest cell, so the colors do not change
+        with the zoom (for a value that does not grow with the column duration, e.g. a depth)
     presence: only happened or not, the last ramp color or `zero`
     zero: the color of a cell without events (None: the first ramp color)
     over: the color above over_ratio times the expected count (None: the last ramp color)
-    no_data: before the source starts; future: after now"""
+    no_data: before the source starts (default: the tab background, COLORS tab_soft); future: after now
+    count_name: what a cell holds, in the selection line and the footer ("events", "forks")"""
 
     def __init__(self, ramp, expected_rate=None, presence=False, zero=None, over=None, over_ratio=1.2,
-                 no_data=(52, 54, 62), future=(0, 10, 45), cursor=(250, 250, 250), names=None):
+                 no_data=(28, 36, 68), future=(0, 10, 45), cursor=(250, 250, 250), names=None,
+                 count_name='events', fixed_max=None):
         self.ramp = [tuple(c) for c in ramp]
         self.expected_rate = expected_rate
         self.presence = presence
@@ -204,12 +228,31 @@ class HeatmapStyle:
         self.no_data = tuple(no_data)
         self.future = tuple(future)
         self.cursor = tuple(cursor)
+        self.count_name = count_name
+        self.fixed_max = fixed_max
         # legend: (color, label)
         self.names = names
+        self._shaded = {}
+
+    def selected(self, color):
+        """The color of a square in a selection of more squares (the cursor square is `cursor`)"""
+        key = ('selected', color)
+        if key not in self._shaded:
+            self._shaded[key] = mix(color, self.cursor, 0.55)
+        return self._shaded[key]
+
+    def shaded(self, color):
+        """The color on the second background band: a little lighter"""
+        if color not in self._shaded:
+            L, a, b = rgb_to_oklab(color)
+            self._shaded[color] = oklab_to_rgb((L + BAND_LIGHTNESS, a, b))
+        return self._shaded[color]
 
     def ratio(self, count: int, seconds: float, view_max: int):
         if self.expected_rate:
             return count / (self.expected_rate * seconds)
+        if self.fixed_max:
+            return count / self.fixed_max
         return count / view_max if view_max else 0
 
     def color(self, count: int, seconds: float, view_max: int):
@@ -274,6 +317,38 @@ class EventSeries:
         for name in ('times', 'file_idx', 'offsets', 'lines'):
             old = getattr(self, name)
             setattr(self, name, array(old.typecode, (old[i] for i in order)))
+
+
+class TimeSeries:
+    """Events with a value each (e.g. the depth of a fork): the times sorted, and one value for
+    each, for the cell counts (count) and for a heat map colored by the biggest value (max_value).
+    start: the time from which the source has data (see EventSeries). A new series has a new
+    version, so the views count their cells again"""
+
+    def __init__(self, pairs, start: float = 0):
+        pairs = sorted(pairs)
+        self.times = [t for t, _ in pairs]
+        self.values = [v for _, v in pairs]
+        self.start = start
+        self.version = 0
+
+    def __len__(self):
+        return len(self.times)
+
+    def index_range(self, t0: float, t1: float):
+        """Indexes [i0, i1) of the events in [t0, t1)"""
+        return bisect.bisect_left(self.times, t0), bisect.bisect_left(self.times, t1)
+
+    def count(self, t0: float, t1: float) -> int:
+        i0, i1 = self.index_range(t0, t1)
+        return i1 - i0
+
+    def max_value(self, t0: float, t1: float):
+        i0, i1 = self.index_range(t0, t1)
+        return max(self.values[i0:i1], default=0)
+
+
+LINE_HEAD = re.compile(rb'\d{4}-\d\d-\d\d[T ]\d\d:')  # a log line that starts with its time
 
 
 def parse_line_time(line: bytes):
@@ -375,59 +450,46 @@ class LogFileSource:
                 series.version += 1
             self.last_refresh = time.time()
 
-    def line_text(self, i: int) -> str:
-        """The line of the event i"""
-        s = self.series
-        with open(self.files[s.file_idx[i]], 'rb') as f:
-            f.seek(s.offsets[i])
-            return f.readline().decode(errors='replace').rstrip('\n')
-
-    def lines_around(self, i0: int, i1: int, before: int = 40, after: int = 40, max_lines: int = 3000):
-        """The log lines from `before` lines before the event i0 to `after` lines after the event
-        i1 - 1, at most max_lines (the interval [i0, i1) can have many events).
-        Lines before the first event stay in its file.
-        Return a list of (file name, line number, text, is an event of [i0, i1))"""
-        s = self.series
+    def lines_between(self, t0: float, t1: float, filters, max_lines: int = 5000):
+        """The log lines from the first line at t0 to the last one before t1, with the lines
+        without a time that follow them (e.g. a traceback). Needs a source of every line
+        (match None). filters: [(name, regex str or None for every line)]; a line without a time
+        goes with the line before it. Return {name: (rows, total)}, rows: at most max_lines
+        (file name, line number, text)"""
+        with self.lock:
+            series, files = self.series, list(self.files)
+        found = {name: ([], 0) for name, _ in filters}
+        i0, i1 = series.index_range(t0, t1)
         if i0 >= i1:
-            return []
-        events = {(s.file_idx[i], s.offsets[i]) for i in range(i0, min(i1, i0 + max_lines))}
-        fi, off, ln = s.file_idx[i0], s.offsets[i0], s.lines[i0]
-        last = (s.file_idx[i1 - 1], s.offsets[i1 - 1])
-        rows = []
-
-        # before: read back some bytes and keep the last lines
-        with open(self.files[fi], 'rb') as f:
-            back = min(off, before * 600)
-            f.seek(off - back)
-            chunk = f.read(back).split(b'\n')
-            if off - back > 0:
-                chunk = chunk[1:]  # the first line is cut
-            if chunk and chunk[-1] == b'':  # the chunk ends where the event line starts
-                chunk.pop()
-            chunk = chunk[-before:] if before else []
-            for k, text in enumerate(chunk):
-                rows.append((os.path.basename(self.files[fi]), ln - len(chunk) + k,
-                             text.decode(errors='replace'), False))
-
-        # the interval, then `after` lines
-        after_left = None
-        while fi < len(self.files) and len(rows) < max_lines:
-            with open(self.files[fi], 'rb') as f:
+            return found
+        compiled = [(name, re.compile(regex.encode()) if regex else None) for name, regex in filters]
+        rows = {name: [] for name, _ in filters}
+        totals = {name: 0 for name, _ in filters}
+        matched = {name: False for name, _ in filters}
+        end = (series.file_idx[i1], series.offsets[i1]) if i1 < len(series) else None
+        fi, off, ln = series.file_idx[i0], series.offsets[i0], series.lines[i0]
+        while fi < len(files):
+            with open(files[fi], 'rb') as f:
                 f.seek(off)
                 for line in f:
-                    is_event = (fi, off) in events
-                    rows.append((os.path.basename(self.files[fi]), ln,
-                                 line.decode(errors='replace').rstrip('\n'), is_event))
-                    if after_left is None and (fi, off) == last:
-                        after_left = after
-                    elif after_left is not None:
-                        after_left -= 1
+                    if (fi, off) == end or not line.endswith(b'\n'):
+                        return {name: (rows[name], totals[name]) for name in rows}
+                    has_time = LINE_HEAD.match(line) is not None
+                    row = None
+                    for name, regex in compiled:
+                        if has_time:
+                            matched[name] = regex is None or regex.search(line) is not None
+                        if matched[name]:
+                            totals[name] += 1
+                            if len(rows[name]) < max_lines:
+                                if row is None:
+                                    row = (os.path.basename(files[fi]), ln,
+                                           line.decode(errors='replace').rstrip('\n'))
+                                rows[name].append(row)
                     off += len(line)
                     ln += 1
-                    if (after_left is not None and after_left <= 0) or len(rows) >= max_lines:
-                        return rows
             fi, off, ln = fi + 1, 0, 1
-        return rows
+        return {name: (rows[name], totals[name]) for name in rows}
 
 
 # ---------------------------------------------------------------- view
@@ -436,16 +498,19 @@ class HeatmapView:
     """Scale, cursor and scroll of one heat map.
     Each column is cut in n_rows squares, the rows the screen has, so a square is the column
     duration / n_rows (a 30m column on 80 rows: 22.5 s).
-    Two modes: in 'column' mode the cursor selects a whole column and the zoom changes the scale;
-    in 'square' mode it selects one square. The cursor is a time, so it stays on the same moment
+    Two modes: in 'column' mode the cursor selects a macro column, the columns of one background
+    band (COLUMN_BAND: the 4 columns of an hour, of a day, the days of a month), and the zoom
+    changes the scale; in 'square' mode it selects one square, or the squares from anchor_time
+    to the cursor in the order of time. The cursor is a time, so it stays on the same moment
     when the scale changes. right_col is the index of the rightmost column; it follows the current
-    time while it shows it. zoom_range: [t0, t1) of the column the last zoom in cut, shown on
-    the columns it became"""
+    time while it shows it. zoom_range: [t0, t1) of the macro column the last zoom in cut, to
+    center the view on it"""
 
     def __init__(self, scale_idx: int = 6):
         self.scale_idx = scale_idx
         self.mode = 'column'
         self.cursor_time = None
+        self.anchor_time = None  # square mode: the other end of a selection of more squares
         self.right_col = None
         self.cols = 1
         self.n_rows = 1
@@ -483,12 +548,37 @@ class HeatmapView:
     def cursor(self):
         return self.locate(self.cursor_time)
 
+    def macro_wall(self, col: int):
+        """[w0, w1) on the wall clock of the macro column that holds the column col"""
+        return band_wall(column_wall(col, self.scale_idx)[0], COLUMN_BAND[self.scale_name])
+
+    def macro_columns(self, col: int):
+        """The first and last column of the macro column that holds the column col"""
+        w0, w1 = self.macro_wall(col)
+        return wall_column(w0, self.scale_idx), wall_column(w1 - 0.5, self.scale_idx)
+
+    def selected_squares(self):
+        """The first and last (column, row) of the selected squares, in the order of time"""
+        cursor = self.cursor()
+        if self.anchor_time is None:
+            return cursor, cursor
+        anchor = self.locate(self.anchor_time)
+        return min(anchor, cursor), max(anchor, cursor)
+
     def selection(self):
-        """[t0, t1) of the selected column, or square in square mode"""
-        col, row = self.cursor()
+        """[t0, t1) of the selected macro column, or of the selected squares in square mode"""
         if self.mode == 'square':
-            return self.cell_bounds(col, row)
-        return self.column_bounds(col)
+            first, last = self.selected_squares()
+            return self.cell_bounds(*first)[0], self.cell_bounds(*last)[1]
+        w0, w1 = self.macro_wall(self.cursor()[0])
+        return from_wall(w0), from_wall(w1)
+
+    def selection_columns(self):
+        """The first and last column of the selection"""
+        if self.mode == 'square':
+            first, last = self.selected_squares()
+            return first[0], last[0]
+        return self.macro_columns(self.cursor()[0])
 
     def zoom_columns(self):
         """The first and last column of zoom_range, None without it"""
@@ -512,6 +602,8 @@ class HeatmapView:
         if self.mode == 'square':
             t0, t1 = self.cell_bounds(col, row)
             self.cursor_time = (t0 + t1) / 2
+        else:
+            self.anchor_time = None
         if self.recenter:
             zoom = self.zoom_columns()
             if zoom:
@@ -528,15 +620,17 @@ class HeatmapView:
             self.right_col = col + self.cols - 1
         self.right_col = min(self.right_col, now_col)
 
-    def move(self, dx: int = 0, dy: int = 0, now: float = None):
-        """Column mode: dx columns, at the same place in the column. Square mode: dx columns and
-        dy rows; the rows go on in the next column, like the time"""
+    def move(self, dx: int = 0, dy: int = 0, now: float = None, extend: bool = False):
+        """Column mode: dx macro columns (-1 or 1), at the same place in the macro column. Square
+        mode: dx columns and dy rows; the rows go on in the next column, like the time. extend:
+        the selection grows from where it was (anchor_time), else it is the cursor square only"""
         now = time.time() if now is None else now
         col, row = self.cursor()
         if self.mode == 'column':
-            w0, w1 = column_wall(col, self.scale_idx)
+            first, last = self.macro_columns(col)
+            w0, w1 = self.macro_wall(col)
             part = (to_wall(self.cursor_time) - w0) / (w1 - w0)
-            n0, n1 = column_wall(col + dx, self.scale_idx)
+            n0, n1 = self.macro_wall(last + 1 if dx > 0 else first - 1)
             t = from_wall(n0 + part * (n1 - n0))
             if t > now:
                 if from_wall(n0) > now:
@@ -544,6 +638,10 @@ class HeatmapView:
                 t = now
             self.cursor_time = t
             return
+        if not extend:
+            self.anchor_time = None
+        elif self.anchor_time is None:
+            self.anchor_time = self.cursor_time
         row += dy
         col += dx + row // self.n_rows
         row %= self.n_rows
@@ -559,18 +657,19 @@ class HeatmapView:
             self.recenter = True
 
     def zoom_in(self):
-        """The selected column becomes the columns of the next scale down, the first one selected"""
+        """The selected macro column becomes the columns of the next scale down, its first macro
+        column selected"""
         target = zoom_in_scale(self.scale_idx)
         if target is None:
             return False
-        t0, t1 = self.column_bounds(self.cursor()[0])
+        t0, t1 = self.selection()
         self.set_scale(target)
         self.zoom_range = (t0, t1)
         self.cursor_time = t0
         return True
 
     def zoom_out(self):
-        """The column of the next scale up that holds the cursor"""
+        """The macro column of the next scale up that holds the cursor"""
         if self.scale_idx + 1 >= len(COLUMN_SCALES):
             return False
         self.set_scale(self.scale_idx + 1)

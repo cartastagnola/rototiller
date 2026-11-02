@@ -3936,62 +3936,51 @@ def create_vdf_header(win, screenState: ScreenState, pos: UIgraph.Point, width: 
     return 1 if compact else 3
 
 
-HEATMAP_LABEL_WIDTH = 8  # row labels and the ▶ of the selected row
-HEATMAP_LABEL_SPACING = 3  # lines between two row labels, at least
+HEATMAP_LABEL_WIDTH = 2  # the legend of the y axis
+HEATMAP_AXIS_LIGHTNESS = 0.08  # the second band of the graph background and of the axes: no_data this much lighter in OKLab
+# the text of a band on the column labels: (column band, top band), strftime of its start
+HEATMAP_BAND_TEXT = {'6m': ('%M', '%m-%d %Hh'), '15m': ('%H', '%a %Y-%m-%d'), '6h': ('%d', '%Y-%m'),
+                     '24h': ('%m', '%Y'), '1mo': ('%Y', '')}
+HEATMAP_Y_UNIT = {'6m': 'm', '15m': 'm', '6h': 'h', '24h': 'h', '1mo': 'd'}  # the unit of the y legend, above it
+# square mode: the keys that grow the selection, (dx, dy)
+HEATMAP_EXTEND_KEYS = {chr(curses.KEY_SLEFT): (-1, 0), chr(curses.KEY_SRIGHT): (1, 0),
+                       chr(curses.KEY_SR): (0, -1), chr(curses.KEY_SF): (0, 1),
+                       'H': (-1, 0), 'L': (1, 0), 'K': (0, -1), 'J': (0, 1)}
 
 
-def heatmap_column_label(view: HEAT.HeatmapView, col: int):
-    t = datetime.fromtimestamp(view.column_bounds(col)[0])
-    name = view.scale_name
-    if name in ('1s', '10s'):
-        return t.strftime('%H:%M:%S')
-    if name in ('1m', '5m', '10m', '20m', '1h', '6h', '12h'):
-        return t.strftime('%m-%d') if (t.hour, t.minute) == (0, 0) else t.strftime('%H:%M')
-    if name in ('24h', '7d'):
-        return t.strftime('%m-%d')
-    if name == '1y':
-        return t.strftime('%Y')
-    return t.strftime('%Y-%m')
-
-
-def heatmap_column_label_every(view: HEAT.HeatmapView, label_len: int):
-    """A label every this many columns, on round columns so they do not move while scrolling"""
-    steps = {'6h': [4, 8, 12, 28], '12h': [2, 4, 8, 14, 28], '24h': [7, 14, 28], '1mo': [3, 6, 12],
-             '3mo': [4, 8]}.get(
-        view.scale_name, [1, 2, 3, 4, 6, 10, 12, 15, 20, 24, 30, 60, 120])
-    return next((k for k in steps if k >= label_len), steps[-1])
-
-
-def heatmap_row_labels(view: HEAT.HeatmapView, col: int, n_lines: int):
-    """{line: label} of round times in the column col; the squares do not fall on round times, so
-    the label is on the line that holds its time"""
-    w0, w1 = HEAT.column_wall(col, view.scale_idx)
-    span = w1 - w0
-    step = next((s for s in HEAT.LABEL_STEPS if s >= span / n_lines * HEATMAP_LABEL_SPACING),
-                HEAT.LABEL_STEPS[-1])
-    name = view.scale_name
-    labels = {}
-    if name == '1y':  # the months
-        for month in range(12):
-            w = calendar.timegm((time.gmtime(w0).tm_year, month + 1, 1, 0, 0, 0))
-            labels.setdefault(int((w - w0) / span * n_lines), time.strftime('%b', time.gmtime(w)).lower())
-        return labels
-    k = math.ceil((w0 - HEAT.WALL_ORIGIN) / step - 1e-9)
-    while True:
-        w = HEAT.WALL_ORIGIN + k * step
-        if w >= w1:
-            return labels
-        d = time.gmtime(math.floor(w))  # the wall clock, read as UTC
-        if name == '7d':
-            text = time.strftime('%a %H' if step < HEAT.DAY else '%a', d).lower()
-        elif name in ('1mo', '3mo', '1y'):
-            text = time.strftime('%m-%d', d)
-        elif name == '24h':
-            text = time.strftime('%H:%M', d)
+def heatmap_band_row(view: HEAT.HeatmapView, unit, fmt: str):
+    """The bands of `unit` on the visible columns: [band id, first column from the left, columns,
+    text]"""
+    bands = []
+    for col in range(view.left_col, view.right_col + 1):
+        w0 = HEAT.column_wall(col, view.scale_idx)[0]
+        b = HEAT.band_id(w0, unit)
+        if bands and bands[-1][0] == b:
+            bands[-1][2] += 1
         else:
-            text = HEAT.short_offset(w - w0)
-        labels.setdefault(int((w - w0) / span * n_lines), text)
-        k += 1
+            bands.append([b, col - view.left_col, 1, time.strftime(fmt, time.gmtime(math.floor(w0))).lower()])
+    return bands
+
+
+def heatmap_y_legend(view: HEAT.HeatmapView, n_lines: int):
+    """(text, band) of each line of the y axis: the band alternates the two shades, its first line
+    holds the text (2 characters, the unit is HEATMAP_Y_UNIT). All the columns of a scale have the
+    same bands (the month columns: as long as the rightmost one)"""
+    w0, w1 = HEAT.column_wall(view.right_col, view.scale_idx)
+    unit = HEAT.ROW_BAND[view.scale_name]
+    legend = []
+    last = None
+    for line in range(n_lines):
+        k = math.floor(line * (w1 - w0) / n_lines / unit + 1e-9)  # the band of the top of the line
+        text = ''
+        if k != last:  # 2 characters: minutes or hours from the start of the column, or the day
+            if unit >= HEAT.DAY:
+                text = f"{k * unit // HEAT.DAY + 1:02d}"
+            else:
+                text = f"{k * unit // 60:02d}" if unit < 3600 else f"{k * unit // 3600:02d}"
+        legend.append((text, k % 2))
+        last = k
+    return legend
 
 
 def heatmap_time_text(t: float, step):
@@ -4004,19 +3993,29 @@ def heatmap_time_text(t: float, step):
 
 
 def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardState, parent_scope: Scope,
-                        name: str, pos: UIgraph.Point, size: UIgraph.Point, series: HEAT.EventSeries,
-                        view: HEAT.HeatmapView, style: HEAT.HeatmapStyle, scope_activation_func=None):
+                        name: str, pos: UIgraph.Point, size: UIgraph.Point, series,
+                        view: HEAT.HeatmapView, style: HEAT.HeatmapStyle, scope_activation_func=None,
+                        value_method: str = 'count'):
     """Time heat map (the chiaharvestgraph graph): one column for each time bucket of view's scale,
     newest on the right, each column cut in as many squares as the height has (two in each line,
     with ▀), read top to bottom; a square is colored by the number of events of `series` in it.
-    It is an element: enter goes into it. In column mode ←→ move the selected column, + cuts it
-    in the columns of the next scale down and - goes up, [ and ] change the scale, s goes to
-    square mode. In square mode ←→↑↓ move the selected square, esc goes back to column mode
-    (KEYBOARD.heatmap_execution). 0 goes back to now. enter runs
-    scope_activation_func(scope, screenState, ...) with scope.data['cell'] = (t0, t1) of the
-    selected column or square.
-    Lines: column labels, the ▼ of the selected column, the grid, the ▲ of the selected column,
-    the selection, the legend. It uses all of size.y. Return (scope, lines used)"""
+    It is an element: enter goes into it. In column mode ←→ move the selected macro column (the
+    columns of one background band, HeatmapView.macro_columns), i cuts it in the columns of the
+    next scale down and o goes up, s goes to square mode. In square mode ←→↑↓ move the selected
+    square, shift+←→↑↓ (or H J K L) select more squares, from the first one to the cursor in the
+    order of time; esc goes back to column mode (KEYBOARD.heatmap_execution). 0 goes back to
+    now. enter runs scope_activation_func(scope, screenState, ...) with scope.data['cell'] =
+    (t0, t1) of the selection.
+    value_method: the method of `series` that gives the value of a cell: count() for the number
+    of events, max_value() for a heat map colored by the biggest value (e.g. a depth).
+    The background of the columns alternates two shades, by the hour, day or month
+    (HEAT.COLUMN_BAND), also on the column labels. The legend of the y axis alternates the two
+    shades by its own bands (HEAT.ROW_BAND), only on the legend: the rows of the graph do not.
+    Lines: the top bands (the day of the hours), the column bands, the grid, the bottom line (its
+    part under the selected columns is yellow), the selection, the legend. A right line closes the grid, with
+    the ◀ of the selected row in square mode; the two lines are drawn like the frame of a table,
+    only when the graph is selected. It uses all of size.y.
+    Return (scope, lines used)"""
 
     scope_name = f"{parent_scope.id}_{name}"
     if scope_name not in screenState.scopes:
@@ -4038,6 +4037,11 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
 
     P_text = screenState.colorPairs["body"]
     P_marker = screenState.colorPairs["down"]
+    P_selection = UIgraph.addCustomColorTuple((screenState.colors["yellow_bee"], screenState.colors["background"]),
+                                              screenState.cursesColors)
+    framed = active or scope.selected()  # the frame of the tables: ▌ on the right, ▀ under it
+    P_frame = screenState.colorPairs["body" if active else "win_selected"]
+    value_func = getattr(series, value_method)
 
     if active:
         keys = keyboardState.keys
@@ -4046,18 +4050,14 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
                 view.move(dx=-1)
             if keyboardState.moveRight:
                 view.move(dx=1)
-            if '+' in keys or '=' in keys:
+            if 'i' in keys:
                 view.zoom_in()
-            if '-' in keys:
+            if 'o' in keys:
                 view.zoom_out()
-            if '[' in keys:
-                view.set_scale(view.scale_idx - 1)
-            if ']' in keys:
-                view.set_scale(view.scale_idx + 1)
             if 's' in keys:
                 view.mode = 'square'
-            screenState.footer_text += ("| column=←→ | zoom=+- | scale=[] | squares=s | now=0 "
-                                        "| events=enter ")
+            screenState.footer_text += (f"| column=←→ | zoom=i o | squares=s | now=0 "
+                                        f"| {style.count_name}=enter ")
         else:
             if keyboardState.moveLeft:
                 view.move(dx=-1)
@@ -4067,7 +4067,11 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
                 view.move(dy=-1)
             if keyboardState.moveDown:
                 view.move(dy=1)
-            screenState.footer_text += "| move=←→↑↓ | columns=esc | now=0 | events=enter "
+            for key in keys:  # shift+arrows (or H J K L) select more squares
+                if key in HEATMAP_EXTEND_KEYS:
+                    view.move(*HEATMAP_EXTEND_KEYS[key], extend=True)
+            screenState.footer_text += (f"| move=←→↑↓ | more squares=shift+←→↑↓ | columns=esc | now=0 "
+                                        f"| {style.count_name}=enter ")
         if keyboardState.home:
             view.go_now()
     elif selected:
@@ -4076,8 +4080,9 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     label_w = HEATMAP_LABEL_WIDTH
     now = time.time()
     n_lines = max(1, size.y - 5)
-    view.layout(size.x - label_w, n_lines * 2, now)
+    view.layout(size.x - label_w - 1, n_lines * 2, now)
     cursor_col, cursor_row = view.cursor()
+    (first_col, first_row), (last_col, last_row) = view.selected_squares()
     t0_sel, t1_sel = view.selection()
     scope.data['cell'] = (t0_sel, t1_sel)
     square_mode = active and view.mode == 'square'
@@ -4089,7 +4094,7 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
             pass  # the last cell of the window
 
     # counts, cached by column; the columns that reach now are counted again every frame
-    key = (view.scale_idx, view.n_rows, id(series), series.version)
+    key = (view.scale_idx, view.n_rows, id(series), series.version, value_method)
     if scope.data.get('heat_key') != key:
         scope.data['heat_key'] = key
         scope.data['heat_counts'] = {}
@@ -4107,24 +4112,31 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
                 elif start is None or t1 <= start:
                     column.append(-1)  # no data
                 else:
-                    column.append(series.count(t0, t1))
-            counts[col] = (column, view.square_seconds(col))
+                    column.append(value_func(t0, t1))
+            counts[col] = (column, view.square_seconds(col), HEAT.column_band(col, view.scale_idx))
         cells[col] = counts[col]
         view_max = max(view_max, max((v for v in counts[col][0] if v is not None), default=0))
     if len(counts) > 4 * view.cols:  # forget the columns far from the view
         for col in [c for c in counts if c not in cells]:
             counts.pop(col)
 
+    # the graph background (no data) and the bands on the axes: style.no_data and the same color lighter
+    nd_l, nd_a, nd_b = HEAT.rgb_to_oklab(style.no_data)
+    background = (style.no_data, HEAT.oklab_to_rgb((nd_l + HEATMAP_AXIS_LIGHTNESS, nd_a, nd_b)))
+
     def cell_color(col, row):
         if square_mode and (col, row) == (cursor_col, cursor_row):
             return style.cursor
-        column, seconds = cells[col]
+        column, seconds, band = cells[col]
         value = column[row]
-        if value is None:
-            return style.future
-        if value < 0:
-            return style.no_data
-        return style.color(value, seconds, view_max)
+        if value is not None and value < 0:
+            color = background[band]
+        else:
+            color = style.future if value is None else style.color(value, seconds, view_max)
+            color = style.shaded(color) if band else color
+        if square_mode and (first_col, first_row) <= (col, row) <= (last_col, last_row):
+            return style.selected(color)
+        return color
 
     pairs = scope.data.setdefault('heat_pairs', {})
 
@@ -4133,45 +4145,62 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
             pairs[(top, bottom)] = UIgraph.addCustomColorTuple_FAST((top, bottom), screenState.cursesColors)
         return pairs[(top, bottom)]
 
-    # column labels
+    # column labels: the top bands, then the column bands, each with its text if it fits
     x0 = pos.x + label_w
-    label_len = len(heatmap_column_label(view, view.right_col)) + 1
-    every = heatmap_column_label_every(view, label_len)
-    for col in range(view.left_col, view.right_col + 1):
-        x = x0 + col - view.left_col
-        if col % every == 0 and x + label_len - 1 <= pos.x + size.x:
-            put(pos.y, x, heatmap_column_label(view, col), P_text)
+    x_right = x0 + view.cols
+    colors = screenState.cursesColors
+    # the axis bands: the background of the tabs (tab_soft) and the same color a little lighter
+    P_axis = [UIgraph.addCustomColorTuple((screenState.colors["white"], UIgraph.addCustomColor(c, colors)), colors)
+              for c in background]
+    column_fmt, top_fmt = HEATMAP_BAND_TEXT[view.scale_name]
+    for y, unit, fmt in ((pos.y, HEAT.TOP_BAND[view.scale_name], top_fmt),
+                         (pos.y + 1, HEAT.COLUMN_BAND[view.scale_name], column_fmt)):
+        if unit is None:  # no band on this row
+            put(y, x0, ' ' * view.cols, P_axis[0])
+            continue
+        for b, x, width, text in heatmap_band_row(view, unit, fmt):
+            put(y, x0 + x, f"{text if len(text) < width else '':<{width}}", P_axis[b % 2])  # a gap after it
+    # the name of the scale in the top right corner, like the selected tab
+    scale_text = f" {view.scale_name} "
+    try:
+        win.addstr(pos.y, x_right - len(scale_text), scale_text,
+                   curses.color_pair(screenState.colorPairs["xch"]) | curses.A_BOLD)
+    except curses.error:
+        pass
+    put(pos.y + 1, pos.x, f"{HEATMAP_Y_UNIT[view.scale_name]:>{label_w}}", P_axis[0])
+    for y in (pos.y, pos.y + 1):
+        put(y, x_right, '▌' if framed else ' ', P_frame)
 
-    # the selected column between ▼ and ▲, and the columns of the last zoom in
-    y_bottom = pos.y + 2 + n_lines
-    zoom = view.zoom_columns()
-    if zoom:
-        for col in range(max(zoom[0], view.left_col), min(zoom[1], view.right_col) + 1):
-            put(pos.y + 1, x0 + col - view.left_col, '─', P_text)
-            put(y_bottom, x0 + col - view.left_col, '─', P_text)
-    put(pos.y + 1, x0 + cursor_col - view.left_col, '▼', P_marker)
-    put(y_bottom, x0 + cursor_col - view.left_col, '▲', P_marker)
-
-    # the grid
-    labels = heatmap_row_labels(view, cursor_col, n_lines)
+    # the grid, closed by the right line
+    y_legend = heatmap_y_legend(view, n_lines)
     for line in range(n_lines):
         y = pos.y + 2 + line
-        if line in labels:
-            put(y, pos.x, f"{labels[line]:>{label_w - 2}}", P_text)
-        if square_mode and cursor_row // 2 == line:
-            put(y, pos.x + label_w - 1, '▶', P_marker)
+        text, band = y_legend[line]
+        put(y, pos.x, f"{text:>{label_w}}", P_axis[band])
         for col in range(view.left_col, view.right_col + 1):
             top = cell_color(col, line * 2)
             bottom = cell_color(col, line * 2 + 1)
             put(y, x0 + col - view.left_col, '▀', pair(top, bottom))
+        if square_mode and cursor_row // 2 == line:
+            put(y, x_right, '◀', P_marker)
+        else:
+            put(y, x_right, '▌' if framed else ' ', P_frame)
+
+    # the bottom line, yellow under the selected columns
+    y_bottom = pos.y + 2 + n_lines
+    put(y_bottom, x0, '▀' * view.cols + '▘' if framed else ' ' * (view.cols + 1), P_frame)
+    sel0, sel1 = view.selection_columns()
+    for col in range(max(sel0, view.left_col), min(sel1, view.right_col) + 1):
+        put(y_bottom, x0 + col - view.left_col, '▀', P_selection)
 
     # the selection
     y = y_bottom + 1
     square = view.square_seconds(cursor_col)
-    count = series.count(t0_sel, t1_sel)
-    what = 'square' if view.mode == 'square' else 'column'
+    count = value_func(t0_sel, t1_sel)
+    n_squares = (last_col - first_col) * view.n_rows + last_row - first_row + 1
+    what = 'column' if view.mode == 'column' else 'square' if n_squares == 1 else f"{n_squares} squares"
     text = (f"{what} {heatmap_time_text(t0_sel, square)} → {heatmap_time_text(t1_sel, square)}"
-            f"   {count:,} events")
+            f"   {style.count_name}: {count:,}")
     if style.expected_rate:
         text += f" ({count / (style.expected_rate * (t1_sel - t0_sel)):.0%} of expected)"
     if start is None or t1_sel <= start:
