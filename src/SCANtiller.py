@@ -28,6 +28,7 @@ from collections import deque
 from dataclasses import dataclass, replace
 
 from chia.types.blockchain_format.program import Program as PyProgram
+from chia_rs import CoinSpend, G2Element, SpendBundle, get_conditions_from_spendbundle
 
 import src.CONFtiller as CONF
 from src.CONFtiller import logging, debug_logger
@@ -443,8 +444,8 @@ class MempoolTx:
     coins_out: int
     puzzle_keys: list  # puzzle key of each coin spend
     removal_coin_ids: list
-    added_at: float
     spend_bundle: dict  # the whole bundle (RPC json), to explore it
+    added_at: float
     gone_at: float = None  # when it left the mempool
     validated_at: float = None  # when it was found in a block
 
@@ -470,14 +471,13 @@ class MempoolPuzzleScanner:
     def __init__(self, catalog: PuzzleCatalog, delay: float, fast_delay: float, validated_delay: float):
         self.catalog = catalog
         self.delay = delay
-        self.validated_delay = validated_delay
         self.fast_delay = fast_delay
+        self.validated_delay = validated_delay
         self.status = 'waiting'
         self.lock = threading.Lock()
         self.txs: dict[str, MempoolTx] = {}
         self.puzzle_hash_cache = {}
         self.thread = None
-
         self.fast_until = 0
         self.wake = threading.Event()  # ends the slow wait when a view asks for fast scans
         self.validated_txs = deque(maxlen=self.VALIDATED_KEEP)
@@ -488,6 +488,7 @@ class MempoolPuzzleScanner:
         if now > self.fast_until:
             self.wake.set()
         self.fast_until = now + self.FAST_HOLD
+
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True, name='puzzle mempool scanner')
         self.thread.start()
@@ -577,7 +578,6 @@ class MempoolPuzzleScanner:
             txs = list(self.txs.values())
         return sorted(txs, key=lambda tx: tx.fee_per_cost, reverse=True)
 
-
     def get(self, tx_id: str):
         """The transaction, also if it just left the mempool; None if it is not known"""
         tx_id = strip_0x(tx_id)
@@ -608,6 +608,90 @@ def mempool_blocks(txs: list):
             blocks.append(WDB.MempoolBlock())
         blocks[-1].add_item(tx)
     return blocks
+
+
+def block_spends_by_puzzle(catalog: PuzzleCatalog, header_hash: str, height: int, block_cost: int):
+    """The coins spent in a block by puzzle type, it does not change the catalog. Returns (types,
+    coin_types, coin_solutions): types is a list of (name, coins, execution cost, condition
+    cost, byte cost) with the costs None if the spends can not be run, coin_types is coin id
+    -> name, coin_solutions is coin id -> solution in hex.
+    Execution and condition costs are measured for each spend. The byte cost is an estimate:
+    the block pays for its compressed generator, what is left of the block cost is split by
+    the size of the spends."""
+    spends = RPC.call_rpc_node('get_block_spends', header_hash=header_hash)
+
+    costs = None
+    try:
+        bundle = SpendBundle([CoinSpend.from_json_dict(spend) for spend in spends], G2Element())
+        conditions = get_conditions_from_spendbundle(bundle, WDB.DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+                                                      WDB.DEFAULT_CONSTANTS, height)
+        costs = {bytes(spend.coin_id).hex(): (spend.execution_cost, spend.condition_cost)
+                 for spend in conditions.spends}
+    except Exception as e:
+        logging(debug_logger, "DEBUG", f"BLOCK SPENDS costs of block {height} not available: {e}")
+
+    def spend_size(spend):
+        return len(spend['puzzle_reveal']) + len(spend['solution'])
+
+    byte_cost_left = 0
+    total_size = sum(spend_size(spend) for spend in spends)
+    if costs is not None:
+        byte_cost_left = max((block_cost or 0) - sum(a + b for a, b in costs.values()), 0)
+
+    puzzle_keys = {}  # the same puzzle is often spent many times in a block
+    kinds = {}
+    coin_puzzles = {}
+    coin_solutions = {}
+    for spend in spends:
+        coin = spend['coin']
+        puzzle_hash = strip_0x(coin['puzzle_hash'])
+        if puzzle_hash not in puzzle_keys:
+            puzzle_keys[puzzle_hash] = classify_puzzle(PyProgram.fromhex(strip_0x(spend['puzzle_reveal'])))[0]
+        name = catalog.label(puzzle_keys[puzzle_hash])[0] or 'unknown'
+
+        coin_id = UTILS.calc_coin_id(coin['parent_coin_info'], coin['puzzle_hash'], coin['amount']).hex()
+        coin_puzzles[coin_id] = name
+        coin_solutions[coin_id] = strip_0x(spend['solution'])
+
+        kind = kinds.setdefault(name, [name, 0, 0, 0, 0])
+        kind[1] += 1
+        if costs is not None:
+            execution, condition = costs.get(coin_id, (0, 0))
+            kind[2] += execution
+            kind[3] += condition
+            kind[4] += byte_cost_left * spend_size(spend) // total_size
+
+    if costs is None:
+        return [(kind[0], kind[1], None, None, None) for kind in kinds.values()], coin_puzzles, coin_solutions
+    return [tuple(kind) for kind in kinds.values()], coin_puzzles, coin_solutions
+
+
+def block_spend_bundles(scanner: MempoolPuzzleScanner, coin_solutions: dict) -> list:
+    """The bundles known to be in a block: a block keeps the spends but not their bundles, a
+    bundle is in the block if the block spends all its coins with the same solutions. Known are
+    the ones in memory (scanner) and the ones saved in the spend bundle DB. Returns a list of
+    (bundle hash, coins, cost, fee, source), cost and fee None for the saved ones."""
+    def in_block(solutions: dict):
+        return solutions and all(coin_solutions.get(coin_id) == solution for coin_id, solution in solutions.items())
+
+    bundles = {}
+    for tx in scanner.known_txs():
+        if not any(coin_id in coin_solutions for coin_id in tx.removal_coin_ids):
+            continue
+        solutions = {}
+        for spend in tx.spend_bundle['coin_spends']:
+            coin = spend['coin']
+            coin_id = UTILS.calc_coin_id(coin['parent_coin_info'], coin['puzzle_hash'], coin['amount']).hex()
+            solutions[coin_id] = strip_0x(spend['solution'])
+        if in_block(solutions):
+            bundles[tx.tx_id] = (tx.tx_id, len(solutions), tx.cost, tx.fee, 'mempool')
+
+    for bundle_hash, solutions in WDB.saved_bundles_spending_coins(CONF.DB_SB, list(coin_solutions)):
+        if bundle_hash not in bundles and in_block(solutions):
+            bundles[bundle_hash] = (bundle_hash, len(solutions), None, None, 'saved')
+    return list(bundles.values())
+
+
 def tx_type(catalog: PuzzleCatalog, puzzle_keys: list):
     """Names of the puzzles spent by a transaction, 'unknown' for the new ones"""
     counts = {}

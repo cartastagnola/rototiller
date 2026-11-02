@@ -2823,21 +2823,11 @@ def create_block_band(stdscr,
                       blocks_loader: WDB.DataChunkLoader,
                       current_peak: int,
                       node_synced: bool):
-    """Block band navigator mempool.space style..."""
-    global DEBUG_OBJ
-    DEBUG_OBJ.text = (f" first peak: {current_peak} | ")
-
-    point = position
-    win_band = stdscr.subwin(size.y, size.x, position.y, position.x)  # y, x
+    """Block band navigator mempool.space style...
+    The selection is parent_scope.cursor_x: the keyboard and the go to block prompt move it."""
     base_point = UIgraph.Point(1,1)
 
-    name_str = name
     # the band has a fixed name to reference the scope from other threads
-
-    # last item is not well implemented. The idea was to remove the parameter
-    # current_peak
-    #last_block = WDB.BlockState(blocks_loader.last_item, False)
-    #current_peak = last_block.height
 
     # precalc indexes of mempool, separator
     # TODO if syncing remove the mempool block
@@ -2852,7 +2842,6 @@ def create_block_band(stdscr,
         scope.main_scope = parent_scope
         #scope.exec = ScopeActions.activate_scope
         scope.exec = ScopeActions.activate_scope_next_sibling
-        scope.cursor = current_peak + separator  # separator default selection
         parent_scope.cursor_x = current_peak + separator  # separator default selection
         parent_scope.sub_scopes[name] = scope
         scope.visible = True
@@ -2863,40 +2852,18 @@ def create_block_band(stdscr,
         scope.data["idx_last_item"] = current_peak + separator + min(mempool_blocks_count, 2)  # show max 2 mempool block by default
         scope.data["last_peak"] = current_peak
         scope.data["on_peak"] = True
-        scope.data["loader_update_counter"] = 0
-        scope.data["prev_idx_selected"] = scope.cursor
-        scope.data["thread_update_loader"] = None
 
     scope: Scope = screenState.scopes[name]
     screenState.block_band_name = name
-    scope.visible = False  # not selectable...
-    scope_is_active = False
-    scope_exec_args = [screenState]
-
-
-    if 'lapper' not in scope.data:
-        scope.data["lapper"] = Timer('block_band')
-    lapper = scope.data["lapper"]
-    lapper.start()
-
-
-    ### this should not trigger anymore
-    if scope is screenState.activeScope:
-        scope.update_no_sub(total_elements_count + 1, False)
-        screenState.scope_exec_args = scope_exec_args
-        scope_is_active = True
+    scope.set_visible()  # selectable: the screen decides what the arrows do
 
     ### keyboard
     screenState.footer_text += "| go to peak=home or 0"
     if keyboardState.home:
-        scope.cursor = current_peak + separator
         parent_scope.cursor_x = current_peak + separator
         scope.data["idx_last_item"] = current_peak + separator + min(mempool_blocks_count, 2)  # show max 2 mempool block by default
         blocks_loader.update_offset(current_peak)
         blocks_loader.start_updater_thread()
-
-
-    lapper.clocking("init")
 
     #check cursor boundaries
     if parent_scope.cursor_x < -1:
@@ -2906,17 +2873,9 @@ def create_block_band(stdscr,
 
     idx_last_item = scope.data["idx_last_item"]
     last_peak = scope.data["last_peak"]
-    selected_idx = scope.cursor
     selected_idx = parent_scope.cursor_x
-    #if scope.cursor > (last_peak + separator + mempool_blocks_count):
     if parent_scope.cursor_x > (last_peak + separator + mempool_blocks_count):
         selected_idx = last_peak + separator + mempool_blocks_count
-
-    prev_idx_selected = scope.data["prev_idx_selected"]
-    scope.data["prev_idx_selected"] = selected_idx
-    DEBUG_OBJ.text += (
-        f" mmm... what's up? | current {current_peak}, last {last_peak} | cursor: {scope.cursor} | parent cursor_x: {parent_scope.cursor_x} "
-    )
 
     # check if the peak is moved
     if current_peak > last_peak:
@@ -2928,7 +2887,6 @@ def create_block_band(stdscr,
 
             delta = current_peak - last_peak
             selected_idx += delta
-            scope.cursor = selected_idx
             parent_scope.cursor_x = selected_idx
             scope.data['on_peak'] = True
 
@@ -2940,7 +2898,6 @@ def create_block_band(stdscr,
 
         elif selected_idx > (last_peak + separator):
             selected_idx += delta
-            scope.cursor = selected_idx
             parent_scope.cursor_x = selected_idx
             scope.data['on_peak'] = True
 
@@ -2948,37 +2905,34 @@ def create_block_band(stdscr,
             logging(debug_logger, "DEBUG", "THREAD - on the meme")
             blocks_loader.start_updater_thread()
 
+    # the mempool blocks can be fewer than in the last frame (e.g. a new block took one):
+    # keep the selection and the last shown item on an existing one
+    idx_last_existing = current_peak + separator + mempool_blocks_count
+    if selected_idx > idx_last_existing:
+        selected_idx = idx_last_existing
+        parent_scope.cursor_x = selected_idx
+    idx_last_item = min(idx_last_item, idx_last_existing)
+
     # if not at peak
     if selected_idx < (last_peak + separator):
         scope.data['on_peak'] = False
-        # with the new peak from the db we do not need it anymore
-        loader_offset_update = threading.Thread(target=blocks_loader.update_offset, args=(selected_idx,), daemon=True)
-        loader_offset_update.start()
-
-        # update only if you move more then half of the chunk size or if you are close to the peak
-        delta = selected_idx - prev_idx_selected
-        scope.data["loader_update_counter"] += delta
-
-        # update when:
-        # the movement is more then half the chunk size
-        # selected is close to the peak
-        if (current_peak - last_peak) > blocks_loader.chunk_size:
-            logging(debug_logger, "DEBUG", f"JUMPPPP is: {current_peak - last_peak}")
-        #if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2 or (current_peak - selected_idx) < blocks_loader.chunk_size:
-        if abs(scope.data["loader_update_counter"]) > blocks_loader.chunk_size // 2 or (current_peak - selected_idx) < blocks_loader.chunk_size:
-            logging(debug_logger, "DEBUG", "THREAD - passed the cound or the chunk size")
-            blocks_loader.start_updater_thread()
-            scope.data["loader_update_counter"] = 0
+        # the loader reads the DB only for a jump of more than one chunk
+        if scope.data.get("loader_offset") != selected_idx:
+            blocks_loader.update_offset(selected_idx)
+            scope.data["loader_offset"] = selected_idx
+        loader_idx = selected_idx
     else:
         scope.data['on_peak'] = True
+        scope.data["loader_offset"] = None  # leaving the peak moves the loader again
+        loader_idx = current_peak
 
+    # load the chunks around the selection (the peak on the peak) when it enters another
+    # chunk or a new block arrives; again later if the loader is still busy: e.g. the node
+    # state updater starts it at the same time with the old offset
+    loader_state = (loader_idx // blocks_loader.chunk_size, current_peak)
+    if scope.data.get("loader_state") != loader_state and blocks_loader.start_updater_thread():
+        scope.data["loader_state"] = loader_state
 
-    if mempool_blocks_count == 0:
-        pass
-        # recalculate first idx item
-
-    win_size = stdscr.getmaxyx()
-    win_size = UIgraph.Point(win_size[1], win_size[0])
 
     # current_height > show block data
     # current height + 1 > show -s stuffs  (DEFAULT)
@@ -2993,33 +2947,19 @@ def create_block_band(stdscr,
     P_block = screenState.colorPairs["block_band"]  # use for tx block
     P_block_mini = screenState.colorPairs["block_band_mini"]
     P_selected = screenState.colorPairs["win_selected"]
-    P_selected_inactive = screenState.colorPairs["win_selected_inactive"]
-    P_tab_active = screenState.colorPairs["tab_dark"]
-    P_tab_active = screenState.colorPairs["scope_selected"]
     P_not_selected = screenState.colorPairs["tab_soft_bg"]
-    #P_yellow_bee = screenState.colorPairs["block_band"]
     P_azzure = screenState.colorPairs["up"]
-    P_white = screenState.colorPairs["down"]
+    P_white = screenState.colorPairs["down"]  # for the commented separators
     P_separator = screenState.colorPairs["tab_soft_bg"]
-    P_btc = screenState.colorPairs["btc"]
     P_btc_text = screenState.colorPairs["btc_text"]
     P_btc_inv = screenState.colorPairs["btc_inv"]
 
-    #win_band.bkgd(' ', curses.color_pair(P_yellow_bee))
-
     ### highlight scope if selected
     P_option = P_not_selected
-    #P_selected_block = P_selected_inactive
-    #P_selected_block_vertical = P_not_selected
     P_selected_block = P_selected
     P_selected_block_vertical = P_selected
 
-    # now it should never be selected
-    if scope.selected() & scope_is_active:
-        P_option = P_tab_active
-        P_selected_block = P_selected
-        P_selected_block_vertical = P_selected
-    elif scope.selected():
+    if scope.selected():
         P_option = P_selected
 
     stdscr.addstr(position.y + size.y, position.x, u'\u2580' * size.x,
@@ -3049,7 +2989,18 @@ def create_block_band(stdscr,
     rec_dim_y = int(rec_dim_x / 2)
     rec_dim = UIgraph.Point(rec_dim_x, rec_dim_y)
     rec_mini_dim = UIgraph.Point(6, 3)
-    block_spacer = 3
+    block_spacer = 2
+
+    # the band is drawn on a pad wider than the band: the last item can go past the edge and
+    # it is cut when the pad is copied on stdscr. Copied, not refreshed: a refresh of its own
+    # would blank and redraw the band on the terminal every frame, and it would flicker
+    pad_size = (size.y, size.x + rec_dim.x + block_spacer + 8)
+    if scope.data.get("pad_size") != pad_size:
+        scope.data["pad"] = curses.newpad(*pad_size)
+        scope.data["pad"].bkgd(' ', curses.color_pair(P_text))
+        scope.data["pad_size"] = pad_size
+    win_band = scope.data["pad"]
+    win_band.erase()
 
     ##############################################
     ### estimate number of block on the screen
@@ -3067,11 +3018,11 @@ def create_block_band(stdscr,
         if local_idx_block >= local_idx_mempool:
             block_lenght = rec_dim.x
         elif local_idx_block == local_peak + separator:
-            block_lenght = 6  # to change if the geometry of the spacer change
+            block_lenght = 5  # to change if the geometry of the spacer change
         elif local_idx_block < local_peak + separator:
             break
 
-        if size.x < (tot_blocks_lenght + block_lenght + block_spacer):
+        if size.x < (tot_blocks_lenght + block_lenght + 1):  # 1 is the selection
             break
         else:
             tot_blocks_lenght += block_lenght + block_spacer
@@ -3083,37 +3034,28 @@ def create_block_band(stdscr,
         local_idx_block = idx_first_block - items_count
         block = None
 
-        try:
-            #if block is None or block.is_transaction_block is True:
+        # outside the loaded chunks it stays None. A negative index would read the end of the list
+        if 0 <= local_idx_block < len(block_states):
             block: WDB.BlockState = block_states[local_idx_block]
-            block_lenght = 0
-            if block.is_transaction_block is True:
-                a = 1
-        except Exception as e:
-            print(f"exception: {e}")
-
 
         if block is None or block.is_transaction_block:
             block_lenght = rec_dim.x
         else:
             block_lenght = rec_mini_dim.x
 
-        if size.x < (tot_blocks_lenght + block_lenght + 2):  # 2 is the selection
+        if size.x < (tot_blocks_lenght + block_lenght + 1):  # 1 is the selection
             break
         else:
             tot_blocks_lenght += block_lenght + block_spacer
             items_count += 1
 
     ########################## estimation end #######################
-    #lapper.clocking('post loop')
 
     # indexes
 
     idx_first_item = idx_last_item - items_count   # the last block is the first
-    DEBUG_OBJ.text += ( f" | last item: {idx_last_item} | item count: {items_count} | first_itme: {idx_first_item}")
     ### recalculate firt and last element
     idx_first_item, idx_last_item, selected_idx_local = recalcultate_first_and_last_element_BAND(selected_idx, idx_last_item, items_count)
-    DEBUG_OBJ.text += ( f" | after LI: {idx_last_item} | after IC: {items_count} | first_itme: {idx_first_item}")
 
     ### update first item
     scope.data["idx_last_item"] = idx_last_item
@@ -3126,16 +3068,13 @@ def create_block_band(stdscr,
     current_peak_global = current_peak
     current_peak -= first_idx
 
-    DEBUG_OBJ.text += (f" | local LI: {idx_last_item} | local IC: {items_count} | first_itme: {idx_first_item}")
 
     current_idx = idx_last_item
 
-    #lapper.clocking('pre calc posiitons')
     # block blipping
-    DEBUG_OBJ.text += (f" | current idx at mem: {current_idx} | actual mem: {mempool_idx} ")
     while current_idx >= mempool_idx:
         if node_synced:
-            if base_point.x + rec_dim.x > size.x:
+            if base_point.x >= size.x:
                 break
             idx_item_mempool = current_idx - mempool_idx
             if len(mempool_blocks) > 0:
@@ -3183,8 +3122,7 @@ def create_block_band(stdscr,
 
         current_idx -= 1
 
-    #lapper.clocking('memepool')
-    if current_idx == current_peak + separator:
+    if current_idx == current_peak + separator and base_point.x < size.x:
         ############### separation line #####################################
         #    ## dot line
         #    for i in range(rec_dim.y + 3):
@@ -3235,18 +3173,11 @@ def create_block_band(stdscr,
 
     ######### blocks ###############
 
-    #lapper.clocking("blocks")
     count = 0
-    DEBUG_OBJ.text += (f" | idx block : {current_idx} ")
-
-    if current_idx > len(block_states):
-        ## implement logic to brake the loop and load the data, or skip it and wait for the upodate of the cache
-        print(f"current_idx; {current_idx}")
-        print(f"len block states: {len(block_states)}")
-        pass
-        #raise Exception("The block idx asked is outside the cache. Increase the cache")
 
     while current_idx >= 0:
+        if base_point.x >= size.x:
+            break
 
         count += 1
         block = None
@@ -3263,8 +3194,6 @@ def create_block_band(stdscr,
 
         if block is None:
 
-            if base_point.x + rec_dim.x > size.x:
-                break
             p = base_point
             p = p + UIgraph.Point(0, 1)
             draw_rect(win_band, p, rec_dim, P_text)
@@ -3294,8 +3223,6 @@ def create_block_band(stdscr,
             base_point += UIgraph.Point(rec_dim.x + 2, 0)
 
         elif block.height == 675317 and selected_idx < 675317:
-            if base_point.x + rec_dim.x > size.x:
-                break
 
             p = base_point
             p = p + UIgraph.Point(0, 1)
@@ -3327,8 +3254,6 @@ def create_block_band(stdscr,
             base_point += UIgraph.Point(rec_dim.x + 2, 0)
 
         elif block.is_transaction_block is True:
-            if base_point.x + rec_dim.x > size.x:
-                break
 
             p = base_point
             p = p + UIgraph.Point(0, 1)
@@ -3372,8 +3297,6 @@ def create_block_band(stdscr,
 
             base_point += UIgraph.Point(rec_dim.x + 2, 0)
         else:
-            if base_point.x + rec_mini_dim.x > size.x:
-                break
             p = base_point + UIgraph.Point(0, 3)
             b_height = f'...{str(block.height)[-2:]}'
             create_text(win_band, p, b_height, P_block_mini, True)
@@ -3401,8 +3324,7 @@ def create_block_band(stdscr,
 
         current_idx -= 1
 
-    lapper.clocking('the very end')
-    lapper.end()
+    win_band.overwrite(stdscr, 0, 0, position.y, position.x, position.y + size.y - 1, position.x + size.x - 1)
 
     return scope
 

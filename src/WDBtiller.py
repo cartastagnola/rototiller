@@ -1461,8 +1461,8 @@ class BlockState:
         self.farmer_puzzle_hash_b = block['foliage']['foliage_block_data']['farmer_reward_puzzle_hash']
         self.pool_puzzle_hash_b = block['foliage']['foliage_block_data']['pool_target']['puzzle_hash']
 
-        if block['foliage_transaction_block'] == "None":
-            self.additions_merkle_root = block['foliage_transaction_block']['addition_root']  # merkle root of the coin additions
+        if block['foliage_transaction_block'] is not None:  # only transaction blocks have it
+            self.additions_merkle_root = block['foliage_transaction_block']['additions_root']  # merkle root of the coin additions
             self.timestamp_b = block['foliage_transaction_block']['timestamp']
         else:
             self.additions_merkle_root = None
@@ -3132,17 +3132,18 @@ class FetchMaker:
 
 
     @staticmethod
-    def block_fetcher(table, sorting_column=None):
+    def block_fetcher(table, sorting_column=None, base_filters=None):
         # NB:
         # it is not clear, if you use sorting_column the start, count are min and max height
-        # sorting in sql is not use, sorting means only on which column apply start and count
         # NB:
         # filters work only for "=", not sure if it worth keep it as parameter. Maybe it is better
         # to create a new fun
+        # base_filters: used when the call has none, e.g. {'in_main_chain': 1}: the node DB keeps
+        # the blocks of forks too, with the height of a main chain block
         def fetch(conn, start, count, filters=None):
             """ order is not implemented... """
             if not filters:
-                filters = {}
+                filters = base_filters or {}
 
             where_clauses = []
             values = []
@@ -3162,10 +3163,8 @@ class FetchMaker:
 
 
             cur = conn.cursor()
-            query = f"SELECT * FROM {table} {where_sql}"
-            #print(query)
-            #print(values)
-            #query = f"SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} LIMIT ? OFFSET ?"
+            order_sql = f"ORDER BY {sorting_column}" if sorting_column is not None else ""
+            query = f"SELECT * FROM {table} {where_sql} {order_sql}"
 
             cur.execute(query, values)
             items = cur.fetchall()
@@ -3174,8 +3173,10 @@ class FetchMaker:
         return fetch
 
     @staticmethod
-    def block_first_last_count_fetcher(table, sorting_column=None):
-        def fetch(conn, filters={}):
+    def block_first_last_count_fetcher(table, sorting_column=None, base_filters=None):
+        def fetch(conn, filters=None):
+            if not filters:
+                filters = base_filters or {}
 
             where_clauses = []
             values = []
@@ -3186,12 +3187,6 @@ class FetchMaker:
 
             where_sql = f" WHERE {' AND '.join(where_clauses)} " if filters else ""
 
-            # total items count
-            count_query = f"SELECT COUNT(*) FROM {table} {where_sql} "
-            with conn:
-                cursor = conn.execute(count_query, values)
-                item_count = cursor.fetchall()[0][0]
-
             # first and last
             first_last_query = (
                 f"SELECT * FROM ( "
@@ -3201,10 +3196,19 @@ class FetchMaker:
                 f"    SELECT * FROM {table} {where_sql} ORDER BY {sorting_column} DESC LIMIT 1) "
             )
 
-            values = values + values
+            values_first_last = values + values
             with conn:
-                cursor = conn.execute(first_last_query, values)
+                cursor = conn.execute(first_last_query, values_first_last)
                 items = cursor.fetchall()
+
+            # total items count. The main chain has one block per height: no need to count
+            # them (COUNT(*) takes ~200 ms on mainnet)
+            if filters.get('in_main_chain') == 1 and sorting_column == 'height':
+                item_count = items[1][2] - items[0][2] + 1 if items else 0
+            else:
+                with conn:
+                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table} {where_sql} ", values)
+                    item_count = cursor.fetchall()[0][0]
             return item_count, items[0], items[1]
 
         return fetch
@@ -3999,7 +4003,10 @@ class DataChunkLoader:
             ##fetched_chunk = self.fetch_chunk(conn, self.current_offset)
 
             # fetch the only the offset item in the chunk
-            fetched_chunk = self.fetch_only_current_offset(conn)
+            try:
+                fetched_chunk = self.fetch_only_current_offset(conn)
+            finally:
+                conn.close()
 
             with self.lock:
                 self.main_chunk_pointer = 2  # arbitrarly start from the middle chunk
@@ -4059,41 +4066,12 @@ class DataChunkLoader:
         return Chunk(chunk_idx, chunk_first_idx, self.chunk_size, data)
 
 
-    def fetch_item_chunk(self, data_index):
-        """Fetch a particular item only if its chunk is already in the cache,
-        Return False if the related chunk is not in the cache"""
-        conn = self.create_sql_conneciton()
-        with self.lock:
-            chunk_idx = data_index // self.chunk_size
-            chunk_first_idx = chunk_idx * self.chunk_size
-            # check if the chunk is in the cache
-            for chunk in self.chunk_arena:
-                if chunk is not None and chunk.chunk_idx == chunk_idx:
-                    item_local_idx = data_index % self.chunk_size
-                    if chunk.data[item_local_idx] is not None:
-                        # already present
-                        conn.close()
-                        return True
-                    data = self.fetch_db(conn, data_index, 1)
-                    if self.data_struct is not None:
-                        data = self.data_struct(data[0],False)
-                    item_local_idx = data_index % self.chunk_size
-                    chunk.data.insert(item_local_idx, data)
-                    conn.close()
-                    return True
-            conn.close()
-            return False
-
-
     def update_current_chunk_pointer(self):
-        current_chunk_idx = self.get_current_chunk().chunk_idx
-
-        # DEBUG
         current_chunk_idx = self.get_current_chunk().chunk_idx
         new_current_chunk_idx = self.current_offset // self.chunk_size
 
         if abs(current_chunk_idx - new_current_chunk_idx) > 1:
-            raise "The offset is not in a consecutive chunk"
+            raise ValueError("The offset is not in a consecutive chunk")
 
         if self.current_offset // self.chunk_size > current_chunk_idx:
             self.main_chunk_pointer = (self.main_chunk_pointer + 1) % self.chunk_arena_size
@@ -4117,7 +4095,7 @@ class DataChunkLoader:
             chunk_idx = idx // self.chunk_size
             # check if the chunk is in the cache
             for i in self.chunk_arena:
-                if chunk_idx == i.chunk_idx:
+                if i is not None and chunk_idx == i.chunk_idx:
                     data_idx = idx % self.chunk_size
                     return i.data[data_idx]
             return None
@@ -4141,16 +4119,31 @@ class DataChunkLoader:
             if post_chunk:
                 data.extend(post_chunk.data)
 
-            # deep copy of the nested lists
-            deep_data = copy.deepcopy(data)
-
-            return deep_data, chunk_idx * self.chunk_size
+            # data is a new list; the items are shared, the band only reads them
+            return data, chunk_idx * self.chunk_size
 
     def start_updater_thread(self):
+        """Start update_loader in a thread. Return False if one is still running"""
         with self.lock:
             if self.update_loader_thread is None or not self.update_loader_thread.is_alive():
                 self.update_loader_thread = threading.Thread(target=self.update_loader, daemon=True)
                 self.update_loader_thread.start()
+                return True
+            return False
+
+    def is_complete(self, chunk: Chunk):
+        """The chunk has all its items, up to the last item of the table: a chunk past the
+        end (e.g. the one with the peak) is never full. A chunk with no rows yet is not
+        complete: while the node syncs, the RPC peak can enter a new chunk before the DB
+        has its rows, and the chunk must be read again later"""
+        if chunk is None:
+            return False
+        if self.total_row_count is None:
+            return chunk.is_full()
+        expected = min(self.chunk_size, self.total_row_count - chunk.first_idx)
+        if expected <= 0:
+            return False
+        return all(item is not None for item in chunk.data[:expected])
 
     def update_loader(self):
         conn = self.create_sql_conneciton()
@@ -4170,10 +4163,10 @@ class DataChunkLoader:
             post_chunk: Chunk = self.chunk_arena[post_chunk_pointer]
 
         if current_chunk is None:
-            raise "can we be None? the chunk is None"
+            raise ValueError("can we be None? the chunk is None")
 
-        # current chunk, fetch again if not full
-        if not current_chunk.is_full():
+        # current chunk, fetch again if not complete
+        if not self.is_complete(current_chunk):
             fetched_chunk = self.fetch_chunk(conn, self.current_offset)
             if fetched_chunk is None:
                 print("fetched chunk was None")
@@ -4182,14 +4175,14 @@ class DataChunkLoader:
 
         # add logic to deal with empty chunks
         # post chunk
-        if not post_chunk or not post_chunk.is_full() or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
+        if not self.is_complete(post_chunk) or current_chunk.chunk_idx + 1 != post_chunk.chunk_idx:
             fetched_chunk = self.fetch_chunk(conn, self.current_offset + self.chunk_size)
             with self.lock:
                 self.chunk_arena[post_chunk_pointer] = fetched_chunk
 
         # pre chunk, do not fetch if we are at the beginning
         if current_chunk.chunk_idx > 0:
-            if not pre_chunk or not pre_chunk.is_full() or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
+            if not self.is_complete(pre_chunk) or current_chunk.chunk_idx - 1 != pre_chunk.chunk_idx:
                 fetched_chunk = self.fetch_chunk(conn, self.current_offset - self.chunk_size)
                 with self.lock:
                     self.chunk_arena[pre_chunk_pointer] = fetched_chunk

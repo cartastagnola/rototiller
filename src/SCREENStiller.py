@@ -3911,22 +3911,134 @@ def screen_full_node_search(stdscr, keyboardState: KeyboardState, screenState: S
         scope_search_button.data['pressed_enter'] = False
 
 
-def build_mempool_blocks(fullNodeState: FullNodeState):
-    """Split the mempool in blocks, with the items sorted by fee per cost"""
-    ## TODO: move the sorting of the mempool outside the UI loop
-    mempool_items = fullNodeState.deepcopy_mempool()
+# tabs of a selected block: title, name of the table
+BLOCK_TABS = [('DETAILS', 'current_bloc'),
+              ('COINS ADDED', 'block_coins_added'),
+              ('COINS REMOVED', 'block_coins_removed'),
+              ('PUZZLE TYPES', 'block_puzzle_types'),
+              ('SPEND BUNDLES', 'block_spend_bundles')]  # only if the block has some
+BLOCK_TABS_WITH_COUNT = ('block_coins_added', 'block_coins_removed', 'block_spend_bundles')
+BLOCK_COINS_LEGEND = {'block_coins_added': ['coin id', 'amount [mojo]', 'origin', 'spent at', 'puzzle hash'],
+                      'block_coins_removed': ['coin id', 'amount [mojo]', 'puzzle type', 'created at', 'puzzle hash']}
+BLOCK_BUNDLES_LEGEND = ['bundle id', 'coins', 'cost', 'fee [XCH]', 'seen in']
+BLOCK_PUZZLE_TYPES_LEGEND = ['puzzle type', 'coins', 'execution cost', 'condition cost', 'byte cost (estimate)', 'total cost', 'of the block']
+MEMPOOL_BLOCK_TXS_TAB = 'mempool_block_txs'
+BLOCK_DATA_CACHE_SIZE = 8  # blocks kept in memory
+BLOCK_DATA_MAX_AGE = 60  # s, a coin added to a block can be spent later: read it again
+BLOCK_DATA_ERROR_MAX_AGE = 5  # s, try again after an error
 
-    sorted_mempool = sorted(list(mempool_items.values()), key=lambda item: item.fee_per_cost)  # sorted by fee per cost
 
-    # create mempool block
-    mempool_blocks = [WDB.MempoolBlock()]
-    for item in sorted_mempool:
-        current_block: WDB.MempoolBlock = mempool_blocks[-1]
-        if current_block.total_cost + item.cost <= BLOCK_MAX_COST:
-            current_block.add_item(item)
-        else:
-            mempool_blocks.append(WDB.MempoolBlock())
-    return mempool_blocks
+def tab_count_text(count: int = None) -> str:
+    """Count for a tab title, always 4 characters aligned on the right: 10k from 10,000.
+    Blank if the count is not known yet."""
+    if count is None:
+        return ' ' * 4
+    return f"{count if count < 10_000 else f'{count // 1000}k':>4}"
+
+
+def block_tab_rows(block: WDB.BlockState) -> dict:
+    """Rows of the coin tabs of a block. Slow: the node DB and the node RPC"""
+    added, removed = WDB.block_coins(DB_BLOCKCHAIN_RO, block.height)
+    kinds, coin_puzzles, bundles = [], {}, []
+    if block.is_transaction_block and removed:
+        kinds, coin_puzzles, coin_solutions = SCAN.block_spends_by_puzzle(SCAN.CATALOG, block.header_hash,
+                                                                          block.height, block.cost)
+        bundles = SCAN.block_spend_bundles(SCAN.MEMPOOL_SCANNER, coin_solutions)
+
+    added.sort(key=lambda coin: -coin[1])
+    removed.sort(key=lambda coin: -coin[1])
+
+    def height_text(height):
+        return f"{height:,}" if height > 0 else 'unspent'
+
+    added_rows = [[f"0x{c[0]}", f"{c[1]:,}", 'reward' if c[3] else 'spend', height_text(c[5]), f"0x{c[2]}"]
+                  for c in added]
+    removed_rows = [[f"0x{c[0]}", f"{c[1]:,}", coin_puzzles.get(c[0], ''), height_text(c[4]), f"0x{c[2]}"]
+                    for c in removed]
+
+    def total_cost(kind):
+        return sum(kind[2:]) if kind[2] is not None else 0
+
+    def number(value):
+        return f"{value:,}" if value is not None else '-'
+
+    def share(cost):
+        return f"{cost / block.cost * 100:.1f}%" if block.cost else '-'
+
+    kinds_rows = [[k[0], k[1], number(k[2]), number(k[3]), number(k[4]),
+                   number(total_cost(k)) if k[2] is not None else '-',
+                   share(total_cost(k)) if k[2] is not None else '-']
+                  for k in sorted(kinds, key=lambda k: (-total_cost(k), -k[1]))]
+    if kinds_rows:
+        kinds_rows.append(['total', sum(k[1] for k in kinds), number(sum(k[2] or 0 for k in kinds)),
+                           number(sum(k[3] or 0 for k in kinds)), number(sum(k[4] or 0 for k in kinds)),
+                           number(sum(total_cost(k) for k in kinds)), share(sum(total_cost(k) for k in kinds))])
+
+    bundles_rows = [[f"0x{b[0]}", b[1], number(b[2]), f"{b[3] / XCH_MOJO:.6f}" if b[3] is not None else '-', b[4]]
+                    for b in bundles]
+
+    return {'block_spend_bundles': (bundles_rows, [b[0] for b in bundles]),
+            'block_coins_added': (added_rows, [row[0] for row in added_rows]),
+            'block_coins_removed': (removed_rows, [row[0] for row in removed_rows]),
+            'block_puzzle_types': (kinds_rows, None)}
+
+
+def selected_block_tab_rows(main_scope: Scope, screenState: ScreenState, block: WDB.BlockState):
+    """Rows of the coin tabs of a block, read in a thread: None until they are there, or an
+    {'error': text}. Moving along the band, only the block selected when the thread ends is
+    read next."""
+    cache = main_scope.data.setdefault('block_tab_rows', {})
+    key = block.header_hash
+    cached = cache.get(key)
+    max_age = BLOCK_DATA_ERROR_MAX_AGE if cached and 'error' in cached['rows'] else BLOCK_DATA_MAX_AGE
+    if cached and time.time() - cached['read_at'] < max_age:
+        return cached['rows']
+
+    thread = main_scope.data.get('block_tab_rows_thread')
+    if thread is None or not thread.is_alive():
+
+        def read_rows():
+            try:
+                rows = block_tab_rows(block)
+            except Exception as e:
+                rows = {'error': str(e)}
+                logging(debug_logger, "DEBUG", f"BLOCK TABS error on block {block.height}: {e}")
+            cache.pop(key, None)
+            while len(cache) >= BLOCK_DATA_CACHE_SIZE:
+                cache.pop(next(iter(cache)))
+            cache[key] = {'rows': rows, 'read_at': time.time()}
+
+        thread = threading.Thread(target=read_rows, daemon=True, name='block tab rows')
+        thread.start()
+        main_scope.data['block_tab_rows_thread'] = thread
+        screenState.running_threads.append(thread)
+
+    return cached['rows'] if cached else None
+
+
+def table_for_tab(main_scope: Scope, screenState: ScreenState, tab_name: str, signature, rows: list):
+    """The table to give to create_tab for rows that are kept between frames. create_tab removes
+    from its table the columns that do not fit, and its frame cache compares only the first and
+    the last row: a new copy and an empty frame cache, only when the rows or the width change."""
+    shown = main_scope.data.setdefault('tables_shown', {})
+    name = f"{main_scope.id}_{tab_name}"
+    signature = (signature, screenState.screen_size.x)
+    if name not in shown or shown[name][0] != signature:
+        shown[name] = (signature, [list(row) for row in rows])
+        if name in screenState.scopes:
+            screenState.scopes[name].data['cached_data_table'] = None
+            screenState.scopes[name].data['column_sizes'] = None
+    return shown[name][1]
+
+
+def open_block_coin(scope: Scope, screenState: ScreenState, coin_name: str = None):
+    if coin_name:
+        ScopeActions.open_coin_record(scope, screenState, coin_name)
+
+
+def open_spend_bundle(scope: Scope, screenState: ScreenState, tx_id: str = None):
+    if tx_id:
+        ScopeActions.open_transaction(scope, screenState, tx_id)
 
 
 def go_to_block(scope_go_to: Scope, main_scope: Scope, block_band_scope: Scope, blocks_loader: WDB.DataChunkLoader,
@@ -4000,10 +4112,6 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
     screenState.scope_exec_args = [screenState]
     main_scope.update()
 
-    if 'lapper' not in main_scope.data:
-        main_scope.data["lapper"] = UTILS.Timer('block_band')
-    lapper = main_scope.data["lapper"]
-    lapper.start()
     # load blockchain database
     ## TODO: move it on startup
 
@@ -4013,9 +4121,9 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
     height_last_block = full_node_meta.peak_height
 
-    mempool_blocks = build_mempool_blocks(fullNodeState)
+    SCAN.MEMPOOL_SCANNER.want_fast()
+    mempool_blocks = SCAN.mempool_blocks(SCAN.MEMPOOL_SCANNER.snapshot())
 
-    lapper.clocking('meme')
     # load blocks
     with fullNodeState.lock:
         blocks_loader: WDB.DataChunkLoader = fullNodeState.blocks_loader
@@ -4113,14 +4221,22 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
                                          pre_text, prompt_lenght, P_text, True, False, custom_scope_function=ScopeActions.press_enter)
     pos += UIgraph.Point(0,3)
 
-    def to_int(text: str):
-        try:
-            return int(text)
-        except ValueError:
-            return None
+    ### ←→ move the band only from the band and the go to block prompt, on the tabs they switch
+    ### the tab. The keys are applied after the screen: take them away from main_scope.cursor_x
+    block_tab_names = [name for _, name in BLOCK_TABS]
+    tab_was_selected = False
+    tab_step = 0
+    selected_scope = main_scope.sub_scope_selected
+    if (screenState.activeScope is main_scope and selected_scope is not None
+            and selected_scope is not scope_go_to and selected_scope.name != 'block_band'):
+        if selected_scope.name.removeprefix(f"{main_scope.id}_") in block_tab_names:
+            tab_was_selected = True
+            tab_step = int(keyboardState.moveRight) - int(keyboardState.moveLeft)
+        keyboardState.moveLeft = False
+        keyboardState.moveRight = False
 
     ### block band
-    lapper.clocking('block loader')
+    block_band_scope = None
     if blocks_loader is not None:
 
         block_band_scope = ELEMENTS.create_block_band(stdscr, keyboardState, screenState, main_scope,
@@ -4132,11 +4248,44 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
     pos += UIgraph.Point(0, block_band_size.y + 0)
 
-    lapper.clocking('block band')
-
     # show data
 
-    if block_band_scope.data['on_peak']:
+    tables_drawn = []
+    idx_mempool_block = main_scope.cursor_x - (height_last_block + 2)  # after the peak and the separator
+
+    if block_band_scope is None:
+        pass  # no blocks DB
+    elif synced and 0 <= idx_mempool_block < len(mempool_blocks):
+        mempool_block: WDB.MempoolBlock = mempool_blocks[idx_mempool_block]
+        now = time.time()
+        put_text(node_data, pos + UIgraph.Point(1, 0),
+                 f"mempool_{idx_mempool_block}: {len(mempool_block.transactions):,} transactions, highest fee per cost first",
+                 P_text)
+        pos += UIgraph.Point(0, 1)
+        max_y = main_win_size.y - pos.y - 3
+        if max_y > 4:
+            tx_ids = [tx.tx_id for tx in mempool_block.transactions]
+            rows = [mempool_tx_row(tx, now) for tx in mempool_block.transactions]
+            table = table_for_tab(main_scope, screenState, MEMPOOL_BLOCK_TXS_TAB, (tx_ids, int(now)), rows)
+            txs_scope = ELEMENTS.create_tab(node_data,
+                                            screenState,
+                                            main_scope,
+                                            MEMPOOL_BLOCK_TXS_TAB,
+                                            table,
+                                            tx_ids or None,
+                                            None,
+                                            False,
+                                            pos,
+                                            UIgraph.Point(80, max_y),
+                                            keyboardState,
+                                            open_spend_bundle,
+                                            True,
+                                            False,
+                                            list(MEMPOOL_TX_LEGEND))
+            txs_scope.exec_esc = ScopeActions.exit_scope
+            tables_drawn.append(txs_scope)
+
+    elif block_band_scope.data['on_peak']:
 
         #ELEMENTS.create_text(node_data, pos, "chia show -s       ", P_text, True, inv_color=True)
         #pos += UIgraph.Point(0, 2)
@@ -4183,7 +4332,6 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
             chia_show_data.append(peak_height)
 
         else:
-            node_data.addstr(row, col,)
             chia_show_label.append("Searching for an initial chain")
             chia_show_data.append("You may be able to expedite with 'chia peer full_node -a host:port' using a known node.")
 
@@ -4224,7 +4372,6 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
         chia_show = [chia_show_label, chia_show_data]
         legend = ["chia show -s", ""]
-        max_y = main_win_size.y - pos.y - 3
         tab_size = UIgraph.Point(80, len(chia_show_data) + 1)
 
         ELEMENTS.create_tab(node_data,
@@ -4244,38 +4391,16 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
         pos += UIgraph.Point(0, len(chia_show_data) + 2)
 
-        # last 10 block
-        count = 0
+        # last 10 block; None for the ones not loaded yet
         last_10_blocks = [[],[],[]]
-        print(peak_height)
-        print("peak")
-        peak_height = int(peak_height)
-        try:
-            while count < 10:
-                h = peak_height - count
-                curr_block: WDB.BlockState = blocks_loader.get_item_by_idx(h)
-                a = curr_block.header_hash
-                last_10_blocks[0].append(h)
-                last_10_blocks[1].append(curr_block.header_hash)
-                if curr_block.is_transaction_block:
-                    last_10_blocks[2].append("trx")
-                else:
-                    last_10_blocks[2].append("")
-                count += 1
-        except Exception as e:
-            print("except last blocks")
-            print(e)
-            print("height: ", h)
-            global DEBUG_OBJ
-            DEBUG_OBJ.text += (f"HASHHHH: {count} and {h} exc: {e}")
-
-            none_list = [None] * 10
-            #last_10_blocks = [none_list, none_list, none_list]
-            while count < 10:
-                last_10_blocks[0].append(None)
-                last_10_blocks[1].append(None)
+        for h in range(int(peak_height), int(peak_height) - 10, -1):
+            curr_block: WDB.BlockState = blocks_loader.get_item_by_idx(h) if h >= 0 else None
+            last_10_blocks[0].append(h if curr_block is not None else None)
+            last_10_blocks[1].append(curr_block.header_hash if curr_block is not None else None)
+            if curr_block is None:
                 last_10_blocks[2].append(None)
-                count += 1
+            else:
+                last_10_blocks[2].append("trx" if curr_block.is_transaction_block else "")
 
         block_legend = ['height', 'header hash', 'block type']
         max_y = main_win_size.y - pos.y - 3
@@ -4300,52 +4425,143 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
 
     else:
 
-        try:
-            if main_scope.cursor_x == -1:
-                blocks_loader.update_offset(0)
-                zero_block: WDB.BlockState = blocks_loader.get_current_item()
-                b_block: WDB.BlockState = zero_block.operational_error()
-                block_data = b_block.b_block_to_2d_list()
-                block_legend = ['property', 'value']
+        block_legend = ['property', 'value']
+        pos_tab_title = pos
+        pos += UIgraph.Point(0, 2)  # the tab titles touch the table
+        max_y = main_win_size.y - pos.y - 3
+        tab_size = UIgraph.Point(80, max_y)
+        if main_scope.cursor_x == -1:
+            blocks_loader.update_offset(0)
+            zero_block: WDB.BlockState = blocks_loader.get_current_item()
+            current_block = zero_block.operational_error() if zero_block is not None else None
+        else:
+            current_block: WDB.BlockState = blocks_loader.get_current_item()
+
+        if current_block is None:
+            # the loader has not read the selected block yet (e.g. after a jump or a new peak)
+            block_data = [['block'], ['loading...']]
+        elif main_scope.cursor_x == -1:
+            block_data = current_block.b_block_to_2d_list()
+        else:
+            block_data = current_block.block_state_to_2d_list()
+
+        # the block before the first has no coins (cursor -1)
+        coins_block = current_block if main_scope.cursor_x != -1 else None
+        if main_scope.cursor_x == -1:
+            tab_rows = {}
+        elif current_block is None:
+            tab_rows = None  # still loading
+        else:
+            tab_rows = selected_block_tab_rows(main_scope, screenState, coins_block)
+
+        ### tabs: ←→ when they are selected, tab also from inside the table. The spend bundles
+        ### tab is only for a block that has some: the choice stays for the next block with some
+        visible_tabs = [(title, name) for title, name in BLOCK_TABS
+                        if name != 'block_spend_bundles' or (tab_rows and tab_rows.get(name, ([],))[0])]
+        tab_names = [name for _, name in visible_tabs]
+        table_name = main_scope.data.get('block_tab', 'current_bloc')
+        if table_name not in tab_names:
+            table_name = 'current_bloc'
+        previous_table = screenState.scopes.get(f"{main_scope.id}_{table_name}")
+        in_previous_table = previous_table is not None and screenState.activeScope is previous_table
+        if in_previous_table:
+            screenState.footer_text += "| switch tab=tab "
+        if tab_was_selected:
+            screenState.footer_text += "| switch tab=←→ "
+        if '\t' in keyboardState.keys and screenState.activeScope.mode != TYPES.ScopeMode.INSERT:
+            tab_step = 1
+        if tab_step:
+            table_name = tab_names[(tab_names.index(table_name) + tab_step) % len(tab_names)]
+            main_scope.data['block_tab'] = table_name
+
+        tab_scope = None
+        if max_y <= 4:
+            pass  # no room for a table
+        elif table_name == 'current_bloc':
+            tab_scope = ELEMENTS.create_tab(node_data,
+                                            screenState,
+                                            main_scope,
+                                            "current_bloc",
+                                            block_data,
+                                            None,
+                                            None,
+                                            True,
+                                            pos,
+                                            tab_size,
+                                            keyboardState,
+                                            ScopeActions.exit_scope,
+                                            False,
+                                            False,
+                                            block_legend)
+        else:
+            legend = BLOCK_BUNDLES_LEGEND if table_name == 'block_spend_bundles' else BLOCK_COINS_LEGEND.get(table_name, BLOCK_PUZZLE_TYPES_LEGEND)
+            keys = None
+            if tab_rows is None:
+                rows = [['loading...'] + [''] * (len(legend) - 1)]
+                signature = 'loading'
+            elif 'error' in tab_rows:
+                rows = [[f"error: {tab_rows['error']}"] + [''] * (len(legend) - 1)]
+                signature = 'error'
             else:
-                current_block: WDB.BlockState = blocks_loader.get_current_item()
-                block_data = current_block.block_state_to_2d_list()
-                block_legend = ['property', 'value']
+                rows, keys = tab_rows.get(table_name, ([], None))
+                # the rows are read again from time to time, a coin can be spent later
+                signature = (coins_block.header_hash, id(rows)) if coins_block else 'no coins'
+            table = table_for_tab(main_scope, screenState, table_name, signature, rows)
+            tab_scope = ELEMENTS.create_tab(node_data,
+                                            screenState,
+                                            main_scope,
+                                            table_name,
+                                            table,
+                                            keys or None,
+                                            None,
+                                            False,
+                                            pos,
+                                            tab_size,
+                                            keyboardState,
+                                            {'block_puzzle_types': ScopeActions.exit_scope,
+                                             'block_spend_bundles': open_spend_bundle}.get(table_name, open_block_coin),
+                                            True,
+                                            False,
+                                            list(legend))
 
-            max_y = main_win_size.y - pos.y - 3
-            tab_size = UIgraph.Point(80, max_y)
+        if tab_scope is not None:
+            # esc keeps the table selected, so ←→ go on switching the tabs
+            tab_scope.exec_esc = ScopeActions.exit_scope
+            tables_drawn.append(tab_scope)
+            if in_previous_table:
+                screenState.activeScope = tab_scope
+            if tab_was_selected:
+                main_scope.sub_scope_selected = tab_scope  # the table of the tab just opened
 
-        except:
-            print("bug while syncing, current block is None")
-            print(f"current block: {current_block}")
-            print(f"current offset: {blocks_loader.current_offset}")
-            block_states, first_idx = blocks_loader.get_items_hot_chunks()
-            for n, i in enumerate(block_states):
-                print(n, ' - ', i)
-            print("it happens if the peak is updated but the block_loader is still not")
-            print("we should show no data untill it is available")
-            print("PEND")
-            print(main_scope.cursor_x)
+        ### tab titles, after the table: the line under the selected one replaces its top border
+        C_background = screenState.colors["background"]
+        P_tab_selected = screenState.colorPairs["xch"]
+        P_tab_title = screenState.colorPairs["title"]
+        P_tab_soft = screenState.colorPairs["tab_soft"]
+        title_pos = pos_tab_title
+        for title, name in visible_tabs:
+            text = f" {title} "
+            if name in BLOCK_TABS_WITH_COUNT:
+                # a fixed width, also while loading: the titles do not move from block to block
+                count = len(tab_rows[name][0]) if tab_rows and name in tab_rows else None
+                text = f" {title} {tab_count_text(count)} "
+            selected_tab = name == table_name
+            P_used = P_tab_selected if selected_tab else P_tab_title
+            if title_pos.x + len(text) + 2 >= main_win_size.x:
+                break
+            ELEMENTS.create_text_double_space(node_data, screenState, title_pos, text, P_used, C_background, 3, True)
+            underline_pos = title_pos + UIgraph.Point(0, 2)
+            if selected_tab:
+                ELEMENTS.create_text(node_data, underline_pos, u'\u2580' * (len(text) + 2), P_tab_soft, True)
+            else:
+                ELEMENTS.create_text(node_data, underline_pos, ' ' * (len(text) + 2), P_used, True)
+            title_pos += UIgraph.Point(len(text) + 2, 0)
 
-
-
-        block_scope = ELEMENTS.create_tab(node_data,
-                                          screenState,
-                                          main_scope,
-                                          "current_bloc",
-                                          block_data,
-                                          None,
-                                          None,
-                                          True,
-                                          pos,
-                                          tab_size,
-                                          keyboardState,
-                                          ScopeActions.exit_scope,
-                                          False,
-                                          False,
-                                          block_legend)
-        # this should be an option of the create tab
-        block_scope.exec_esc = ScopeActions.select_prev_scope
+    # a table that is not drawn anymore (a new block took the mempool block, another view of the
+    # band) can not stay active: nothing would show it and the keys would go nowhere
+    block_tables = [f"{main_scope.id}_{name}" for _, name in BLOCK_TABS] + [f"{main_scope.id}_{MEMPOOL_BLOCK_TXS_TAB}"]
+    if screenState.activeScope.name in block_tables and screenState.activeScope not in tables_drawn:
+        screenState.activeScope = main_scope
 
 
     # run copy/paste action or other pending stuffs
@@ -4353,11 +4569,6 @@ def screen_blocks(stdscr, keyboardState: KeyboardState, screenState: ScreenState
         for i, fn in screenState.pending_action:
             fn()
         screenState.pending_action = []
-
-
-    lapper.clocking('block data')
-    lapper.end()
-    print(lapper)
 
 
 VDF_BLOCKS_AROUND = 160  # blocks loaded on each side of the selected one, about 5 sub-slots

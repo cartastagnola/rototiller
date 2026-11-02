@@ -467,7 +467,6 @@ class FullNodeState:
         self.lock = threading.Lock()
         self.db_path = db_path
         self.blocks_loader: WDB.DataChunkLoader = None
-        self.is_blocks_loader_on_peak = True
         self.full_node_meta = FullNodeMeta()
 
         self.update_chain_info()
@@ -478,8 +477,8 @@ class FullNodeState:
         offset = self.full_node_meta.peak_height
         sorting_column = 'height'
         filters = {'in_main_chain': 1}
-        fetcher = WDB.FetchMaker.block_fetcher(table_name, sorting_column)
-        fetcher_first_last = WDB.FetchMaker.block_first_last_count_fetcher(table_name, sorting_column)
+        fetcher = WDB.FetchMaker.block_fetcher(table_name, sorting_column, filters)
+        fetcher_first_last = WDB.FetchMaker.block_first_last_count_fetcher(table_name, sorting_column, filters)
 
         self.blocks_loader = WDB.DataChunkLoader(
             db_path, table_name, chunk_size, fetcher, fetcher_first_last, offset,
@@ -542,8 +541,8 @@ class FullNodeState:
 
 
     def update_blocks(self):
-        if self.is_blocks_loader_on_peak:
-            self.blocks_loader.update_loader()
+        # in the loader's thread: two update_loader at the same time mix up the chunks
+        self.blocks_loader.start_updater_thread()
 
     def update_state(self, screenState):
         print("updating the state")
