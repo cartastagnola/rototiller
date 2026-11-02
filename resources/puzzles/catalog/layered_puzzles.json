@@ -198,20 +198,6 @@
             "pool_waitingroom_innerpuz"
         ]
     },
-    "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7": {
-        "puzzle_type": "type_auto_layered_01",
-        "name": "auto_layered_01",
-        "sub_puzzle_hashes": [
-            "cfbfdeed5c4ca2de3d0bf520b9cb4bb7743a359bd2e6a188d19ce7dffc21d3e7"
-        ],
-        "sub_puzzle_names": [
-            "--cni-settlement_payments"
-        ],
-        "tags": [
-            "UNKNOWN",
-            "settlement_payments"
-        ]
-    },
     "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657|9db33d93853179903d4dd272a00345ee6630dc94907dbcdd96368df6931060fd|6f1cebc5a6d3661ad87d3558146259ca580729b244b7662757f8d1c34a6a9ad9": {
         "puzzle_type": "CAT_V2_PAY_TO_VAULT_SINGLETON_MEMBER",
         "name": "CAT_V2 - pay to vault (singleton member)",

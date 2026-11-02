@@ -853,7 +853,9 @@ def parse_markdown_puzzles(src, repo_path, store, include_dirs, source_of=None):
 
 # The combined catalog is never rewritten from scratch: the compiled puzzles are merged
 # into the existing file (see merge_into_catalog), the entries already there are kept.
-CATALOG_FILE = SCRIPT_DIR / "puzzles.json"
+CATALOG_FILE = SCRIPT_DIR / "catalog" / "puzzles.json"
+# the puzzles of each source, written on every run (git-ignored)
+BUILD_DIR = SCRIPT_DIR / "build"
 
 
 # fields of the old catalog entries that are now in "sources"
@@ -956,7 +958,8 @@ if __name__ == "__main__":
                 source_of=source_of,
             )
 
-        out_file = SCRIPT_DIR / f"{src['name']}_puzzles.json"
+        BUILD_DIR.mkdir(exist_ok=True)
+        out_file = BUILD_DIR / f"{src['name']}.json"
         with open(out_file, "w") as f:
             json.dump(repo_catalog, f, indent=4)
         print(f"Wrote {out_file} ({len(repo_catalog)} puzzles)")

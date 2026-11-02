@@ -11,7 +11,7 @@ of its hash (see classify_puzzle), or every coin with different data in the code
 would be a new puzzle.
 
 Two lists:
-- known puzzles: layered_puzzles.json and puzzle_types.json in resources/puzzles.
+- known puzzles: layered_puzzles.json and puzzle_types.json in resources/puzzles/catalog.
   The names given by the user are saved there, the files are in the repo so the
   names can be shared on github and used by other apps. They can be edited by hand
   while roto runs: the changes are reloaded and roto never overwrites them.
@@ -90,7 +90,7 @@ def create_puzzles_db(conn):
 
 
 def catalog_label(puzzle_key: str):
-    """Name and family from the puzzle catalogs in resources/puzzles.
+    """Name and family from the puzzle catalogs in resources/puzzles/catalog.
     Return (name, family, status)"""
     if puzzle_key == QUOTED_CONDITIONS_KEY:
         return 'quoted conditions', '', STATUS_KNOWN
@@ -307,7 +307,7 @@ class PuzzleCatalog:
             entry = self.entries[puzzle_key]
             sub_puzzle_hashes = list(entry.sub_puzzle_hashes)
             example_coin_id = entry.example_coin_id
-        # names from the shared catalogs only: unknown_puzz_NN names exist only in the local unknown_puzzles.json
+        # names from the shared catalogs only: unknown_puzz_NN names exist only in the local puzzle_harvesting/puzzles.json
         sub_puzzle_names = [CONF.KNOWN_PUZZLES[h]['name'] if h in CONF.KNOWN_PUZZLES else sub_puzzle_name(h)
                             for h in sub_puzzle_hashes]
         sub_puzzle_names = [name if not name.startswith('unknown_puzz_') else CONF.UNKNOWN_PUZZLE

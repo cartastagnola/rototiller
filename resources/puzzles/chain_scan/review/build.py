@@ -43,8 +43,8 @@ ONE_LAYER = {
     '--circuit-circuit_puzzles-statutes_launcher': ('CIRCUIT', 'statutes launcher', False, 'UNKNOWN'),
 }
 fam = collections.defaultdict(list)
-saved_file = json.load(open('resources/puzzles/layered_puzzles.json'))
-puzzle_types = json.load(open('resources/puzzles/puzzle_types.json'))
+saved_file = json.load(open('resources/puzzles/catalog/layered_puzzles.json'))
+puzzle_types = json.load(open('resources/puzzles/catalog/puzzle_types.json'))
 def family_of(first_layer):
     """Family from the outer layer, the same rule as apply_review.py"""
     return 'CAT' if 'cat_v' in first_layer else 'SINGLETON' if 'singleton' in first_layer else 'UNKNOWN'

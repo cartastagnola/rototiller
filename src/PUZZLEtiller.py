@@ -176,10 +176,10 @@ def layered_puzzle_tags(family: str, sub_puzzle_names: list, old_tags: list = No
 
 
 def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
-    """Save a layered puzzle combination to the appropriate JSON file.
-
-    If any sub-puzzle is unknown, the combination goes to unknown_layered_puzzles.json.
-    If all sub-puzzles are known, it goes to layered_puzzles.json.
+    """Save a layered puzzle combination that is not named yet in
+    puzzle_harvesting/layered_puzzles.json: named unknown_layered_NN if a sub-puzzle is
+    unknown, auto_layered_NN if all are known. The catalog (catalog/layered_puzzles.json)
+    is written only when the user saves a name.
 
     Args:
         puzzle_key: The pipe-separated hash string used as key.
@@ -190,17 +190,10 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
         The generated name for the layered combination.
     """
     has_unknown = any(hash not in CONF.KNOWN_PUZZLES for hash in sub_hashes)
-
-    if has_unknown:
-        target_dict = CONF.UNKNOWN_LAYERED_PUZZLES
-        target_path = CONF.UNKNOWN_LAYERED_PUZZLES_PATH
-        lock = CONF.UNKNOWN_LAYERED_PUZZLES_LOCK
-        prefix = "unknown_layered"
-    else:
-        target_dict = CONF.KNOWN_LAYERED_PUZZLES
-        target_path = CONF.KNOWN_LAYERED_PUZZLES_PATH
-        lock = CONF.LAYERED_PUZZLES_LOCK
-        prefix = "auto_layered"
+    target_dict = CONF.UNKNOWN_LAYERED_PUZZLES
+    target_path = CONF.UNKNOWN_LAYERED_PUZZLES_PATH
+    lock = CONF.UNKNOWN_LAYERED_PUZZLES_LOCK
+    prefix = "unknown_layered" if has_unknown else "auto_layered"
 
     def add_entry(catalog: dict):
         """Add the entry to the catalog, return (puzzle_type, name, added)"""
@@ -239,26 +232,11 @@ def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
             entry = target_dict[puzzle_key]
             return entry['puzzle_type'], entry['name']
 
-        if has_unknown:
-            # local file, only roto writes it
-            new_type, new_name, added = add_entry(target_dict)
-            with open(target_path, 'w') as f:
-                json.dump(target_dict, f, indent=4)
-            return new_type, new_name
-
-        # layered_puzzles.json can be edited by hand: add the entry to the file on disk
-        result = []
-
-        def change(data):
-            result.extend(add_entry(data))
-            return result[2]
-
-        try:
-            update_catalog_file(target_path, target_dict, change)
-        except ValueError as e:
-            logging(debug_logger, "DEBUG", f"CATALOG {target_path} is not valid json, {puzzle_key} not saved: {e}")
-            return add_entry(dict(target_dict))[:2]
-        return result[0], result[1]
+        # local file, only roto writes it
+        new_type, new_name, added = add_entry(target_dict)
+        with open(target_path, 'w') as f:
+            json.dump(target_dict, f, indent=4)
+        return new_type, new_name
 
 
 def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
@@ -604,8 +582,8 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
 
     puzzle_hash = puzzle.get_tree_hash().hex()
     puzzle_name = compare_to_known_puzzles(puzzle_hash)
-    # the walk depends only on the shared catalog (puzzles.json), not on the local
-    # unknown_puzzles.json, or the same puzzle would get a different key on every machine
+    # the walk depends only on the shared catalog (catalog/puzzles.json), not on the local
+    # puzzle_harvesting/puzzles.json, or the same puzzle would get a different key on every machine
     puzzle_is_known = puzzle_hash in CONF.KNOWN_PUZZLES
 
     mod, curried_args = puzzle.uncurry()

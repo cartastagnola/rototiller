@@ -63,11 +63,26 @@ SQL_TIMEOUT = 10
 
 ## CLMV
 # load the known puzzles
+# resources/puzzles/catalog: the catalog, in the repo, read by rototiller
+# resources/puzzles/puzzle_harvesting: the puzzles rototiller found that are not in the
+# catalog yet, same file names and shape as the catalog, git-ignored (each user has their own)
 UNKNOWN_PUZZLE = 'unknown_puzzle'
-UNKNOWN_PUZZLES_PATH = './resources/puzzles/unknown_puzzles.json'
-KNOWN_PUZZLES_PATH = './resources/puzzles/puzzles.json'
-KNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/layered_puzzles.json'
-PUZZLE_TYPES_PATH = './resources/puzzles/puzzle_types.json'
+PUZZLE_CATALOG_DIR = './resources/puzzles/catalog'
+PUZZLE_HARVESTING_DIR = './resources/puzzles/puzzle_harvesting'
+UNKNOWN_PUZZLES_PATH = f'{PUZZLE_HARVESTING_DIR}/puzzles.json'
+KNOWN_PUZZLES_PATH = f'{PUZZLE_CATALOG_DIR}/puzzles.json'
+KNOWN_LAYERED_PUZZLES_PATH = f'{PUZZLE_CATALOG_DIR}/layered_puzzles.json'
+PUZZLE_TYPES_PATH = f'{PUZZLE_CATALOG_DIR}/puzzle_types.json'
+UNKNOWN_LAYERED_PUZZLES_PATH = f'{PUZZLE_HARVESTING_DIR}/layered_puzzles.json'
+
+# the found puzzles were next to the catalog before (2026-11): move them once, so a user
+# who updates keeps them
+Path(PUZZLE_HARVESTING_DIR).mkdir(parents=True, exist_ok=True)
+for _old_path, _new_path in (('./resources/puzzles/unknown_puzzles.json', UNKNOWN_PUZZLES_PATH),
+                             ('./resources/puzzles/unknown_layered_puzzles.json', UNKNOWN_LAYERED_PUZZLES_PATH)):
+    if Path(_old_path).exists() and not Path(_new_path).exists():
+        Path(_old_path).replace(_new_path)
+
 KNOWN_PUZZLES = None
 KNOWN_LAYERED_PUZZLES = None
 PUZZLE_TYPES = None
@@ -84,7 +99,8 @@ if Path(UNKNOWN_PUZZLES_PATH).exists():
         UNKNOWN_PUZZLES = json.load(f)
 UNKNOWN_PUZZLES_LOCK = threading.Lock()
 
-UNKNOWN_LAYERED_PUZZLES_PATH = './resources/puzzles/unknown_layered_puzzles.json'
+# layer combinations not named yet: with an unknown layer (unknown_layered_NN) or with
+# only known layers (auto_layered_NN)
 UNKNOWN_LAYERED_PUZZLES = {}
 if Path(UNKNOWN_LAYERED_PUZZLES_PATH).exists():
     with open(UNKNOWN_LAYERED_PUZZLES_PATH, 'r') as f:

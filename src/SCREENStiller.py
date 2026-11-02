@@ -5544,9 +5544,9 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
                 screenState.footer_message = "removed from layered_puzzles.json"
         except ValueError as e:
             # a catalog file edited by hand is not valid json, it is not overwritten
-            screenState.footer_message = f"not saved, fix the json in resources/puzzles first: {e}"
+            screenState.footer_message = f"not saved, fix the json in resources/puzzles/catalog first: {e}"
 
-    put_text(win, pos, f"known families: {', '.join(SCAN.CATALOG.families())} | saved in resources/puzzles/layered_puzzles.json, an empty name removes it", P_text)
+    put_text(win, pos, f"known families: {', '.join(SCAN.CATALOG.families())} | saved in resources/puzzles/catalog/layered_puzzles.json, an empty name removes it", P_text)
     pos += UIgraph.Point(0,2)
 
     ##### layers: the puzzle uncurried

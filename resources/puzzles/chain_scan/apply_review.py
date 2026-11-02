@@ -72,7 +72,7 @@ def main():
         return
     for (k, name, family, tags, old), _ in todo:
         SCAN.save_known_puzzle(k['key'], k['layer_hashes'], k['layers'], name, family, k['example_coin'], tags)
-    print('written: resources/puzzles/layered_puzzles.json and puzzle_types.json')
+    print('written: resources/puzzles/catalog/layered_puzzles.json and puzzle_types.json')
 
 
 if __name__ == '__main__':
