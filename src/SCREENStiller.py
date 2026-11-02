@@ -4730,6 +4730,9 @@ def screen_blocks_vdf(stdscr, keyboardState: KeyboardState, screenState: ScreenS
         screenState.pending_action = []
 
 
+TX_DEBUG_MAX_SOLUTION = 20_000  # bytes: disassembling and running a bigger spend every frame is too slow
+
+
 def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
 
     # Steve transaction f3cf5c97a1e84186
@@ -4764,26 +4767,23 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
     tx_cache = main_scope.data["tx_cache"]
 
     if tx_cache is None:
-        # make a func to call only one tx
         tx_cache = {}
-        mempool_items = fullNodeState.deepcopy_mempool()
-        if spend_bundle_hash in mempool_items:
-            tx_cache["tx"] = mempool_items[spend_bundle_hash]
+        mempool_tx = SCAN.MEMPOOL_SCANNER.get(spend_bundle_hash)
+        if mempool_tx is not None:
+            tx_cache["tx"] = WDB.MempoolItem(raw_json_spendbundle=mempool_tx.spend_bundle,
+                                             timestamp=mempool_tx.added_at)
+            tx_cache["mempool_tx"] = mempool_tx
         else:
-            mempool_archive = fullNodeState.deepcopy_mempool_archive()
-            if spend_bundle_hash in mempool_archive:
-                tx_cache["tx"] = mempool_archive[spend_bundle_hash]
+            # not in the mempool anymore: the saved copy (e.g. a watched bundle)
+            conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
+            saved = WDB.load_spend_bundle(conn, spend_bundle_hash)
+            conn.close()
+            if saved:
+                sp: SpendBundle = SpendBundle.from_bytes(saved[0].raw_spend_bundle)
+                tx_cache["tx"] = WDB.MempoolItem(raw_json_spendbundle=sp.to_json_dict(),
+                                                 timestamp=saved[0].timestamp)
             else:
-                # not in the mempool anymore: the saved copy (e.g. a watched bundle)
-                conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-                saved = WDB.load_spend_bundle(conn, spend_bundle_hash)
-                conn.close()
-                if saved:
-                    sp: SpendBundle = SpendBundle.from_bytes(saved[0].raw_spend_bundle)
-                    tx_cache["tx"] = WDB.MempoolItem(raw_json_spendbundle=sp.to_json_dict(),
-                                                     timestamp=saved[0].timestamp)
-                else:
-                    tx_cache["tx"] = None
+                tx_cache["tx"] = None
 
     main_scope.data["tx_cache"] = tx_cache
 
@@ -4800,19 +4800,28 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
         main_scope.data['watch_later'] = WDB.add_spend_bundles_to_watch_later(conn, spend_bundle_hash)
         conn.close()
     P_text = screenState.colorPairs['tab_soft']
-    P_watch = screenState.colorPairs['error']
-    pos = UIgraph.Point(2,2)
-    ELEMENTS.create_text(tx_win, pos, str(tx.spend_bundle_hash) + str(tx.additions) + str(tx.addition_amount), P_text, bold=False)
+    P_body = screenState.colorPairs['body']
 
-    ###################### WATCH LATER FLAG ################
-    if main_scope.data['watch_later']:
-        pos = UIgraph.Point(22,2)
-        ELEMENTS.create_text(tx_win, pos, "WATCH LATER", P_watch, bold=True)
+    pos = UIgraph.Point(1,1)
+    ELEMENTS.create_text_double_space(tx_win, screenState, pos, 'spend bundle', screenState.colorPairs['xch'],
+                                      screenState.colors['background'], 3, True, inv_color=False)
+    pos += UIgraph.Point(0,3)
+    mempool_tx = tx_cache.get("mempool_tx")
+    if mempool_tx is None:
+        where = 'saved copy, not in the mempool'
+    elif mempool_tx.validated_at is not None:
+        where = 'in a block'
+    elif mempool_tx.gone_at is not None:
+        where = 'left the mempool'
     else:
-        pos = UIgraph.Point(22,2)
-        ELEMENTS.create_text(tx_win, pos, "WATCH NOW", P_text, bold=True)
-    pos = UIgraph.Point(2,2)
-    ########################################################
+        where = f'in the mempool for {human_age(time.time() - mempool_tx.added_at)}'
+    put_text(tx_win, pos, f"id: {spend_bundle_hash.removeprefix('0x')} | {where} | fee: {tx.fee / XCH_MOJO:.6f} XCH | "
+             f"cost: {tx.cost:,} | coins in/out: {tx.removed_coins_count} / {tx.added_coins_count}", P_body)
+    pos += UIgraph.Point(0,1)
+    put_text(tx_win, pos, 'in watch later' if main_scope.data['watch_later'] else 'not saved', P_text)
+    if not main_scope.data['watch_later']:
+        screenState.footer_text += "| watch later=w "
+    pos += UIgraph.Point(0,1)
 
 
     legend = ['action', 'coin id', 'amount', 'parent coin info', 'puzzle hash']
@@ -4872,36 +4881,45 @@ def screen_transaction(stdscr, keyboardState, screenState, fullNodeState: FullNo
             c_puzzle = PyProgram.fromhex(c['puzzle_reveal'])
             c_solution = PyProgram.fromhex(c['solution'])
 
-            # unroll puzzle
-            c_puzzle_names, _ = PUZ.unroll_puzzle_to_names(c_puzzle)
-
-
             pos += UIgraph.Point(0, tab_size.y + 1)
-            ELEMENTS.create_text(tx_win, pos, str(c_puzzle)[:150], P_text, bold=False)
-            pos += UIgraph.Point(0,2)
-            ELEMENTS.create_text(tx_win, pos, str(c_puzzle_names), P_text, bold=False)
-            pos += UIgraph.Point(0,2)
-            ELEMENTS.create_text(tx_win, pos, str(c_solution)[:150], P_text, bold=False)
-            pos += UIgraph.Point(0,2)
-            ELEMENTS.create_text(tx_win, pos, disassemble(c_solution), P_text, bold=False)
-            # run program
-            result = c_puzzle.run(c_solution)
-            pos += UIgraph.Point(0,3)
-            result_list = list(result.as_iter())
-            ELEMENTS.create_text(tx_win, pos, "result = " + disassemble(result), P_text, bold=False)
-            pos += UIgraph.Point(0,2)
-            result_list = list(result.as_iter())
-            res = []
-            for rr in result.as_iter():
-                res.append(disassemble(rr))
+            solution_size = len(c['solution']) // 2
+            if solution_size > TX_DEBUG_MAX_SOLUTION:
+                put_text(tx_win, pos, f"this spend is too big to show here: {solution_size:,} bytes of solution", P_text)
+                break
 
-            ELEMENTS.create_text(tx_win, pos, f"result -----", P_text, bold=False)
-            for i in res:
-                pos += UIgraph.Point(0,1)
-                i = i.replace(' ', ',')
-                i = ast.literal_eval(i)
-                code = PUZ.get_opcode_name(i[0])
-                ELEMENTS.create_text(tx_win, pos, f"{code}: {i} and type f{type(i)}", P_text, bold=False)
+            # the text below is the old debug layout (see PLAN.md): it can be longer than the screen
+            try:
+                # unroll puzzle
+                c_puzzle_names, _ = PUZ.unroll_puzzle_to_names(c_puzzle)
+
+
+                ELEMENTS.create_text(tx_win, pos, str(c_puzzle)[:150], P_text, bold=False)
+                pos += UIgraph.Point(0,2)
+                ELEMENTS.create_text(tx_win, pos, str(c_puzzle_names), P_text, bold=False)
+                pos += UIgraph.Point(0,2)
+                ELEMENTS.create_text(tx_win, pos, str(c_solution)[:150], P_text, bold=False)
+                pos += UIgraph.Point(0,2)
+                ELEMENTS.create_text(tx_win, pos, disassemble(c_solution), P_text, bold=False)
+                # run program
+                result = c_puzzle.run(c_solution)
+                pos += UIgraph.Point(0,3)
+                result_list = list(result.as_iter())
+                ELEMENTS.create_text(tx_win, pos, "result = " + disassemble(result), P_text, bold=False)
+                pos += UIgraph.Point(0,2)
+                result_list = list(result.as_iter())
+                res = []
+                for rr in result.as_iter():
+                    res.append(disassemble(rr))
+
+                ELEMENTS.create_text(tx_win, pos, f"result -----", P_text, bold=False)
+                for i in res:
+                    pos += UIgraph.Point(0,1)
+                    i = i.replace(' ', ',')
+                    i = ast.literal_eval(i)
+                    code = PUZ.get_opcode_name(i[0])
+                    ELEMENTS.create_text(tx_win, pos, f"{code}: {i} and type f{type(i)}", P_text, bold=False)
+            except (curses.error, RecursionError) as e:
+                logging(debug_logger, "DEBUG", f"TRANSACTION spend does not fit on the screen: {e}")
 
     pos += UIgraph.Point(0,2)
     #ELEMENTS.create_text(tx_win, pos, "spend_bundle_hash: " + str(tx.spend_bundle_hash)[:20], P_text, bold=False)
@@ -4988,13 +5006,19 @@ def screen_mempool(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     pos = UIgraph.Point(1,1)
     ELEMENTS.create_text_double_space(win, screenState, pos, 'mempool', P_title, C_background,
                                       3, True, inv_color=False)
+    timer_text, block_late = next_transaction_block_text(main_scope, screenState, fullNodeState)
+    put_text(win, UIgraph.Point(pos.x + len('mempool') + 6, pos.y + 1), timer_text,
+             P_error if block_late else P_text, bold=block_late)
     pos += UIgraph.Point(0,3)
 
     scanner = SCAN.MEMPOOL_SCANNER
+    scanner.want_fast()
     now = time.time()
-    # the scanner drops validated txs only at its next scan, hide them here on time
+    # the scanner drops validated txs only at its next scan, hide them here on time; it keeps
+    # for a while the txs that left the mempool without a block yet, hide them
     txs = [tx for tx in scanner.snapshot()
-           if tx.validated_at is None or now - tx.validated_at <= CONF.MEMPOOL_VALIDATED_TX_DELAY]
+           if (tx.validated_at is None and tx.gone_at is None)
+           or (tx.validated_at is not None and now - tx.validated_at <= CONF.MEMPOOL_VALIDATED_TX_DELAY)]
     pending_txs = [tx for tx in txs if tx.validated_at is None]
     total_cost = sum(tx.cost for tx in pending_txs)
     total_fee = sum(tx.fee for tx in pending_txs)
@@ -5007,7 +5031,7 @@ def screen_mempool(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
         put_text(win, pos, "the node is syncing, the mempool stays empty until it is synced", P_error, bold=True)
     pos += UIgraph.Point(0,2)
 
-    legend = ['tx id', 'type', 'cost', 'fee [XCH]', 'fee/cost', 'coins in', 'coins out', 'age']
+    legend = list(MEMPOOL_TX_LEGEND)
     C_validated = screenState.colors["light_azure"]
 
     def validated_color(tx):
@@ -5023,20 +5047,11 @@ def screen_mempool(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     colors = []
     for tx in txs:
         colors.append([validated_color(tx)] * len(legend))
-        rows.append([
-            f"0x{tx.tx_id[:16]}...",
-            SCAN.tx_type(SCAN.CATALOG, tx.puzzle_keys),
-            f"{tx.cost:,}",
-            f"{tx.fee / XCH_MOJO:.6f}",
-            f"{tx.fee_per_cost:.2f}",
-            tx.coins_in,
-            tx.coins_out,
-            human_age(now - tx.added_at),
-        ])
+        rows.append(mempool_tx_row(tx, now))
         keys.append(tx.tx_id)
 
     tab_name = "mempool_txs"
-    tab_scope = list_tab_scope(screenState, main_scope, tab_name, scopeAction_nothing)
+    tab_scope = list_tab_scope(screenState, main_scope, tab_name, ScopeActions.open_transaction)
     tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 1)
     ELEMENTS.create_tab(win,
                         screenState,
@@ -5049,11 +5064,65 @@ def screen_mempool(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
                         pos,
                         tab_size,
                         keyboardState,
-                        scopeAction_nothing,
+                        ScopeActions.open_transaction,
                         True,
                         False,
                         legend,
                         prepped_scope=tab_scope)
+
+
+MEMPOOL_TX_LEGEND = ['tx id', 'type', 'cost', 'fee [XCH]', 'fee/cost', 'coins in', 'coins out', 'age']
+
+
+def mempool_tx_row(tx, now: float) -> list:
+    """Row of a mempool transaction (SCAN.MempoolTx), with the columns of MEMPOOL_TX_LEGEND"""
+    return [
+        f"0x{tx.tx_id[:16]}...",
+        SCAN.tx_type(SCAN.CATALOG, tx.puzzle_keys),
+        f"{tx.cost:,}",
+        f"{tx.fee / XCH_MOJO:.6f}",
+        f"{tx.fee_per_cost:.2f}",
+        tx.coins_in,
+        tx.coins_out,
+        human_age(now - tx.added_at),
+    ]
+
+
+def next_transaction_block_text(main_scope: Scope, screenState: ScreenState, fullNodeState: FullNodeState):
+    """When the next transaction block should come (only those take mempool transactions):
+    the last one + the average gap of the recent ones. Times are arrivals: a timestamp +
+    WDB.BLOCK_INFUSION_DELAY. The timestamps are read in a thread, again at every new peak.
+    Returns (text, late)."""
+    data = main_scope.data
+    peak = fullNodeState.full_node_meta.peak_height
+    thread = data.get('tx_block_times_thread')
+    if data.get('tx_block_times_peak') != peak and (thread is None or not thread.is_alive()):
+        data['tx_block_times_peak'] = peak
+
+        def load_times():
+            try:
+                data['tx_block_times'] = WDB.recent_transaction_block_timestamps(DB_BLOCKCHAIN_RO)
+            except Exception as e:
+                data['tx_block_times'] = None
+                logging(debug_logger, "DEBUG", f"MEMPOOL tx block times error: {e}")
+
+        thread = threading.Thread(target=load_times, daemon=True, name='tx block times')
+        thread.start()
+        data['tx_block_times_thread'] = thread
+        screenState.running_threads.append(thread)
+
+    times = data.get('tx_block_times')
+    if times is None:
+        return 'next transaction block: reading the chain...', False
+    if len(times) < 2:
+        return 'next transaction block: not enough blocks to estimate', False
+    average_gap = (times[-1] - times[0]) / (len(times) - 1)
+    since_last = time.time() - (times[-1] + WDB.BLOCK_INFUSION_DELAY)
+    remaining = average_gap - since_last
+    last = f"last {human_age(max(since_last, 0))} ago, every ~{average_gap:.0f}s"
+    if remaining >= 0:
+        return f"next transaction block in ~{human_age(remaining)} ({last})", False
+    return f"next transaction block late by {human_age(-remaining)} ({last})", True
 
 
 # the two lists of the puzzles screen: status -> label, tab switches between them

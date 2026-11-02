@@ -1166,6 +1166,69 @@ def load_spend_bundle(conn, bundle_hash, group_name=None):
     return bundle_states
 
 
+# a block's timestamp is set when the farmer makes it, at a signage point; it reaches the
+# chain at least NUM_SP_INTERVALS_EXTRA signage points later (~28 s on mainnet)
+BLOCK_INFUSION_DELAY = (DEFAULT_CONSTANTS.NUM_SP_INTERVALS_EXTRA * DEFAULT_CONSTANTS.SUB_SLOT_TIME_TARGET
+                        / DEFAULT_CONSTANTS.NUM_SPS_SUB_SLOT)
+
+
+def recent_transaction_block_timestamps(db_path, n_blocks=300) -> list:
+    """Timestamps of the transaction blocks among the last n_blocks of the main chain, oldest
+    first (only transaction blocks have one: about 1 block in 3)."""
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute("SELECT block_record FROM full_blocks WHERE in_main_chain = 1 "
+                            "ORDER BY height DESC LIMIT ?;", (n_blocks,)).fetchall()
+    finally:
+        conn.close()
+    timestamps = [BlockRecord.from_bytes(row[0]).timestamp for row in rows]
+    return sorted(t for t in timestamps if t is not None)
+
+
+def block_coins(db_path, height) -> tuple:
+    """Coins created and coins spent at a height, from the coin_record table of the node DB:
+    (added, removed), each coin is (coin id, amount, puzzle hash, coinbase, confirmed height,
+    spent height), ids in hex. The spent height is 0 or less for an unspent coin."""
+    columns = "coin_name, amount, puzzle_hash, coinbase, confirmed_index, spent_index"
+    conn = get_connection(db_path)
+    try:
+        added = conn.execute(f"SELECT {columns} FROM coin_record WHERE confirmed_index = ?;", (height,)).fetchall()
+        removed = conn.execute(f"SELECT {columns} FROM coin_record WHERE spent_index = ?;", (height,)).fetchall()
+    finally:
+        conn.close()
+
+    def parse(row):
+        return (row[0].hex(), int.from_bytes(row[1], 'big'), row[2].hex(), bool(row[3]), row[4], row[5])
+
+    return [parse(row) for row in added], [parse(row) for row in removed]
+
+
+def saved_bundles_spending_coins(db_path, coin_ids: list) -> list:
+    """Bundles saved in the spend bundle DB that spend at least one of these coins (hex ids):
+    a list of (bundle hash, {coin id: solution}), all in hex, with all the coins of the bundle"""
+    conn = sqlite3.connect(db_path, timeout=SQL_TIMEOUT)
+    try:
+        bundle_ids = set()
+        for i in range(0, len(coin_ids), 500):  # the limit of the variables of a query
+            chunk = [bytes.fromhex(coin_id) for coin_id in coin_ids[i:i + 500]]
+            marks = ','.join('?' * len(chunk))
+            rows = conn.execute(f"SELECT spend_bundle_id FROM coin_spends WHERE coin_id IN ({marks});", chunk)
+            bundle_ids.update(row[0] for row in rows)
+
+        bundles = []
+        for bundle_id in bundle_ids:
+            bundle_hash = conn.execute("SELECT spend_bundle_hash FROM spend_bundles WHERE id = ?;",
+                                       (bundle_id,)).fetchone()
+            coins = conn.execute("SELECT coin_id, solution FROM coin_spends WHERE spend_bundle_id = ?;",
+                                 (bundle_id,)).fetchall()
+            if bundle_hash is not None:
+                bundles.append((bytes(bundle_hash[0]).hex(),
+                                {bytes(coin_id).hex(): bytes(solution).hex() for coin_id, solution in coins}))
+        return bundles
+    finally:
+        conn.close()
+
+
 def refresh_bundle_status(conn, spend_bundle_id):
     """Check a pending bundle's coins on chain and update its status:
     - confirmed: all its coins are spent with its solutions, block_height is where;
@@ -1246,7 +1309,7 @@ class MempoolItem:
 
             sp_conds: SpendBundleConditions = validate_clvm_and_signature(
                 sp,
-                1000000000,  # max cost
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,  # max cost
                 DEFAULT_CONSTANTS,  # ConsensusConstants
                 1000000000)  # peak_height
             sp_conds = sp_conds[0]  # keep only the conditions
@@ -1311,12 +1374,13 @@ class MempoolItem:
 
 
 class MempoolBlock:
+    """Transactions that go together in one of the next blocks (SCAN.mempool_blocks)"""
 
     def __init__(self):
         self.transactions = []
         self.total_cost = 0
 
-    def add_item(self, item: MempoolItem):
+    def add_item(self, item):  # SCAN.MempoolTx
         self.transactions.append(item)
         self.total_cost += item.cost
 

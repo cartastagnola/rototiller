@@ -93,13 +93,11 @@ UNKNOWN_LAYERED_PUZZLES_LOCK = threading.Lock()
 
 LAYERED_PUZZLES_LOCK = threading.Lock()
 
-## memepool
-TXS_MEMPOOL_DELAY = 1000  # ms
-
 ## puzzle scanners
 PUZZLE_SCAN_COIN_LIMIT = 10_000  # the chain scanner looks only at the last N spent coins
 PUZZLE_SCAN_CHAIN_DELAY = 60  # s, wait between chain scans for new blocks
-PUZZLE_SCAN_MEMPOOL_DELAY = 5  # s, wait between mempool scans
+PUZZLE_SCAN_MEMPOOL_DELAY = 10  # s, wait between mempool scans
+PUZZLE_SCAN_MEMPOOL_FAST_DELAY = 1  # s, wait between mempool scans while the block or mempool view is open
 PUZZLE_CATALOG_WATCH_DELAY = 2  # s, check if layered_puzzles.json or puzzle_types.json were edited by hand
 MEMPOOL_VALIDATED_TX_DELAY = 15  # s, validated transactions stay in the mempool view before disappearing
 MEMPOOL_VALIDATED_TX_FLASH = 5  # s, validated transactions blink during the last seconds before disappearing

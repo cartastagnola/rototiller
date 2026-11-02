@@ -466,15 +466,12 @@ class FullNodeState:
     def __init__(self, db_path: str):
         self.lock = threading.Lock()
         self.db_path = db_path
-        self.mempool_items = None
-        self.mempool_archive = {}
         self.blocks_loader: WDB.DataChunkLoader = None
         self.is_blocks_loader_on_peak = True
         self.full_node_meta = FullNodeMeta()
 
         self.update_chain_info()
         self.update_chain_state()
-        self.init_mempool()
 
         table_name = 'full_blocks'
         chunk_size = 50  # 120  # height * 2  # to be sure to have at least 2 full screen of data
@@ -506,74 +503,6 @@ class FullNodeState:
         #    sorting_column=sorting_column, data_struct=WDB.BundleState)
 
         #self.spend_bundle_archive_loader.start_updater_thread()
-
-
-    def init_mempool(self):
-        mempool_items = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in RPC.call_rpc_node('get_all_mempool_items').items()}
-
-        #for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items():
-        #    print(f"tx id: {spend_bundle_hash} and json: {json_item}")
-
-        with self.lock:
-            self.mempool_items = mempool_items
-            logging(debug_logger, "DEBUG", f"NODE STATE - init mempool, inserting items")
-            # TODO; move sqlite in DB.py
-            conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-            for key, item in mempool_items.items():
-                sb = item.spend_bundle
-
-            conn.close()
-
-
-    def update_mempool(self):
-        with self.lock:
-            self.mempool_items = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in RPC.call_rpc_node('get_all_mempool_items').items()}
-
-        # removed expired transactions older then
-        # TODO:
-        # - add property in_mempool
-        # - remove apptoved txs after 15s
-
-        #logging(debug_logger, "DEBUG", f"NODE STATE - updating mempool")
-        #new_mempool = {spend_bundle_hash: WDB.MempoolItem(spend_bundle_hash, json_item) for spend_bundle_hash, json_item in call_rpc_node('get_all_mempool_items').items()}
-        #added_tx = new_mempool.keys() - self.mempool_items.keys()
-        #removed_txs = self.mempool_items.keys() - new_mempool.keys()
-        #with self.lock:
-        #    logging(debug_logger, "DEBUG", f"NODE STATE - lock")
-        #    conn = sqlite3.connect(DB_SB, timeout=SQL_TIMEOUT)
-        #    for tx in added_tx:
-        #        logging(debug_logger, "DEBUG", f"NODE STATE - tx: {tx}")
-        #        self.mempool_items[tx] = new_mempool[tx]
-        #        # add to the db
-        #        raw_sb = new_mempool[tx].spend_bundle
-        #        logging(debug_logger, "DEBUG", f"NODE STATE - raw_sb: {raw_sb}")
-        #        sb = SpendBundle.from_json_dict(new_mempool[tx].spend_bundle)
-        #        logging(debug_logger, "DEBUG", f"NODE STATE - {type(sb)}")
-        #        WDB.insert_spend_bundle(conn, sb)
-        #        logging(debug_logger, "DEBUG", f"NODE STATE - inserting SB")
-
-        #    conn.close()
-        #for tx in removed_txs:
-        #    # here we should modify the status of the sb also in the db, as invalid or blocked
-        #    if self.mempool_items[tx].removed_at is None:
-        #        with self.lock:
-        #            self.mempool_items[tx].removed_at = time.time()
-        #    else:
-        #        if self.mempool_items[tx].removed_at - time.time() > TXS_MEMPOOL_DELAY:
-        #            with self.lock:
-        #                self.mempool_archive = self.mempool_items.pop(tx)
-
-
-
-    def parse_mempool_txs(self):
-        for spend_bundle_hash, tx in self.mempool_items:
-            pass
-            # take SB
-            # take input coin
-            # fill coin types
-            # take solution coin
-
-        pass
 
 
     def update_chain_info(self):
@@ -622,7 +551,6 @@ class FullNodeState:
             try:
                 logging(debug_logger, "DEBUG", f"NODE STATE - updating node state")
                 self.update_chain_state()
-                self.update_mempool()
                 logging(debug_logger, "DEBUG", f"NODE STATE - state updated")
             except Exception as e:
                 print(e)
@@ -643,12 +571,6 @@ class FullNodeState:
 
     def deepcopy_meta(self):
         return copy.deepcopy(self.full_node_meta)
-
-    def deepcopy_mempool(self):
-        return copy.deepcopy(self.mempool_items)
-
-    def deepcopy_mempool_archive(self):
-        return copy.deepcopy(self.mempool_archive)
 
 
 @dataclass

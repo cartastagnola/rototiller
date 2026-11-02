@@ -24,6 +24,7 @@ import os
 import re
 import time
 import threading
+from collections import deque
 from dataclasses import dataclass, replace
 
 from chia.types.blockchain_format.program import Program as PyProgram
@@ -443,6 +444,7 @@ class MempoolTx:
     puzzle_keys: list  # puzzle key of each coin spend
     removal_coin_ids: list
     added_at: float
+    spend_bundle: dict  # the whole bundle (RPC json), to explore it
     gone_at: float = None  # when it left the mempool
     validated_at: float = None  # when it was found in a block
 
@@ -452,21 +454,40 @@ class MempoolTx:
 
 
 class MempoolPuzzleScanner:
-    """Keep the list of the mempool transactions and add their puzzles to the catalog."""
+    """Keep the list of the mempool transactions and add their puzzles to the catalog.
+    It scans every `delay` seconds, every `fast_delay` while a view asks for it (want_fast)."""
 
     # with more new transactions than this, load the whole mempool in one call
     MAX_SINGLE_CALLS = 50
+    # a view calls want_fast every frame: fast scans stop this long after the view is closed
+    FAST_HOLD = 2  # s
+    # a transaction that left the mempool is checked on chain for this long, then dropped
+    GONE_HOLD = 10  # s
+    # validated transactions kept in memory after the views stop showing them: a block does not
+    # say which bundles it contains, these are the ones the block view can recognize
+    VALIDATED_KEEP = 100
 
-    def __init__(self, catalog: PuzzleCatalog, delay: float, validated_delay: float):
+    def __init__(self, catalog: PuzzleCatalog, delay: float, fast_delay: float, validated_delay: float):
         self.catalog = catalog
         self.delay = delay
         self.validated_delay = validated_delay
+        self.fast_delay = fast_delay
         self.status = 'waiting'
         self.lock = threading.Lock()
         self.txs: dict[str, MempoolTx] = {}
         self.puzzle_hash_cache = {}
         self.thread = None
 
+        self.fast_until = 0
+        self.wake = threading.Event()  # ends the slow wait when a view asks for fast scans
+        self.validated_txs = deque(maxlen=self.VALIDATED_KEEP)
+
+    def want_fast(self):
+        """Called every frame by the views that show the mempool"""
+        now = time.time()
+        if now > self.fast_until:
+            self.wake.set()
+        self.fast_until = now + self.FAST_HOLD
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True, name='puzzle mempool scanner')
         self.thread.start()
@@ -479,7 +500,9 @@ class MempoolPuzzleScanner:
                 self.status = f'error: {e}'
                 logging(debug_logger, "DEBUG", f"PUZZLE MEMPOOL SCAN error: {e}")
                 UTILS.logging_traceback('PUZZLE MEMPOOL SCAN')
-            time.sleep(self.delay)
+            delay = self.fast_delay if time.time() < self.fast_until else self.delay
+            self.wake.wait(delay)
+            self.wake.clear()
 
     def scan(self):
         tx_ids = {strip_0x(tx_id) for tx_id in RPC.call_rpc_node('get_all_mempool_tx_ids')}
@@ -488,12 +511,13 @@ class MempoolPuzzleScanner:
         with self.lock:
             for tx_id, tx in list(self.txs.items()):
                 if tx.validated_at is not None and now - tx.validated_at > self.validated_delay:
-                    self.txs.pop(tx_id)
+                    self.validated_txs.append(self.txs.pop(tx_id))
             gone_txs = [tx for tx_id, tx in self.txs.items() if tx_id not in tx_ids and tx.validated_at is None]
             new_tx_ids = tx_ids - set(self.txs)
 
         # a transaction that left the mempool is validated if its coins are spent on chain,
-        # if not it was replaced or expired. Check it twice, the block could be not in the DB yet
+        # if not it was replaced or expired. Check it again for GONE_HOLD seconds, the block
+        # could be not in the DB yet
         validated_tx_ids = self.validated_tx_ids(gone_txs)
         with self.lock:
             for tx in gone_txs:
@@ -501,7 +525,7 @@ class MempoolPuzzleScanner:
                     tx.validated_at = now
                 elif tx.gone_at is None:
                     tx.gone_at = now
-                else:
+                elif now - tx.gone_at > self.GONE_HOLD:
                     self.txs.pop(tx.tx_id, None)
 
         if len(new_tx_ids) > self.MAX_SINGLE_CALLS:
@@ -520,7 +544,8 @@ class MempoolPuzzleScanner:
             removal_coin_ids = [UTILS.calc_coin_id(c['parent_coin_info'], c['puzzle_hash'], c['amount']).hex()
                                 for c in item['removals']]
             tx = MempoolTx(tx_id, item['cost'], item['fee'], len(item['removals']),
-                           len(item['additions']), puzzle_keys, removal_coin_ids, time.time())
+                           len(item['additions']), puzzle_keys, removal_coin_ids, item['spend_bundle'],
+                           time.time())
             with self.lock:
                 self.txs[tx_id] = tx
 
@@ -553,6 +578,36 @@ class MempoolPuzzleScanner:
         return sorted(txs, key=lambda tx: tx.fee_per_cost, reverse=True)
 
 
+    def get(self, tx_id: str):
+        """The transaction, also if it just left the mempool; None if it is not known"""
+        tx_id = strip_0x(tx_id)
+        with self.lock:
+            if tx_id in self.txs:
+                return self.txs[tx_id]
+            for tx in self.validated_txs:
+                if tx.tx_id == tx_id:
+                    return tx
+        return None
+
+    def known_txs(self):
+        """All the transactions in memory: in the mempool, just left it, validated"""
+        with self.lock:
+            return list(self.txs.values()) + list(self.validated_txs)
+
+
+def mempool_blocks(txs: list):
+    """Split the transactions still in the mempool into the next blocks. txs sorted by fee per
+    cost, highest first (MempoolPuzzleScanner.snapshot): each block takes them in order until
+    the next one does not fit. An estimate: a farmer can skip one that does not fit and take
+    a smaller one."""
+    blocks = [WDB.MempoolBlock()]
+    for tx in txs:
+        if tx.validated_at is not None or tx.gone_at is not None:
+            continue
+        if blocks[-1].transactions and blocks[-1].total_cost + tx.cost > CONF.BLOCK_MAX_COST:
+            blocks.append(WDB.MempoolBlock())
+        blocks[-1].add_item(tx)
+    return blocks
 def tx_type(catalog: PuzzleCatalog, puzzle_keys: list):
     """Names of the puzzles spent by a transaction, 'unknown' for the new ones"""
     counts = {}
@@ -594,7 +649,8 @@ class CatalogFileWatcher:
 
 CATALOG = PuzzleCatalog(CONF.DB_PUZZLES)
 CHAIN_SCANNER = ChainPuzzleScanner(CATALOG, CONF.PUZZLE_SCAN_COIN_LIMIT, CONF.PUZZLE_SCAN_CHAIN_DELAY)
-MEMPOOL_SCANNER = MempoolPuzzleScanner(CATALOG, CONF.PUZZLE_SCAN_MEMPOOL_DELAY, CONF.MEMPOOL_VALIDATED_TX_DELAY)
+MEMPOOL_SCANNER = MempoolPuzzleScanner(CATALOG, CONF.PUZZLE_SCAN_MEMPOOL_DELAY,
+                                       CONF.PUZZLE_SCAN_MEMPOOL_FAST_DELAY, CONF.MEMPOOL_VALIDATED_TX_DELAY)
 CATALOG_WATCHER = CatalogFileWatcher(CATALOG, CONF.PUZZLE_CATALOG_WATCH_DELAY)
 
 
