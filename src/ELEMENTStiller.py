@@ -4012,8 +4012,8 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     (HEAT.COLUMN_BAND), also on the column labels. The legend of the y axis alternates the two
     shades by its own bands (HEAT.ROW_BAND), only on the legend: the rows of the graph do not.
     Lines: the top bands (the day of the hours), the column bands, the grid, the bottom line (its
-    part under the selected columns is yellow), the selection, the legend. A right line closes the grid, with
-    the ◀ of the selected row in square mode; the two lines are drawn like the frame of a table,
+    part under the selected columns is yellow), the selection, the legend. A right line closes the grid,
+    yellow on the selected row in square mode; the two lines are drawn like the frame of a table,
     only when the graph is selected. It uses all of size.y.
     Return (scope, lines used)"""
 
@@ -4036,7 +4036,6 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
         view.mode = 'column'
 
     P_text = screenState.colorPairs["body"]
-    P_marker = screenState.colorPairs["down"]
     P_selection = UIgraph.addCustomColorTuple((screenState.colors["yellow_bee"], screenState.colors["background"]),
                                               screenState.cursesColors)
     framed = active or scope.selected()  # the frame of the tables: ▌ on the right, ▀ under it
@@ -4181,10 +4180,11 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
             top = cell_color(col, line * 2)
             bottom = cell_color(col, line * 2 + 1)
             put(y, x0 + col - view.left_col, '▀', pair(top, bottom))
-        if square_mode and cursor_row // 2 == line:
-            put(y, x_right, '◀', P_marker)
-        else:
-            put(y, x_right, '▌' if framed else ' ', P_frame)
+        # the selected row is the right line in yellow, not another character: ncurses compares the
+        # lines by their characters only, so a character on one line only (e.g. ◀) moving to the
+        # next line looks like the grid moved, and ncurses scrolls it and repaints it (flicker)
+        P_right = P_selection if square_mode and cursor_row // 2 == line else P_frame
+        put(y, x_right, '▌' if framed else ' ', P_right)
 
     # the bottom line, yellow under the selected columns
     y_bottom = pos.y + 2 + n_lines
