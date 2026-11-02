@@ -163,17 +163,33 @@ def calc_size_column(data_table, data_table_color, data_table_legend, scope, max
 
 
     ### remove last column until there is enough space
+    def remove_last_column():
+        dim = max_dims.pop(-1)
+        max_dims_origin.pop(-1)
+        delete_table_column(data_table, -1)
+        delete_table_column(data_table_color, -1)
+        formatters.pop(-1)
+        column_widths.pop(-1)
+        if data_table_legend is not None:
+            data_table_legend.pop(-1)
+        return dim
+
     if total_dims > max_table_width:
-        while total_dims > max_table_width:
-            dim = max_dims.pop(-1)
-            max_dims_origin.pop(-1)
-            delete_table_column(data_table, -1)
-            delete_table_column(data_table_color, -1)
-            formatters.pop(-1)
-            column_widths.pop(-1)
+        while total_dims > max_table_width and len(max_dims) > 2:
+            total_dims -= remove_last_column()
+
+        # shrink the second column instead of removing it: the first one alone is usually
+        # labels without their values. The text is cut when it is drawn
+        excess = total_dims - max_table_width
+        if excess > 0 and len(max_dims) == 2:
+            min_width = 10 + column_separator
             if data_table_legend is not None:
-                data_table_legend.pop(-1)
-            total_dims -= dim
+                min_width = max(min_width, len(data_table_legend[1]) + column_separator)
+            if max_dims[1] - excess >= min_width:
+                max_dims[1] -= excess
+                total_dims -= excess
+            else:
+                total_dims -= remove_last_column()
     else:
         ## WIP: if there are enough space, it enlarge fixed size columns
         count_fix_size_col = 0
@@ -829,7 +845,14 @@ def create_tab(scr,
     ### end
 
     ### FRAME CACHE
+    # not only screen_resized: the screen can be resized while this tab is not drawn
+    tab_width = scr.getmaxyx()[1] - position.x
+    width_changed = scope.data.get('tab_width') != tab_width
+    scope.data['tab_width'] = tab_width
+
     if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None or no_cache:
+        if width_changed:
+            scope.data['column_sizes'] = None
         scope.data['cached_data_table'] = dataTable
         scope.data['cached_data_table_color'] = data_table_color
         scope.data['cached_data_table_legend'] = data_table_legend
@@ -847,6 +870,7 @@ def create_tab(scr,
             dataTable[0] == old_data_table[0] and
             dataTable[-1] == old_data_table[-1] and
             chunk_first_idx == old_first_idx and
+            not width_changed and
             not screenState.screen_resized):
 
             dataTable = old_data_table
@@ -896,8 +920,10 @@ def create_tab(scr,
 
     ### make empty data_table_color if...
     if data_table_color is None or not data_table_color:
+        # calc_size_column removes columns from it: check the columns too, not only the rows
         if ('data_table_color' not in scope.data or scope.data['data_table_color'] == None
-                or len(scope.data['data_table_color']) != len(dataTable)):
+                or len(scope.data['data_table_color']) != len(dataTable)
+                or (dataTable and len(scope.data['data_table_color'][0]) != len(dataTable[0]))):
             row = len(dataTable)
             col = len(dataTable[0]) if dataTable else 0
             data_table_color = [list([None] * col) for _ in range(row)]

@@ -905,9 +905,6 @@ class ScopeActions():
         for key, item in parent.sub_scopes.items():
             if item == scope:
                 parent.cursor = count
-                scope.selected = True
-            else:
-                item.selected = False
             count += 1
         return scope
 
@@ -922,15 +919,11 @@ class ScopeActions():
         for key, item in parent.sub_scopes.items():
             if item == scope:
                 parent.cursor = count + 1
-                scope.selected = False
                 next_item = True
             elif next_item:
                 screenState.activeScope = item
-                item.selected = True
                 next_item = False
                 next_scope = item
-            else:
-                item.selected = False
             count += 1
         return next_scope
 
@@ -946,14 +939,10 @@ class ScopeActions():
             if item == scope:
                 prev_item_id = count - 1
                 parent.cursor = prev_item_id
-                scope.selected = False
-            else:
-                item.selected = False
             count += 1
 
         prev_scope = list(parent.sub_scopes.values())[prev_item_id]
         screenState.activeScope = prev_scope
-        prev_scope.selected = True
         return prev_scope
 
     @staticmethod
