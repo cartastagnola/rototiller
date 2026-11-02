@@ -232,8 +232,11 @@ SOURCES = [
 
 # Puzzles that are not in a .clsp file, they are hardcoded here as compiled bytecode.
 # The puzzle hash is checked when the catalog is built. "clvm" is the source written here,
-# checked to compile to the same puzzle hash; an entry without "clvm" has "source" instead:
+# checked to compile to the same puzzle hash; an entry without "clvm" has "source_url" instead:
 # where the bytecode comes from, for code that today's compilers build to another hash.
+# "source" is the project tag (the name prefix). Where the bytecode was found, when known:
+# "repo", "commit" and "path" (a file of that repo), and "source_url" (a link to the file the
+# clvm comes from). They go in the puzzle's "sources", see make_source.
 HARDCODED_PUZZLES = [
     {
         # MIPS index wrapper: (a 5 7), curried with (nonce inner_puzzle) it runs the inner
@@ -244,6 +247,9 @@ HARDCODED_PUZZLES = [
         #   crates/chia-sdk-types/src/puzzles/mips/index_wrapper.rs (INDEX_WRAPPER, INDEX_WRAPPER_HASH)
         # It is defined only as hex in Rust, there is no .clsp file.
         "source": "sdk",
+        "repo": "https://github.com/xch-dev/chia-wallet-sdk.git",
+        "commit": "ed584e3",
+        "path": "crates/chia-sdk-types/src/puzzles/mips/index_wrapper.rs",
         "name": "mips-index_wrapper",
         "bytecode": "ff02ff05ff0780",
         "puzzle_hash": "847d971ef523417d555ea9854b1612837155d34d453298defcd310774305f657",
@@ -262,6 +268,10 @@ HARDCODED_PUZZLES = [
         # the clvm below is that file, it compiles to this puzzle hash.
         # Do not use eip712_member.clsp (v1) of that repo: it returns ASSERT_MY_AMOUNT, every spend fails
         "source": "sdk",
+        "repo": "https://github.com/xch-dev/chia-wallet-sdk.git",
+        "commit": "ed584e3",
+        "path": "crates/chia-sdk-types/src/puzzles/mips/members/eip712_member.rs",
+        "source_url": "https://github.com/MattHintz/solslot-protocol/blob/108ac023d836cf0198775eebd377880d0f8d6aef/solslot_puzzles/eip712_member_v2.clsp",
         "name": "mips-eip712_member",
         "bytecode": (
             "ff02ffff01ff02ffff03ffff22ffff20ffff8413d61f00ff17ff81bfff82017f8080ffff20ffff24"
@@ -318,6 +328,9 @@ HARDCODED_PUZZLES = [
         # The clvm below is written by hand from the bytecode (names are ours, the functions are
         # named so that the compiler keeps their order): it compiles to this puzzle hash
         "source": "sdk",
+        "repo": "https://github.com/xch-dev/chia-wallet-sdk.git",
+        "commit": "ed584e3",
+        "path": "crates/chia-sdk-types/src/puzzles/mips/wrappers/force_singleton_recreation.rs",
         "name": "mips-force_singleton_recreation",
         "bytecode": (
             "ff02ffff01ff02ff1effff04ff02ffff04ffff02ff16ffff04ff02ffff04ff05ff80808080ffff04"
@@ -468,6 +481,48 @@ def ensure_repo(name: str, url: str, sparse: list = None, ref: str = None) -> pa
     return dest
 
 
+_commits = {}
+
+
+def git_commit(repo_path: pathlib.Path) -> str:
+    """Commit checked out in a cached clone: the one the puzzles were compiled from"""
+    if repo_path not in _commits:
+        _commits[repo_path] = subprocess.run(
+            ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout.strip()
+    return _commits[repo_path]
+
+
+# Every catalog entry has "sources": where the puzzle can be found, one item for each source
+# that builds the same puzzle hash (e.g. the same file in two repos):
+#   "project":  the project tag (the name prefix, the "name" of the source in SOURCES)
+#   "repo", "commit", "path": the git URL, the commit compiled and the file in that repo
+#   "language": chialisp, chialisp-23 or rue
+#   optional: "section" (heading of a markdown file), "export" (module export of a
+#   chialisp-23 file), "compiled" (the .rue.hex read for a rue file), "url" (a link),
+#   "hardcoded": true (the bytecode is written in HARDCODED_PUZZLES)
+def make_source(src: dict, repo_path: pathlib.Path, file_path, **extra) -> dict:
+    """The "sources" item of a puzzle compiled from file_path, a file of the clone repo_path"""
+    def in_repo(path):
+        return pathlib.Path(path).resolve().relative_to(repo_path.resolve()).as_posix()
+
+    if "compiled" in extra:
+        extra["compiled"] = in_repo(extra["compiled"])
+    return {
+        "project": src["name"],
+        "repo": src["url"],
+        "commit": git_commit(repo_path),
+        "path": in_repo(file_path),
+        "language": src.get("language", "chialisp"),
+        **extra,
+    }
+
+
+def source_key(source: dict) -> tuple:
+    """Two sources are the same place if they have the same project, file and part of it"""
+    return (source.get("project"), source.get("path"), source.get("section"), source.get("export"))
+
+
 def get_puzzle_root(repo_path: pathlib.Path, subdir: str) -> pathlib.Path:
     """Return the sub-directory inside the repo that holds the .clsp files.
 
@@ -535,6 +590,10 @@ def build_hardcoded_puzzles():
                 clvm_hash = str(load_clvm_from_file(clsp_path).get_tree_hash())
             if clvm_hash != puzzle_hash:
                 raise ValueError(f"{puzzle['name']}: the clvm compiles to {clvm_hash}, not {puzzle_hash}")
+        source = {"project": puzzle["source"], "hardcoded": True}
+        source.update({key: puzzle[key] for key in ("repo", "commit", "path") if key in puzzle})
+        if "source_url" in puzzle:
+            source["url"] = puzzle["source_url"]
         store[puzzle_hash] = {
             "file_name": None,
             "name": f"--{puzzle['source']}-{puzzle['name']}",
@@ -542,15 +601,17 @@ def build_hardcoded_puzzles():
             "bytecode": prog.to_json_dict(),
             "bytecode_disassembled": bu_disassemble(prog),
             "clvm": puzzle.get("clvm"),
-            **({"source": puzzle["source_url"]} if "source_url" in puzzle else {}),
+            "sources": [source],
         }
     return store
 
 
-def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dirs=None, exclude=(), only=None):
+def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dirs=None, exclude=(), only=None,
+                  source_of=None):
     """Recursively scan *path* for .clsp files, compile them, and store
     metadata in *store* keyed by puzzle_hash. The paths in *exclude* are skipped.
-    With *only* (a set of paths) only those files are compiled, .clvm ones too."""
+    With *only* (a set of paths) only those files are compiled, .clvm ones too.
+    source_of(file_path, **extra) gives the "sources" item of a file (see make_source)."""
     if puzzles_root_folder is None:
         puzzles_root_folder = path
     if include_dirs is None:
@@ -564,7 +625,8 @@ def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dir
             continue
         if os.path.isdir(sub_path):
             prefix_puzzle = f"{prefix}-{file_name}"
-            parse_puzzles(sub_path, store, prefix_puzzle, puzzles_root_folder, include_dirs, exclude, only)
+            parse_puzzles(sub_path, store, prefix_puzzle, puzzles_root_folder, include_dirs, exclude, only,
+                          source_of)
         else:
             if only is not None and pathlib.Path(sub_path) not in only:
                 continue
@@ -588,6 +650,8 @@ def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dir
                 }
                 with open(sub_path, "r") as f:
                     new_puzzle["clvm"] = f.read()
+                if source_of is not None:
+                    new_puzzle["sources"] = [source_of(sub_path)]
 
                 store[new_puzzle["puzzle_hash"]] = new_puzzle
                 print(f"  → {name} ({new_puzzle['puzzle_hash']})")
@@ -601,7 +665,7 @@ def parse_puzzles(path, store, prefix="-", puzzles_root_folder=None, include_dir
 #     committed .rue.hex: a difference means the committed output is out of date
 #   - if rue is not installed, or its version differs from Rue.toml, use the committed
 #     .rue.hex as now and print a warning
-def parse_rue_puzzles(path, store, prefix="-", compiled_dir=None, exclude=()):
+def parse_rue_puzzles(path, store, prefix="-", compiled_dir=None, exclude=(), source_of=None):
     """Recursively scan *path* for .rue files that have their compiled <file>.rue.hex
     committed next to them (or in *compiled_dir*, see SOURCES), and store them in *store*
     keyed by puzzle_hash. The paths in *exclude* are skipped.
@@ -613,7 +677,7 @@ def parse_rue_puzzles(path, store, prefix="-", compiled_dir=None, exclude=()):
             print(f"  excluded: {sub_path}")
             continue
         if os.path.isdir(sub_path):
-            parse_rue_puzzles(sub_path, store, f"{prefix}-{file_name}", compiled_dir, exclude)
+            parse_rue_puzzles(sub_path, store, f"{prefix}-{file_name}", compiled_dir, exclude, source_of)
             continue
         if not file_name.endswith(".rue"):
             continue
@@ -647,12 +711,13 @@ def parse_rue_puzzles(path, store, prefix="-", compiled_dir=None, exclude=()):
             "bytecode": prog.to_json_dict(),
             "bytecode_disassembled": bu_disassemble(prog),
             "clvm": source,  # the Rue source, not chialisp
-            "language": "rue",
         }
+        if source_of is not None:
+            store[puzzle_hash]["sources"] = [source_of(sub_path, compiled=hex_path)]
         print(f"  → {name} ({puzzle_hash})")
 
 
-def parse_chialisp23_puzzles(repo_path, puzzle_root, store, prefix, exclude=()):
+def parse_chialisp23_puzzles(repo_path, puzzle_root, store, prefix, exclude=(), source_of=None):
     """Compile the .clsp files under *puzzle_root* with the modern compiler (chialisp
     package): files that start with (include *standard-cl-23*) use modules, (import a.b)
     is a file of the repo, searched from the repo root and from clsp/ (like chia-gaming's
@@ -707,6 +772,10 @@ def parse_chialisp23_puzzles(repo_path, puzzle_root, store, prefix, exclude=()):
                         "bytecode_disassembled": bu_disassemble(prog),
                         "clvm": clsp.read_text(),
                     }
+                    if source_of is not None:
+                        # rel is a path of the temporary copy: the same path in the clone
+                        extra = {} if o.name == "out.hex" else {"export": stem}
+                        store[puzzle_hash]["sources"] = [source_of(repo_path / rel, **extra)]
                     print(f"  → {name} ({puzzle_hash})")
         finally:
             os.chdir(cwd)
@@ -753,7 +822,7 @@ def markdown_code_block(md_path, section):
     raise ValueError(f"no code block under '{section}' in {md_path}")
 
 
-def parse_markdown_puzzles(src, repo_path, store, include_dirs):
+def parse_markdown_puzzles(src, repo_path, store, include_dirs, source_of=None):
     """Compile the puzzles of src["markdown_puzzles"] (see SOURCES) into *store*"""
     for puzzle in src["markdown_puzzles"]:
         md_path = repo_path / puzzle["file"]
@@ -776,8 +845,9 @@ def parse_markdown_puzzles(src, repo_path, store, include_dirs):
             "bytecode": prog.to_json_dict(),
             "bytecode_disassembled": bu_disassemble(prog),
             "clvm": source,
-            "markdown_section": puzzle["section"],  # where the puzzle is in file_name
         }
+        if source_of is not None:
+            store[puzzle_hash]["sources"] = [source_of(md_path, section=puzzle["section"])]
         print(f"  → {name} ({puzzle_hash})")
 
 
@@ -786,18 +856,42 @@ def parse_markdown_puzzles(src, repo_path, store, include_dirs):
 CATALOG_FILE = SCRIPT_DIR / "puzzles.json"
 
 
+# fields of the old catalog entries that are now in "sources"
+LEGACY_SOURCE_FIELDS = ("language", "markdown_section", "source")
+
+
+def merge_sources(entry: dict, new_sources: list) -> bool:
+    """Add new_sources to entry["sources"]: a place already there (source_key) gets the new
+    commit, a new place is added. The legacy fields go (they are in the sources now).
+    Return True if the entry changed."""
+    sources = [dict(s) for s in entry.get("sources", [])]
+    for new in new_sources:
+        same = next((s for s in sources if source_key(s) == source_key(new)), None)
+        if same is None:
+            sources.append(new)
+        else:
+            same.update(new)
+    changed = sources != entry.get("sources") or any(f in entry for f in LEGACY_SOURCE_FIELDS)
+    entry["sources"] = sources
+    for field in LEGACY_SOURCE_FIELDS:
+        entry.pop(field, None)
+    return changed
+
+
 def merge_into_catalog(catalog: dict, new_puzzles: dict, found_date: str):
-    """Add new_puzzles to catalog, nothing in catalog is changed or deleted.
-    - puzzle hash already in the catalog: skipped
+    """Add new_puzzles to catalog, nothing in catalog is deleted.
+    - puzzle hash already in the catalog: only its "sources" are updated (merge_sources)
     - name already in the catalog with another puzzle hash (the source changed): added
       as a new puzzle named <name>_CHANGED_FOUND_ON_<yy_mm_dd>
     - new name: added
-    Return (added, modified, skipped) lists of names."""
+    Return (added, modified, skipped, sources_updated) lists of names."""
     names = {entry["name"] for entry in catalog.values()}
-    added, modified, skipped = [], [], []
+    added, modified, skipped, sources_updated = [], [], [], []
     for puzzle_hash, puzzle in new_puzzles.items():
         if puzzle_hash in catalog:
             skipped.append(puzzle["name"])
+            if merge_sources(catalog[puzzle_hash], puzzle.get("sources", [])):
+                sources_updated.append(catalog[puzzle_hash]["name"])
             continue
         puzzle = dict(puzzle)
         if puzzle["name"] in names:
@@ -812,7 +906,7 @@ def merge_into_catalog(catalog: dict, new_puzzles: dict, found_date: str):
             added.append(puzzle["name"])
         names.add(puzzle["name"])
         catalog[puzzle_hash] = puzzle
-    return added, modified, skipped
+    return added, modified, skipped, sources_updated
 
 
 # Main
@@ -833,6 +927,7 @@ if __name__ == "__main__":
 
         repo_catalog = {}
         exclude = {puzzle_root / entry for entry in src.get("exclude", [])}
+        source_of = lambda file_path, src=src, repo_path=repo_path, **extra: make_source(src, repo_path, file_path, **extra)
         if src.get("language", "chialisp") == "rue":
             compiled_dir = repo_path / src["compiled_dir"] if "compiled_dir" in src else None
             parse_rue_puzzles(
@@ -841,11 +936,12 @@ if __name__ == "__main__":
                 prefix=f"--{src['name']}",
                 compiled_dir=compiled_dir,
                 exclude=exclude,
+                source_of=source_of,
             )
         elif src.get("language") == "chialisp-23":
-            parse_chialisp23_puzzles(repo_path, puzzle_root, repo_catalog, f"--{src['name']}", exclude)
+            parse_chialisp23_puzzles(repo_path, puzzle_root, repo_catalog, f"--{src['name']}", exclude, source_of)
         elif "markdown_puzzles" in src:
-            parse_markdown_puzzles(src, repo_path, repo_catalog, resolve_include_dirs(src, repo_path))
+            parse_markdown_puzzles(src, repo_path, repo_catalog, resolve_include_dirs(src, repo_path), source_of)
         else:
             include_dirs = resolve_include_dirs(src, repo_path)
             if include_dirs:
@@ -857,6 +953,7 @@ if __name__ == "__main__":
                 include_dirs=include_dirs,
                 exclude=exclude,
                 only={puzzle_root / entry for entry in src["files"]} if "files" in src else None,
+                source_of=source_of,
             )
 
         out_file = SCRIPT_DIR / f"{src['name']}_puzzles.json"
@@ -864,13 +961,22 @@ if __name__ == "__main__":
             json.dump(repo_catalog, f, indent=4)
         print(f"Wrote {out_file} ({len(repo_catalog)} puzzles)")
 
-        all_puzzles.update(repo_catalog)
+        # a puzzle hash built by more sources keeps all their places
+        for puzzle_hash, puzzle in repo_catalog.items():
+            if puzzle_hash in all_puzzles:
+                merge_sources(all_puzzles[puzzle_hash], puzzle["sources"])
+            else:
+                all_puzzles[puzzle_hash] = puzzle
 
     print("\n=== hardcoded ===")
     hardcoded = build_hardcoded_puzzles()
     for puzzle in hardcoded.values():
         print(f"  → {puzzle['name']} ({puzzle['puzzle_hash']})")
-    all_puzzles.update(hardcoded)
+    for puzzle_hash, puzzle in hardcoded.items():
+        if puzzle_hash in all_puzzles:
+            merge_sources(all_puzzles[puzzle_hash], puzzle["sources"])
+        else:
+            all_puzzles[puzzle_hash] = puzzle
 
     # Combined catalog (backwards-compatible name): merge into the existing file
     catalog = {}
@@ -878,16 +984,22 @@ if __name__ == "__main__":
         with open(CATALOG_FILE, "r") as f:
             catalog = json.load(f)
     count_before = len(catalog)
-    added, modified, skipped = merge_into_catalog(catalog, all_puzzles, date.today().strftime("%y_%m_%d"))
+    added, modified, skipped, sources_updated = merge_into_catalog(catalog, all_puzzles,
+                                                                   date.today().strftime("%y_%m_%d"))
 
     print(f"\n=== {CATALOG_FILE.name} ===")
-    print(f"  already in the catalog: {len(skipped)}")
+    print(f"  already in the catalog: {len(skipped)} ({len(sources_updated)} with new or changed sources)")
+    no_source = [entry["name"] for entry in catalog.values() if not entry.get("sources")]
+    if no_source:
+        print(f"  no source (not built by any source today): {len(no_source)}")
+        for name in no_source:
+            print(f"    {name}")
     for name in added:
         print(f"  [new] {name}")
     for name in modified:
         print(f"  [modified source, added as new puzzle] {name}")
 
-    if added or modified:
+    if added or modified or sources_updated:
         tmp_file = CATALOG_FILE.with_name(CATALOG_FILE.name + ".tmp")
         with open(tmp_file, "w") as f:
             json.dump(catalog, f, indent=4)
