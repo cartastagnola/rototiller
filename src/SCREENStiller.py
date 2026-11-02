@@ -5709,9 +5709,29 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
         screenState.pending_action = []
 
 
-REORG_VIEWS = ['timeline', 'by depth']
+REORG_VIEWS = ['forks', 'depth', 'by depth']
 REORG_REFRESH = 30  # sec between two scans of the last blocks
-REORG_CHART_MAX_ROWS = 8
+REORG_SCALE = '6h'  # column scale when a heat map opens: a month of forks in ~120 columns
+REORG_TABLE_LEGEND = ['time', 'ago', 'fork at height', 'depth', 'orphaned blocks', 'orphaned tip']
+REORG_TABLE_WIDTHS = [None, None, None, None, None, 70]
+
+REORG_FORK_RAMP = HEAT.ramp_from_seed((230, 120, 50), 7, (0, 10, 45))
+REORG_FORK_STYLE = HEAT.HeatmapStyle(
+    REORG_FORK_RAMP,
+    zero=(20, 30, 65),
+    count_name='forks',
+    names=[((20, 30, 65), 'no fork'), (REORG_FORK_RAMP[len(REORG_FORK_RAMP) // 2], '½ busiest'),
+           (REORG_FORK_RAMP[-1], 'busiest')])
+# depth 1 is the common fork, so the colors are on a fixed scale: 3 blocks and more is deep
+REORG_DEPTH_RAMP = HEAT.make_ramp([(70, 130, 200), (240, 170, 40), (235, 75, 45)], 7)
+REORG_DEPTH_STYLE = HEAT.HeatmapStyle(
+    REORG_DEPTH_RAMP,
+    fixed_max=3,
+    zero=(20, 30, 65),
+    over=(245, 245, 238),
+    count_name='deepest depth',
+    names=[((20, 30, 65), 'no fork'), (REORG_DEPTH_RAMP[2], 'depth 1'),
+           (REORG_DEPTH_RAMP[-1], 'depth 3'), ((245, 245, 238), '4+')])
 
 
 def human_age_days(seconds: float) -> str:
@@ -5722,68 +5742,45 @@ def human_age_days(seconds: float) -> str:
     return f"{seconds // 86400}d {seconds % 86400 // 3600:02d}h"
 
 
-def reorg_depth_color(screenState: ScreenState, depth: int):
-    if depth <= 1:
-        return screenState.colorPairs["body"]
-    if depth == 2:
-        return screenState.colorPairs["xch"]
-    return screenState.colorPairs["error"]
-
-
-def draw_reorg_timeline(win, screenState: ScreenState, pos: UIgraph.Point, width: int, chart_rows: int,
-                        forks: list, selected):
-    """Forks on a time axis, from the oldest one to now: one column for each time bucket,
-    the bar is the depth of the deepest fork in it. A ▼ marks the selected fork.
-    Returns the number of lines used"""
-    P_text = screenState.colorPairs["body"]
-    P_title = screenState.colorPairs["xch"]
-    label_width = 5  # depth labels on the left, then the axis
-    cols = max(width - label_width - 1, 10)
-
-    now = datetime.now().timestamp()
-    timestamps = [f.timestamp for f in forks if f.timestamp is not None]
-    start = min(timestamps) if timestamps else now - 86400
-    span = max(now - start, 3600) * 1.02  # a small margin before the oldest fork
-    start = now - span
-
-    def column(timestamp):
-        return min(int((timestamp - start) / span * cols), cols - 1)
-
-    deepest = {}
+def reorg_table_rows(forks, now: float):
+    """Rows and keys of the fork table, the same columns in the screen and in a heat map cell"""
+    rows = []
+    keys = []
     for f in forks:
-        if f.timestamp is not None:
-            c = column(f.timestamp)
-            deepest[c] = max(deepest.get(c, 0), f.depth)
+        rows.append([
+            UTILS.timestamp_to_date(f.timestamp) if f.timestamp else '-',
+            human_age_days(now - f.timestamp) if f.timestamp else '-',
+            f"{f.fork_height:,}",
+            f.depth,
+            f.orphaned_blocks,
+            '0x' + f.tip_hash.hex(),
+        ])
+        keys.append(f.tip_hash.hex())
+    return rows, keys
 
-    x0 = pos.x + label_width
-    # marker row
-    if selected is not None and selected.timestamp is not None:
-        put_text(win, UIgraph.Point(x0 + column(selected.timestamp), pos.y), '▼', P_title, True)
-    # bars, from the top row down
-    for r in range(chart_rows):
-        level = chart_rows - r
-        y = pos.y + 1 + r
-        label = f"{level}+" if level == chart_rows and max(deepest.values(), default=0) > chart_rows else str(level)
-        put_text(win, UIgraph.Point(pos.x, y), f"{label:>3} │", P_text)
-        for c, depth in deepest.items():
-            if depth >= level:
-                put_text(win, UIgraph.Point(x0 + c, y), '█', reorg_depth_color(screenState, depth))
 
-    # time axis with a tick every few columns
-    y_axis = pos.y + 1 + chart_rows
-    # dates only when the ticks are at least one day apart
-    tick_every = 11
-    date_format = '%m-%d'
-    if tick_every / cols * span < 86400:
-        tick_every = 17
-        date_format = '%m-%d %H:%M'
-    axis = ['─'] * cols
-    for c in range(0, cols - tick_every // 2, tick_every):
-        axis[c] = '┬'
-        tick_time = datetime.fromtimestamp(start + c / cols * span).strftime(date_format)
-        put_text(win, UIgraph.Point(x0 + c, y_axis + 1), tick_time, P_text)
-    put_text(win, UIgraph.Point(pos.x, y_axis), '    └' + ''.join(axis), P_text)
-    return chart_rows + 3
+def reorg_time_series(main_scope: Scope):
+    """The forks as a time series (time, depth), rebuilt after each scan of the node DB"""
+    scanner = WDB.REORG_SCANNER
+    data = main_scope.data
+    key = (scanner.last_scan, len(scanner.forks))
+    if data.get('reorg_series_key') != key:
+        pairs = [(f.timestamp, f.depth) for f in scanner.forks if f.timestamp is not None]
+        # the first scan reads the whole DB, so the series has data from the beginning
+        data['reorg_series'] = HEAT.TimeSeries(pairs, start=0)
+        data['reorg_series_key'] = key
+    return data['reorg_series']
+
+
+def scopeAction_open_reorg_cell(scope: Scope, screenState: ScreenState, *args):
+    """enter on a cell of a reorg heat map: the forks of the cell"""
+    t0, t1 = scope.data['cell']
+    new_scope = Scope(f"reorg_cell_{int(t0)}_{int(t1)}", screen_reorg_cell, screenState)
+    new_scope.parent_scope = scope
+    new_scope.data['cell'] = (t0, t1)
+    new_scope.exec = None
+    screenState.activeScope = new_scope
+    return new_scope
 
 
 def screen_reorgs(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
@@ -5844,65 +5841,55 @@ def screen_reorgs(stdscr, keyboardState, screenState, fullNodeState: FullNodeSta
     view = REORG_VIEWS[main_scope.cursor_x % len(REORG_VIEWS)]
     pos_tab_title = pos
     pos += UIgraph.Point(0, 2)
-    screenState.footer_text += "| switch view=←→ "
+    if screenState.activeScope is main_scope:
+        screenState.footer_text += "| switch view=←→ "
 
-    if view == 'by depth':
-        forks.sort(key=lambda f: (f.depth, f.tip_height), reverse=True)
-
-    legend = ['time', 'ago', 'fork at height', 'depth', 'orphaned blocks', 'orphaned tip']
     now = datetime.now().timestamp()
-    rows = []
-    keys = []
-    for f in forks:
-        rows.append([
-            UTILS.timestamp_to_date(f.timestamp) if f.timestamp else '-',
-            human_age_days(now - f.timestamp) if f.timestamp else '-',
-            f"{f.fork_height:,}",
-            f.depth,
-            f.orphaned_blocks,
-            '0x' + f.tip_hash.hex(),
-        ])
-        keys.append(f.tip_hash.hex())
-
     tab_name = f"reorgs_{view.replace(' ', '_')}"
-    selected = None
-    if view == 'timeline':
-        # the line under the tabs, the chart has no border of its own
-        put_text(win, pos, '─' * (main_win_size.x - 2), P_text)
-        chart_rows = min(max(deepest, 3), REORG_CHART_MAX_ROWS)
-        tab_scope = main_scope.sub_scopes.get(f"{main_scope.id}_{tab_name}")  # the name create_tab gives it
-        if tab_scope is not None and forks:
-            selected = forks[tab_scope.cursor % len(forks)]
-        used = draw_reorg_timeline(win, screenState, pos + UIgraph.Point(0, 1), main_win_size.x - 2,
-                                   chart_rows, forks, selected)
-        pos += UIgraph.Point(0, used + 2)
-
-    if rows:
-        tab_size = UIgraph.Point(main_win_size.x - 2, max(main_win_size.y - pos.y - 2, 5))
-        ELEMENTS.create_tab(win,
-                            screenState,
-                            main_scope,
-                            tab_name,
-                            rows,
-                            keys,
-                            fresh_table_colors(rows),
-                            False,
-                            pos,
-                            tab_size,
-                            keyboardState,
-                            scopeAction_nothing,
-                            True,
-                            False,
-                            legend,
-                            [None, None, None, None, None, 70])
+    if view in ('forks', 'depth'):
+        # the half line under the tabs goes on to the right end of the heat map, which starts right under it
+        put_text(win, pos, '▀' * (main_win_size.x - 2), screenState.colorPairs["tab_dark_bg"])
+        pos += UIgraph.Point(0, 1)
+        views = main_scope.data.setdefault('views', {})
+        if view not in views:
+            views[view] = HEAT.HeatmapView(HEAT.SCALE_INDEX[REORG_SCALE])
+        style = REORG_FORK_STYLE if view == 'forks' else REORG_DEPTH_STYLE
+        value_method = 'count' if view == 'forks' else 'max_value'
+        ELEMENTS.create_time_heatmap(
+            win, screenState, keyboardState, main_scope, tab_name, pos,
+            UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2),
+            reorg_time_series(main_scope), views[view], style, scopeAction_open_reorg_cell,
+            value_method=value_method)
     else:
-        put_text(win, pos + UIgraph.Point(0, 1), "no fork in the node DB", P_text)
+        forks.sort(key=lambda f: (f.depth, f.tip_height), reverse=True)
+        rows, keys = reorg_table_rows(forks, now)
+        if rows:
+            tab_size = UIgraph.Point(main_win_size.x - 2, max(main_win_size.y - pos.y - 2, 5))
+            ELEMENTS.create_tab(win,
+                                screenState,
+                                main_scope,
+                                tab_name,
+                                rows,
+                                keys,
+                                fresh_table_colors(rows),
+                                False,
+                                pos,
+                                tab_size,
+                                keyboardState,
+                                scopeAction_nothing,
+                                True,
+                                False,
+                                list(REORG_TABLE_LEGEND),
+                                column_widths=list(REORG_TABLE_WIDTHS))
+        else:
+            put_text(win, pos + UIgraph.Point(0, 1), "no fork in the node DB", P_text)
 
     P_tab_title = screenState.colorPairs["title"]
     P_tab_soft = screenState.colorPairs["tab_soft"]
     pos = pos_tab_title
     for name in REORG_VIEWS:
-        text = f" {name.upper()} " if name == 'timeline' else f" {name.upper()} ({len(forks)}) "
+        count = f" ({len(forks)})" if name in ('forks', 'by depth') else ''
+        text = f" {name.upper()}{count} "
         selected_tab = name == view
         P_used = P_title if selected_tab else P_tab_title
         ELEMENTS.create_text_double_space(win, screenState, pos, text, P_used, C_background, 3, True)
@@ -5914,12 +5901,76 @@ def screen_reorgs(stdscr, keyboardState, screenState, fullNodeState: FullNodeSta
         pos += UIgraph.Point(len(text) + 2, 0)
 
 
+def screen_reorg_cell(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """The forks of a heat map cell, from the blocks of the node DB that are not in the main chain"""
+
+    height = screenState.screen_size.y
+    width = screenState.screen_size.x
+
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update()
+
+    win = createFullSubWin(stdscr, screenState, height, width)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
+
+    C_background = screenState.colors["background"]
+    P_text = screenState.colorPairs["body"]
+    P_title = screenState.colorPairs["xch"]
+
+    pos = UIgraph.Point(1, 1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'reorgs in a cell', P_title, C_background,
+                                      3, True, inv_color=False)
+    pos += UIgraph.Point(0, 3)
+
+    t0, t1 = main_scope.data['cell']
+    scanner = WDB.REORG_SCANNER
+    forks = [f for f in scanner.forks if f.timestamp is not None and t0 <= f.timestamp < t1]
+    forks.sort(key=lambda f: f.timestamp)
+    deepest = max((f.depth for f in forks), default=0)
+    text = (f"{ELEMENTS.heatmap_time_text(t0, t1 - t0)} → {ELEMENTS.heatmap_time_text(t1, t1 - t0)}"
+            f" | {len(forks)} forks | deepest depth: {deepest}")
+    put_text(win, pos, text, P_text)
+    pos += UIgraph.Point(0, 1)
+    missing = sum(1 for f in scanner.forks if f.timestamp is None)
+    if missing:
+        put_text(win, pos, f"{missing} forks have no block time and are only in the by depth table", P_text)
+        pos += UIgraph.Point(0, 1)
+    pos += UIgraph.Point(0, 1)
+
+    now = datetime.now().timestamp()
+    rows, keys = reorg_table_rows(forks, now)
+    tab_name = 'reorg_cell_forks'
+    tab_scope = list_tab_scope(screenState, main_scope, tab_name, scopeAction_nothing)
+    if rows:
+        ELEMENTS.create_tab(win,
+                            screenState,
+                            main_scope,
+                            tab_name,
+                            rows,
+                            keys,
+                            fresh_table_colors(rows),
+                            False,
+                            pos,
+                            UIgraph.Point(main_win_size.x - 2, max(main_win_size.y - pos.y - 2, 5)),
+                            keyboardState,
+                            scopeAction_nothing,
+                            True,
+                            False,
+                            list(REORG_TABLE_LEGEND),
+                            column_widths=list(REORG_TABLE_WIDTHS),
+                            prepped_scope=tab_scope)
+    else:
+        put_text(win, pos + UIgraph.Point(0, 1), "no fork in this cell", P_text)
+
+
 # the chia log: debug.log and its rotated files (debug.log.1 is the newest of them)
 CHIA_LOG = CHIALOG.CHIA_LOG
 CHIA_LOG_PATHS = CHIALOG.CHIA_LOG_PATHS
 HEATMAP_REFRESH = 5  # seconds between two reads of the new log lines
-HEATMAP_DETAIL_CONTEXT = 40  # log lines shown before the first and after the last event of a cell
-HEATMAP_DETAIL_MAX = 3000  # most log lines and events shown for a cell
+LOG_LINES_MAX = 5000  # most log lines shown for each filter of a selection
 
 # the harvester checks its plots once for each signage point, every 9.375 s; the colors are the
 # ones of chiaharvestgraph: red none, orange too few, yellow as expected, white more
