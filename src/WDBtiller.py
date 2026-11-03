@@ -3588,13 +3588,41 @@ class Fork:
         return self.tip_height - self.fork_height
 
 
+# version of the DB_FULL_NODE tables: an older DB is dropped, its data is read again from the node DB
+FULL_NODE_DB_VERSION = 1
+
+
+def create_full_node_db(conn):
+    """The tables of DB_FULL_NODE: what rototiller works out from the node DB, kept between runs"""
+    if conn.execute("PRAGMA user_version").fetchone()[0] < FULL_NODE_DB_VERSION:
+        for table in ('reorg_orphans', 'reorg_timestamps', 'reorg_scan_state'):
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.execute(f"PRAGMA user_version = {FULL_NODE_DB_VERSION}")
+    # the blocks out of the main chain (ReorgScanner.orphans)
+    conn.execute("CREATE TABLE IF NOT EXISTS reorg_orphans ("
+                 "header_hash BLOB PRIMARY KEY, height INTEGER, prev_hash BLOB)")
+    conn.execute("CREATE INDEX IF NOT EXISTS reorg_orphans_height ON reorg_orphans (height)")
+    # the timestamp of each fork tip (ReorgScanner.timestamps), it does not change
+    conn.execute("CREATE TABLE IF NOT EXISTS reorg_timestamps ("
+                 "tip_hash BLOB PRIMARY KEY, timestamp INTEGER)")
+    # one row: the main chain peak of the last scan and its header hash, to see if the node DB
+    # is still the same chain (not resynced or replaced)
+    conn.execute("CREATE TABLE IF NOT EXISTS reorg_scan_state ("
+                 "id INTEGER PRIMARY KEY CHECK (id = 0), scanned_height INTEGER, header_hash BLOB)")
+    conn.commit()
+
+
 class ReorgScanner:
     """Find the forks in the node DB: the blocks of full_blocks with in_main_chain = 0.
     The first scan reads the whole table (no index on in_main_chain = 0, ~30 sec cold),
-    the next ones only the last blocks, with the height index"""
+    the next ones only the last blocks, with the height index.
+    The state is saved in DB_FULL_NODE after each scan and loaded at the first refresh, so the whole
+    table is read only once; it is read again if the saved peak is not in the node's main chain"""
     RESCAN_DEPTH = 64  # a reorg can flip the main chain blocks under the last scanned height
 
-    def __init__(self):
+    def __init__(self, db_path=CONF.DB_FULL_NODE):
+        self.db_path = db_path
+        self.loaded = False  # the saved state was looked for
         self.lock = threading.Lock()
         self.orphans = {}  # header_hash -> (height, prev_hash)
         self.timestamps = {}  # tip_hash -> timestamp, they do not change
@@ -3609,12 +3637,20 @@ class ReorgScanner:
         if not self.lock.acquire(blocking=False):
             return False
         try:
-            self.status = 'scanning the whole node DB' if self.scanned_height is None else 'scanning the last blocks'
             db_conn = get_connection(CONF.DB_BLOCKCHAIN_RO)
+            save_conn = get_connection(str(self.db_path))
             try:
-                self._scan(db_conn)
+                if not self.loaded:
+                    self.status = 'loading the saved forks'
+                    create_full_node_db(save_conn)
+                    self._load(db_conn, save_conn)
+                    self.loaded = True
+                self.status = 'scanning the whole node DB' if self.scanned_height is None else 'scanning the last blocks'
+                from_height = self._scan(db_conn)
+                self._save(db_conn, save_conn, from_height)
             finally:
                 db_conn.close()
+                save_conn.close()
             self.error = None
             self.status = 'done'
         except Exception as e:
@@ -3629,6 +3665,7 @@ class ReorgScanner:
     def _scan(self, db_conn):
         peak = db_conn.execute("SELECT max(height) FROM full_blocks WHERE in_main_chain = 1").fetchone()[0] or 0
         if self.scanned_height is None:
+            from_height = None
             rows = db_conn.execute("SELECT header_hash, prev_hash, height FROM full_blocks "
                                    "WHERE in_main_chain = 0").fetchall()
             orphans = {}
@@ -3662,6 +3699,43 @@ class ReorgScanner:
         self.orphans = orphans
         self.forks = forks
         self.scanned_height = peak
+        return from_height
+
+    @staticmethod
+    def _main_chain_hash(db_conn, height):
+        row = db_conn.execute("SELECT header_hash FROM full_blocks WHERE height = ? AND in_main_chain = 1",
+                              (height,)).fetchone()
+        return bytes(row[0]) if row else None
+
+    def _load(self, db_conn, save_conn):
+        """The state of the last run, if its peak is still in the main chain of the node DB"""
+        row = save_conn.execute("SELECT scanned_height, header_hash FROM reorg_scan_state WHERE id = 0").fetchone()
+        if row is None or row[0] is None:
+            return
+        scanned_height, header_hash = row
+        if header_hash is None or self._main_chain_hash(db_conn, scanned_height) != bytes(header_hash):
+            return  # another chain (resynced or replaced node DB): scan it all again
+        self.orphans = {bytes(h): (height, bytes(prev))
+                        for h, height, prev in save_conn.execute("SELECT header_hash, height, prev_hash FROM reorg_orphans")}
+        self.timestamps = {bytes(h): t for h, t in save_conn.execute("SELECT tip_hash, timestamp FROM reorg_timestamps")}
+        self.scanned_height = scanned_height
+
+    def _save(self, db_conn, save_conn, from_height):
+        """Write the scan: all the orphans after a whole scan, else the ones above from_height"""
+        with save_conn:
+            if from_height is None:
+                save_conn.execute("DELETE FROM reorg_orphans")
+                rows = self.orphans.items()
+            else:
+                save_conn.execute("DELETE FROM reorg_orphans WHERE height > ?", (from_height,))
+                rows = [(h, v) for h, v in self.orphans.items() if v[0] > from_height]
+            save_conn.executemany("INSERT OR REPLACE INTO reorg_orphans (header_hash, height, prev_hash) "
+                                  "VALUES (?, ?, ?)", [(h, height, prev) for h, (height, prev) in rows])
+            save_conn.executemany("INSERT OR IGNORE INTO reorg_timestamps (tip_hash, timestamp) VALUES (?, ?)",
+                                  list(self.timestamps.items()))
+            save_conn.execute("INSERT OR REPLACE INTO reorg_scan_state (id, scanned_height, header_hash) "
+                              "VALUES (0, ?, ?)",
+                              (self.scanned_height, self._main_chain_hash(db_conn, self.scanned_height)))
 
     @staticmethod
     def _timestamp_at(db_conn, height):

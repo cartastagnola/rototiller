@@ -51,6 +51,8 @@ DB_WDB = 'DBiller_wallets.db'  # TODO: rename to DB_CACHED_WALLET
 DB_CACHED_BLOCKCHAIN = DB_FOLDER / 'DBiller_cached_blockchain.db'
 DB_SB = 'db/DBiller_spend_bundles.db'
 DB_PUZZLES = DB_FOLDER / 'DBiller_puzzles.db'
+# what rototiller works out from the node DB and keeps between runs (e.g. the forks, ReorgScanner)
+DB_FULL_NODE = DB_FOLDER / 'DBiller_full_node.db'
 
 blockchain_db_path = config["full_node"]["database_path"].replace("CHALLENGE", chain_network)
 # database_path in config.yaml is relative to the chia root (e.g. db/blockchain_v2_CHALLENGE.sqlite)
