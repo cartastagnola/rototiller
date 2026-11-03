@@ -3,10 +3,6 @@
         "name": "unknown puzzle",
         "family": "UNKNOWN"
     },
-    "UKNOWN": {
-        "name": "uknown puzzle",
-        "family": "UNKNOWN"
-    },
     "NFT_V1": {
         "name": "NFT v1.0",
         "family": "SINGLETON"

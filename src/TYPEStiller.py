@@ -103,63 +103,13 @@ class CacheCoinRecordType(IntEnum):
     PHANTOM_SPENT = 2  # coin spent with no child
 
 
-    ## class CoinType
-    ## Dynamically build CoinType StrEnum from puzzle_types.json.
-    #_puzzle_types = CONF.PUZZLE_TYPES or {}
-    #
-    ## Validate every puzzle_type referenced in layered_puzzles.json exists in puzzle_types.json
-    #_layered_types = set()
-    #for entry in (CONF.KNOWN_LAYERED_PUZZLES or {}).values():
-    #    pt = entry.get('puzzle_type')
-    #    if pt:
-    #        _layered_types.add(pt)
-    #
-    #for pt in _layered_types:
-    #    if pt not in _puzzle_types:
-    #        raise ValueError(
-    #            f"layered_puzzles.json references puzzle_type {pt!r} which is missing from puzzle_types.json"
-    #        )
-    #
-    #_coin_type_members = {key.upper(): data['name'] for key, data in sorted(_puzzle_types.items())}
-    #_coin_type_members['UNKNOWN'] = 'UNKNOWN'
-    #CoinType = StrEnum('CoinType', _coin_type_members)
-# eg:
-# CoinType.STD
-# CoinType.CAT_V2
-# CoinType.NFT_V1
-
-
-_puzzle_types = CONF.PUZZLE_TYPES or {}
-
-# Build CoinType from puzzle_types.json keys. The enum value is the key itself,
-# which is the same string stored as puzzle_type in layered_puzzles.json, so
-# CoinType(puzzle_type) works. The "name" field is only for display.
-CoinType = StrEnum(
-    'CoinType',
-    {key.upper(): key for key in sorted(_puzzle_types)}
-)
-
-# CoinType -> human readable name
-COIN_TYPE_NAMES = {
-    CoinType(key): data['name'] for key, data in _puzzle_types.items()
-}
-
-# Build CoinFamily from unique family values in puzzle_types.json
-_families = sorted({data['family'] for data in _puzzle_types.values()})
-CoinFamily = StrEnum('CoinFamily', {fam: fam for fam in _families})
-
-# Build CoinType -> CoinFamily mapping
-_COIN_TYPE_TO_FAMILY = {
-    getattr(CoinType, key.upper()): CoinFamily(data['family'])
-    for key, data in _puzzle_types.items()
-    if hasattr(CoinType, key.upper())
-}
-
-# Add UNKNOWN -> UNKNOWN mapping if not present
-# (UKNOWN is the old misspelled member, kept until its users are renamed)
-for _unknown_type in (CoinType.UNKNOWN, CoinType.UKNOWN):
-    if _unknown_type not in _COIN_TYPE_TO_FAMILY:
-        _COIN_TYPE_TO_FAMILY[_unknown_type] = CoinFamily.UNKNOWN
+class PuzzleStatus(StrEnum):
+    """Is the layer combination of a puzzle in the catalog (resources/puzzles/catalog)?
+    The names, puzzle types and families of the catalog are for people: they are edited by
+    hand and can be renamed at any time, so the code never decides anything from them. To
+    know what a coin is, the code checks the mod hashes of its layers."""
+    KNOWN = 'known'
+    UNKNOWN = 'unknown'
 
 
 @dataclass
@@ -167,8 +117,9 @@ class PuzzleRecord:
     puzzle_and_sol_rpc: str
     puzzle_disassembled: str
     unrolled_puzzles: str
-    layered_puzzle_type: CoinType
+    layered_puzzle_type: str  # the puzzle type text of the catalog, shown only
     layered_puzzle_name: str
+    layered_puzzle_status: PuzzleStatus
 
 
 @dataclass

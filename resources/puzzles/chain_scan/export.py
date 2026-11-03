@@ -3,6 +3,7 @@ Run from the repo root: .venv/bin/python resources/puzzles/chain_scan/export.py 
 import json, sqlite3, sys, collections
 sys.path.insert(0, '.')
 import src.SCANtiller as SCAN
+import src.TYPEStiller as TYPES
 from chia.types.blockchain_format.program import Program as PyProgram
 
 D = sys.argv[1]
@@ -37,7 +38,7 @@ for key, (subs, count, first, last, coin, ex_h, _) in sorted(merged.items(), key
     elif key == SCAN.QUOTED_CONDITIONS_KEY: kind = 'quoted'
     elif len(subs) == 1: kind = '1 layer'
     else: kind = '2+ layers'
-    ps.append(dict(key=key, kind=kind, known=status == SCAN.STATUS_KNOWN, name=name, family=family,
+    ps.append(dict(key=key, kind=kind, known=status == TYPES.PuzzleStatus.KNOWN, name=name, family=family,
                    layers=layers, layer_hashes=subs, seen=count, first_height=first,
                    last_height=last, example_coin=coin, example_height=ex_h))
 json.dump(ps, open(f"{D}/all_puzzles.json", 'w'), indent=1)

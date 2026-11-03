@@ -3344,6 +3344,8 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         values.append(puzzle_record.layered_puzzle_type)
         labels.append('-puzzle_name')
         values.append(puzzle_record.layered_puzzle_name)
+        labels.append('-puzzle_status')
+        values.append(puzzle_record.layered_puzzle_status)
 
         labels.append('-sub_puzzle_list')
         values.append('')
@@ -5338,7 +5340,7 @@ def next_transaction_block_text(main_scope: Scope, screenState: ScreenState, ful
 
 
 # the two lists of the puzzles screen: status -> label, tab switches between them
-PUZZLE_VIEWS = {SCAN.STATUS_NEW: 'unknown', SCAN.STATUS_KNOWN: 'known'}
+PUZZLE_VIEWS = {TYPES.PuzzleStatus.UNKNOWN: 'unknown', TYPES.PuzzleStatus.KNOWN: 'known'}
 
 
 def scopeAction_open_puzzle(scope: Scope, screenState: ScreenState, puzzle_key: str = None):
@@ -5403,7 +5405,7 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     pos += UIgraph.Point(0, 2)
     screenState.footer_text += "| switch list=←→ "
 
-    if view == SCAN.STATUS_KNOWN:
+    if view == TYPES.PuzzleStatus.KNOWN:
         legend = ['name', 'family', 'layers', 'seen', 'first seen in', 'last seen']
         column_widths = [30, 12, 70, None, None, None]
     else:
@@ -5421,7 +5423,7 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
             e.source,
             UTILS.timestamp_to_date(e.last_seen),
         ]
-        if view == SCAN.STATUS_KNOWN:
+        if view == TYPES.PuzzleStatus.KNOWN:
             row = [name or '-', family or '-'] + row
         rows.append(row)
         keys.append(e.puzzle_key)

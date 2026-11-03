@@ -642,15 +642,11 @@ def unroll_puzzle_from_coin_id(coin_record: TYPES.CoinRecordRoto):
             logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
             unroll_puzzles = unroll_puzzle_to_nodes(program)
             puz_names, puz_hashes = unroll_puzzle_to_names(program)
-            layered_puzzle_type_str, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            layered_puzzle_type, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
             logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
-            try:
-                layered_puzzle_type = TYPES.CoinType(layered_puzzle_type_str)
-            except (ValueError, KeyError):
-                layered_puzzle_type = TYPES.CoinType.UNKNOWN
-
-            puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_type, layered_puzzle_name)
+            puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_type, layered_puzzle_name,
+                                     layered_puzzle_status('|'.join(puz_hashes)))
 
         except Exception as e:
             logging(debug_logger, "DEBUG", f"LOAD program exc {e}")
@@ -678,6 +674,8 @@ def get_coin_type_from_parent(parent_coin_id, confirmed_height):
     puz_names, puz_hashes = unroll_puzzle_to_names(program)
     layered_puzzle_type_str, _ = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
 
+    # when this is written: decide from the mod hashes of the layers (eg: the CAT layer), not
+    # from the family or the puzzle type, which people can rename in the catalog
 #    match puzzle_family:
 #        case STD:
 #            pass
@@ -698,7 +696,8 @@ def get_type_unspent_coin(coin_record: TYPES.CoinRecordRoto):
         coin_record: A CoinRecordRoto representing an unspent coin.
 
     Returns:
-        CoinType enum member, or CoinType.UNKNOWN if type cannot be determined.
+        The puzzle type text of the catalog (shown only, see TYPES.PuzzleStatus), or None if it
+        can not be found.
     """
 
 
@@ -735,14 +734,19 @@ def get_type_unspent_coin(coin_record: TYPES.CoinRecordRoto):
             # cat do this
             # nft / singleton do this
             # unknown do this
-            try:
-                return TYPES.CoinType(layered_puzzle_type_str)
-            except (ValueError, KeyError):
-                return TYPES.CoinType.UNKNOWN
+            return layered_puzzle_type_str
 
         except Exception as e:
             logging(debug_logger, "DEBUG", f"get_type_unspent_coin failed: {e}")
-            return TYPES.CoinType.UNKNOWN
+            return None
+
+
+def layered_puzzle_status(puzzle_key: str) -> TYPES.PuzzleStatus:
+    """KNOWN if the layer combination is in catalog/layered_puzzles.json, or if it is one
+    layer that is in catalog/puzzles.json (the key of one layer is its hash)"""
+    if puzzle_key in CONF.KNOWN_LAYERED_PUZZLES or puzzle_key in CONF.KNOWN_PUZZLES:
+        return TYPES.PuzzleStatus.KNOWN
+    return TYPES.PuzzleStatus.UNKNOWN
 
 
 # --- Type checker registry ----------------------------------------------------

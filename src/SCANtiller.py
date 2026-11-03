@@ -34,15 +34,13 @@ import src.CONFtiller as CONF
 from src.CONFtiller import logging, debug_logger
 import src.RPCtiller as RPC
 import src.PUZZLEtiller as PUZ
+import src.TYPEStiller as TYPES
 import src.UTILStiller as UTILS
 import src.WDBtiller as WDB
 
 
 SOURCE_CHAIN = 'chain'
 SOURCE_MEMPOOL = 'mempool'
-
-STATUS_NEW = 'new'
-STATUS_KNOWN = 'known'
 
 # a puzzle that only returns its conditions: (q . conditions)
 QUOTED_CONDITIONS_KEY = 'quoted_conditions'
@@ -93,20 +91,20 @@ def catalog_label(puzzle_key: str):
     """Name and family from the puzzle catalogs in resources/puzzles/catalog.
     Return (name, family, status)"""
     if puzzle_key == QUOTED_CONDITIONS_KEY:
-        return 'quoted conditions', '', STATUS_KNOWN
+        return 'quoted conditions', '', TYPES.PuzzleStatus.KNOWN
 
     layered = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key)
-    # auto saved layered puzzles have a type that is not in puzzle_types.json, they are not known
-    if layered is not None and layered['puzzle_type'] in CONF.PUZZLE_TYPES:
-        family = CONF.PUZZLE_TYPES[layered['puzzle_type']]['family']
-        return layered['name'], family, STATUS_KNOWN
+    if layered is not None:
+        # the family is only shown: it is the one of the entry's type in puzzle_types.json
+        family = CONF.PUZZLE_TYPES.get(layered.get('puzzle_type'), {}).get('family', '')
+        return layered['name'], family, TYPES.PuzzleStatus.KNOWN
 
     # puzzle with a single layer that is in the base catalog
     known = CONF.KNOWN_PUZZLES.get(puzzle_key)
     if known is not None:
-        return known['name'], '', STATUS_KNOWN
+        return known['name'], '', TYPES.PuzzleStatus.KNOWN
 
-    return None, '', STATUS_NEW
+    return None, '', TYPES.PuzzleStatus.UNKNOWN
 
 
 def shape_hash(puzzle: PyProgram) -> str:
