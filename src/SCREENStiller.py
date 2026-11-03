@@ -3153,6 +3153,19 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
                 with screenState.lock:
                     main_scope.data['coin_cache'] = row
 
+            # hint owner and puzzle data: they call the node, so they are read here
+            if row is not None:
+                try:
+                    raw_hint = row[14]
+                    hint = bytes32(raw_hint) if UTILS.is_bytes32(raw_hint) else None
+                    puzzle_info = PUZ.coin_puzzle_data(TYPES.CoinRecordRoto(row[:10]), hint)
+                except Exception as e:
+                    logging(debug_logger, "DEBUG", f"coin puzzle data failed: {e}")
+                    UTILS.logging_traceback("coin puzzle data")
+                    puzzle_info = (f"error: {e}", [], None)
+                with screenState.lock:
+                    main_scope.data['coin_puzzle_data'] = puzzle_info
+
             with screenState.lock:
                 main_scope.data['coin_loading'] = False
             logging(debug_logger, "DEBUG", f"THREAD FINISHED!!!!!!!!!!!!")
@@ -3177,6 +3190,7 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         with screenState.lock:
             main_scope.data['coin_loading'] = True
             main_scope.data['coin_cache_name'] = coin_name_hex
+            main_scope.data['coin_puzzle_data'] = None
         load_coin_cache()
         cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
         cache_cursor = cache_conn.cursor()
@@ -3297,29 +3311,26 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
         hint,
     ]
 
-    # --- Type verification (CAT / NFT / XCH) ---
-    try:
-        coin_record_roto = TYPES.CoinRecordRoto(coin_record[:10])
-        type_result = WDB.FetchMaker.verify_coin_type(coin_record_roto, hint=raw_hint if UTILS.is_bytes32(raw_hint) else None)
-        labels.append("Verified Type")
-        values.append(type_result.get('type', 'UNKNOWN'))
-        labels.append("Verified")
-        values.append(str(type_result.get('verified', False)))
-        labels.append("Type Detail")
-        values.append(str(type_result.get('detail', {})))
-    except Exception as e:
-        logging(debug_logger, "DEBUG", f"verify_coin_type failed: {e}")
-        traceback.print_exc()
-        labels.append("Verified Type")
-        values.append("ERROR")
-        labels.append("Verified")
-        values.append("False")
-        labels.append("Type Detail")
-        values.append(str(e))
+    # --- Hint owner and puzzle data (read by query_db) ---
+    with screenState.lock:
+        puzzle_info = main_scope.data.get('coin_puzzle_data')
+    labels.append("Hint Owner")
+    values.append("loading..." if puzzle_info is None else puzzle_info[0])
 
     if coin_memo is not None:
         labels.append("RPC Spent debug")
         values.append(str(coin_memo))
+
+    if puzzle_info is not None and puzzle_info[1]:
+        _, pairs, source = puzzle_info
+        labels.append('')
+        values.append('')
+        # an unspent coin is read from its parent's puzzle: the data are the parent's
+        labels.append('PUZZLE_DATA' if source == 'coin' else 'PUZZLE_DATA (parent coin)')
+        values.append('')
+        for key, value in pairs:
+            labels.append(f'-{key}')
+            values.append(value)
 
     # --- Unrolled Puzzle ---
     # Construct a temporary CoinRecordRoto from the cached row so we can reuse the new helper.
@@ -3404,9 +3415,11 @@ def screen_coin_record(stdscr, keyboardState, screenState: ScreenState, fullNode
     # --- unrolled solution ---
 
 
-    puzzle, solution = WDB.FetchMaker._fetch_puzzle_and_solution(coin_record_roto)
-
-    unrolled = PUZ.unroll_puzzle_to_nodes(solution)
+    # an unspent coin has no solution yet: the node refuses the call and roto stopped
+    unrolled = None
+    if coin_record_roto.spent_block_index > 0:
+        puzzle, solution = WDB.FetchMaker._fetch_puzzle_and_solution(coin_record_roto)
+        unrolled = PUZ.unroll_puzzle_to_nodes(solution)
 
 
     if puzzle_record is not None and unrolled is not None:
