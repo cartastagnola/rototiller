@@ -3,6 +3,7 @@ import pathlib
 import json
 import subprocess
 import sys
+import re
 import tempfile
 from datetime import date
 
@@ -880,13 +881,102 @@ def merge_sources(entry: dict, new_sources: list) -> bool:
     return changed
 
 
+# the classification fields set by hand on a puzzle (see docs/puzzles.md): they say what the
+# puzzle is for, a change of its code keeps them
+HAND_FIELDS = ("family", "puzzle_type", "custody", "project")
+CHANGED_SUFFIX = "_CHANGED_FOUND_ON_"
+
+
+def mod_parameters(source):
+    """The parameters of the (mod ...) of a chialisp source, in order: the curried arguments
+    are the first ones. A destructured parameter, (A B), is its text; a dotted rest ends the
+    list. None when there is no (mod (...)) in the source (Rue, a chialisp-23 module, a
+    hardcoded puzzle without clvm)."""
+    if not source:
+        return None
+    tokens = [t for t in re.findall(r'"(?:[^"\\]|\\.)*"|;[^\n]*|\(|\)|[^\s()]+', source)
+              if not t.startswith(";")]
+    start = next((i for i in range(len(tokens) - 2)
+                  if tokens[i] == "(" and tokens[i + 1] == "mod" and tokens[i + 2] == "("), None)
+    if start is None:
+        return None
+    params, depth, current = [], 0, []
+    for token in tokens[start + 2:]:
+        if token == "(":
+            depth += 1
+            if depth > 1:
+                current.append(token)
+            continue
+        if token == ")":
+            depth -= 1
+            if depth == 0:
+                return params
+            current.append(token)
+            if depth == 1:
+                params.append(" ".join(current).replace("( ", "(").replace(" )", ")"))
+                current = []
+            continue
+        if depth == 1:
+            if token == ".":
+                return params
+            params.append(token)
+        else:
+            current.append(token)
+    return None  # unbalanced
+
+
+def copy_hand_fields(old: dict, old_hash: str, new: dict) -> list:
+    """Copy the hand fields of old (the previous version of a puzzle) to new (the version
+    built from a changed source), and return the lines of the checklist printed at the end.
+    - HAND_FIELDS are copied;
+    - inner_arg is a position among the curried arguments, a code change can move it: it is
+      copied (with inner_arg_from) only when the parameter at that position has the same
+      name in the old and the new source, else it is dropped (the custody walk stops at
+      this layer: CONTRACT, until it is set by hand);
+    - new gets "fields_from": old_hash, the code never reads it: remove it once checked."""
+    copied = [field for field in HAND_FIELDS if field in old]
+    for field in copied:
+        new[field] = old[field]
+    lines = []
+    if "inner_arg" in old:
+        position = old["inner_arg"]
+        name_at = lambda params: params[position - 1] if params and len(params) >= position else None
+        before, after = name_at(mod_parameters(old.get("clvm"))), name_at(mod_parameters(new.get("clvm")))
+        if before is not None and before == after:
+            new["inner_arg"] = position
+            if "inner_arg_from" in old:
+                new["inner_arg_from"] = old["inner_arg_from"]
+            copied.append(f"inner_arg {position} ({before})")
+        else:
+            lines.append(f"inner_arg {position} NOT copied: parameter {position} was {before or '(not read)'}, "
+                         f"now {after or '(not read)'}: set inner_arg by hand, custody is CONTRACT until then")
+    if copied:
+        lines.insert(0, f"copied: {', '.join(copied)}")
+    if copied or lines:
+        new["fields_from"] = old_hash
+        lines.insert(0, f"fields from {old['name']} ({old_hash})")
+    return lines
+
+
+def previous_version(catalog: dict, name: str):
+    """(hash, entry) of the newest catalog entry named name or name_CHANGED_FOUND_ON_...:
+    new entries are added at the end of the catalog"""
+    found = None
+    for puzzle_hash, entry in catalog.items():
+        if entry["name"] == name or entry["name"].startswith(name + CHANGED_SUFFIX):
+            found = (puzzle_hash, entry)
+    return found
+
+
 def merge_into_catalog(catalog: dict, new_puzzles: dict, found_date: str):
     """Add new_puzzles to catalog, nothing in catalog is deleted.
     - puzzle hash already in the catalog: only its "sources" are updated (merge_sources)
     - name already in the catalog with another puzzle hash (the source changed): added
-      as a new puzzle named <name>_CHANGED_FOUND_ON_<yy_mm_dd>
+      as a new puzzle named <name>_CHANGED_FOUND_ON_<yy_mm_dd>, with the hand fields of the
+      previous version (copy_hand_fields)
     - new name: added
-    Return (added, modified, skipped, sources_updated) lists of names."""
+    Return (added, modified, skipped, sources_updated) lists of names; modified holds
+    (name, checklist lines)."""
     names = {entry["name"] for entry in catalog.values()}
     added, modified, skipped, sources_updated = [], [], [], []
     for puzzle_hash, puzzle in new_puzzles.items():
@@ -897,13 +987,14 @@ def merge_into_catalog(catalog: dict, new_puzzles: dict, found_date: str):
             continue
         puzzle = dict(puzzle)
         if puzzle["name"] in names:
-            name = f"{puzzle['name']}_CHANGED_FOUND_ON_{found_date}"
+            old_hash, old = previous_version(catalog, puzzle["name"])
+            name = f"{puzzle['name']}{CHANGED_SUFFIX}{found_date}"
             n = 2
             while name in names:  # changed again on the same day
-                name = f"{puzzle['name']}_CHANGED_FOUND_ON_{found_date}_{n}"
+                name = f"{puzzle['name']}{CHANGED_SUFFIX}{found_date}_{n}"
                 n += 1
             puzzle["name"] = name
-            modified.append(name)
+            modified.append((name, copy_hand_fields(old, old_hash, puzzle)))
         else:
             added.append(puzzle["name"])
         names.add(puzzle["name"])
@@ -999,8 +1090,17 @@ if __name__ == "__main__":
             print(f"    {name}")
     for name in added:
         print(f"  [new] {name}")
-    for name in modified:
+    for name, _ in modified:
         print(f"  [modified source, added as new puzzle] {name}")
+    # the hand fields of the changed puzzles: what to check in the catalog
+    checklist = [(name, lines) for name, lines in modified if lines]
+    if checklist:
+        print(f"\n=== to check: hand fields of the changed puzzles ({len(checklist)}) ===")
+        for name, lines in checklist:
+            print(f"  {name}")
+            for line in lines:
+                print(f"    {line}")
+        print('  remove "fields_from" from an entry once it is checked')
 
     if added or modified or sources_updated:
         tmp_file = CATALOG_FILE.with_name(CATALOG_FILE.name + ".tmp")
