@@ -2567,10 +2567,31 @@ def menu_select(stdscr, menu: str, scope: Scope, point: UIgraph.Point,
         stdscr.addstr(point.y + i - first_y_point + 1, point.x + 35, str(item))
 
 
+def button_menu_open(scope: Scope, screenState: ScreenState, *args):
+    """exec of create_button_menu: open the list, remember the value to go back to on esc"""
+    scope.data['cursor_open'] = scope.cursor
+    screenState.activeScope = scope
+    return scope
+
+
+def button_menu_cancel(scope: Scope, screenState: ScreenState, *args):
+    """esc in create_button_menu: close the list, the value it had when it opened"""
+    scope.cursor = scope.data.get('cursor_open', scope.cursor)
+    return ScopeActions.exit_scope(scope, screenState)
+
+
 def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
-                       name: str, menu: List[str], point: UIgraph.Point, only_init: bool = False):
-    """A real menu button...
-    only_init: when """
+                       name: str, menu: List[str], point: UIgraph.Point, only_init: bool = False,
+                       custom_scope_function=None, value_width: int = None):
+    """A drop-down button: it shows "name: value", the value is menu[scope.cursor].
+    Enter opens the list over the button, the value in its place and the others above and
+    under it; ↑↓ choose, enter keeps the value (custom_scope_function, default: back to the
+    parent scope), esc puts back the value the list had when it opened.
+    only_init: create the scope and return it without drawing; call it again at the end of
+    the screen, so the open list is drawn over the rest.
+    value_width: the value is padded to it, so the button keeps its size.
+    The button is 3 rows from point; with the selection line, len(name) + 2 + value + 7
+    columns."""
 
     name_str = name
     name = f"{parent_scope.id}_{name}"
@@ -2579,13 +2600,17 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
         scope = Scope(name, parent_scope.screen, screenState)
         scope.parent_scope = parent_scope
         scope.main_scope = parent_scope
-        scope.exec = ScopeActions.activate_scope
+        scope.exec = button_menu_open
         scope.cursor = 0
         parent_scope.sub_scopes[name] = scope
 
-        scope.exec_own = ScopeActions.exit_scope
+        scope.exec_own = custom_scope_function or ScopeActions.exit_scope
+        scope.exec_esc = button_menu_cancel
 
     scope = screenState.scopes[name]
+    scope.set_visible()
+    scope.base_point = point + UIgraph.Point(0, 1)  # the text row, like create_button
+    scope.cursor = max(0, min(scope.cursor, len(menu) - 1))
     scope_is_active = False
     scope_exec_args = [screenState]
 
@@ -2596,23 +2621,15 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
     if scope is screenState.activeScope:
         scope.update_no_sub(len(menu), False)
         screenState.scope_exec_args = scope_exec_args
+        screenState.footer_text += "| choose=↑↓ keep=enter cancel=esc "
         scope_is_active = True
 
-    winDim = stdscr.getmaxyx()
-
-    stdscr.addstr(10, 10, str(winDim))
     pos_x = point.x
     pos_y = point.y
 
-    # temp
-    ppos_x = pos_x
-    ppos_y = pos_y
-
-    stdscr.addstr(ppos_y, ppos_x, '#')
-    # temp 
-
     prefix = name_str
-    menu_selection = f"{prefix}: {menu[scope.cursor]}"
+    value = str(menu[scope.cursor])
+    menu_selection = f"{prefix}: {value:<{value_width or len(value)}}"
     space = 2
     length = len(menu_selection) + space * 2
 
@@ -2696,12 +2713,12 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
         x += length - 2 * space
         stdscr.addstr(pos_y + 1, x, u'\u2588' * space,
                       curses.color_pair(frame_cp_dark) | curses.A_BOLD)
-        x += 2 * space + 1
+        x += space
         stdscr.addstr(pos_y + 1, x, u'\u2588',
                       curses.color_pair(frame_cp_dark) | curses.A_BOLD)
 
         # lower row
-        stdscr.addstr(pos_y + 2, pos_x + 0, u'\u2580' * (length + 1),
+        stdscr.addstr(pos_y + 2, pos_x + 0, u'\u2580' * (length + 2),
                       curses.color_pair(frame_cp_dark))
 
         # change color for the selection drawing
@@ -2762,39 +2779,27 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
                       curses.color_pair(frame_selected_backgroung))
 
     if scope_is_active:
-
-        # draw menu
-
-        stdscr.addstr(ppos_y, ppos_x, '#')
-        winDim = stdscr.getmaxyx()
-        maxUp = ppos_y
-        maxDown = winDim[0] - ppos_y - 3
-
-        for i in range(maxDown):
-            stdscr.addstr(pos_y + 2 + i, pos_x + 1 + space, '#' * len(menu_selection),
-                          curses.color_pair(frame_cp_dark))
-        for i in range(maxUp):
-            stdscr.addstr(pos_y - i, pos_x + 1 + space, '#' * len(menu_selection),
-                          curses.color_pair(frame_cp_dark))
-
-#######################
-
-
-        menu_select(stdscr, menu, scope, point, screenState.colorPairs['body'],
-                    screenState.colorPairs["body_sel"])
-
-########################
-
-
-
-    stdscr.addstr(ppos_y, ppos_x, '#')
-    winDim = stdscr.getmaxyx()
-    maxUp = ppos_y
-    maxDown = winDim[0] - ppos_y - 1
-
-    stdscr.addstr(ppos_y - maxUp, ppos_x, '$')
-    stdscr.addstr(ppos_y + maxDown, ppos_x, '&')
-
+        # the open list: the chosen value stays on the text row of the button, the values
+        # before it go up and the ones after go down, as far as the window lets them
+        win_h, win_w = stdscr.getmaxyx()
+        text_row = pos_y + 1
+        x_list = pos_x + 1 + space + len(prefix) + 1  # one column before the value
+        item_width = max(value_width or 0, max(len(str(m)) for m in menu))
+        item_text = item_width + 2
+        if x_list + item_text >= win_w:
+            item_text = max(0, win_w - x_list - 1)
+        list_item = text_dark
+        list_selected = UIgraph.addCustomColorTuple(
+            (default_background, default_selected),
+            screenState.cursesColors
+        )
+        first = max(0, scope.cursor - text_row)
+        last = min(len(menu), scope.cursor + win_h - 1 - text_row)
+        for i in range(first, last):
+            color = list_selected if i == scope.cursor else list_item
+            text = f" {str(menu[i]):<{item_width}} "[:item_text]
+            stdscr.addstr(text_row + i - scope.cursor, x_list, text,
+                          curses.color_pair(color) | curses.A_BOLD)
 
     return scope
 
