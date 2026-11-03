@@ -3936,21 +3936,28 @@ def create_vdf_header(win, screenState: ScreenState, pos: UIgraph.Point, width: 
     return 1 if compact else 3
 
 
-HEATMAP_LABEL_WIDTH = 2  # the legend of the y axis
 HEATMAP_AXIS_LIGHTNESS = 0.08  # the second band of the graph background and of the axes: no_data this much lighter in OKLab
 # the text of a band on the column labels: (column band, top band), strftime of its start
-HEATMAP_BAND_TEXT = {'6m': ('%M', '%m-%d %Hh'), '15m': ('%H', '%a %Y-%m-%d'), '6h': ('%d', '%Y-%m'),
+HEATMAP_BAND_TEXT = {'6m': ('%M', '%Hh'), '15m': ('%H', '%a %Y-%m-%d'), '6h': ('%d', '%Y-%m'),
                      '24h': ('%m', '%Y'), '1mo': ('%Y', '')}
-HEATMAP_Y_UNIT = {'6m': 'm', '15m': 'm', '6h': 'h', '24h': 'h', '1mo': 'd'}  # the unit of the y legend, above it
+# when the top text has no day: (the text of the first label, of a label at the start of a day)
+HEATMAP_DAY_TEXT = {'6m': ('%m-%d %Hh', '%m-%d')}
+# the names of the scales on the graph, from the biggest: the length of their macro column
+# (HeatmapView.macro_columns)
+HEATMAP_SCALE_TEXT = {'1mo': 'year', '24h': 'month', '6h': 'day', '15m': 'hour', '6m': '24 minutes'}
+HEATMAP_INFO_GAP = 2  # the columns between the value of the selection, the color legend and the scale names
+HEATMAP_LEGEND_SPACE = 3  # the columns between two items of the color legend
 # square mode: the keys that grow the selection, (dx, dy)
 HEATMAP_EXTEND_KEYS = {chr(curses.KEY_SLEFT): (-1, 0), chr(curses.KEY_SRIGHT): (1, 0),
                        chr(curses.KEY_SR): (0, -1), chr(curses.KEY_SF): (0, 1),
                        'H': (-1, 0), 'L': (1, 0), 'K': (0, -1), 'J': (0, 1)}
 
 
-def heatmap_band_row(view: HEAT.HeatmapView, unit, fmt: str):
+def heatmap_band_row(view: HEAT.HeatmapView, unit, fmt: str, day_fmt=None):
     """The bands of `unit` on the visible columns: [band id, first column from the left, columns,
-    text]"""
+    text]. The text is '' when it does not fit in its band with a space after it. With day_fmt
+    (first, new day): the band at the start of a day has only the day (new day), the first label
+    shown has the day too (first), the others use fmt"""
     bands = []
     for col in range(view.left_col, view.right_col + 1):
         w0 = HEAT.column_wall(col, view.scale_idx)[0]
@@ -3958,29 +3965,21 @@ def heatmap_band_row(view: HEAT.HeatmapView, unit, fmt: str):
         if bands and bands[-1][0] == b:
             bands[-1][2] += 1
         else:
-            bands.append([b, col - view.left_col, 1, time.strftime(fmt, time.gmtime(math.floor(w0))).lower()])
+            bands.append([b, col - view.left_col, 1, time.gmtime(math.floor(w0))])
+    last_day = None
+    for band in bands:
+        start, width = band[3], band[2]
+        text = time.strftime(fmt, start).lower()
+        if day_fmt and start[3:6] == (0, 0, 0):
+            text = time.strftime(day_fmt[1], start).lower()
+        elif day_fmt and start[:3] != last_day:
+            text = time.strftime(day_fmt[0], start).lower()
+        if len(text) >= width:
+            text = ''
+        elif day_fmt:
+            last_day = start[:3]
+        band[3] = text
     return bands
-
-
-def heatmap_y_legend(view: HEAT.HeatmapView, n_lines: int):
-    """(text, band) of each line of the y axis: the band alternates the two shades, its first line
-    holds the text (2 characters, the unit is HEATMAP_Y_UNIT). All the columns of a scale have the
-    same bands (the month columns: as long as the rightmost one)"""
-    w0, w1 = HEAT.column_wall(view.right_col, view.scale_idx)
-    unit = HEAT.ROW_BAND[view.scale_name]
-    legend = []
-    last = None
-    for line in range(n_lines):
-        k = math.floor(line * (w1 - w0) / n_lines / unit + 1e-9)  # the band of the top of the line
-        text = ''
-        if k != last:  # 2 characters: minutes or hours from the start of the column, or the day
-            if unit >= HEAT.DAY:
-                text = f"{k * unit // HEAT.DAY + 1:02d}"
-            else:
-                text = f"{k * unit // 60:02d}" if unit < 3600 else f"{k * unit // 3600:02d}"
-        legend.append((text, k % 2))
-        last = k
-    return legend
 
 
 def heatmap_time_text(t: float, step):
@@ -3995,7 +3994,7 @@ def heatmap_time_text(t: float, step):
 def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardState, parent_scope: Scope,
                         name: str, pos: UIgraph.Point, size: UIgraph.Point, series,
                         view: HEAT.HeatmapView, style: HEAT.HeatmapStyle, scope_activation_func=None,
-                        value_method: str = 'count'):
+                        value_method: str = 'count', top_left: int = None):
     """Time heat map (the chiaharvestgraph graph): one column for each time bucket of view's scale,
     newest on the right, each column cut in as many squares as the height has (two in each line,
     with ▀), read top to bottom; a square is colored by the number of events of `series` in it.
@@ -4009,10 +4008,12 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     value_method: the method of `series` that gives the value of a cell: count() for the number
     of events, max_value() for a heat map colored by the biggest value (e.g. a depth).
     The background of the columns alternates two shades, by the hour, day or month
-    (HEAT.COLUMN_BAND), also on the column labels. The legend of the y axis alternates the two
-    shades by its own bands (HEAT.ROW_BAND), only on the legend: the rows of the graph do not.
+    (HEAT.COLUMN_BAND), also on the column labels. There is no y axis legend.
+    2 rows above pos (the row of the tab titles), at the right: the value of the selection, the
+    color legend and the names of the scales (the length of their macro column); top_left is the
+    first free column of that row (after the tabs).
     Lines: the top bands (the day of the hours), the column bands, the grid, the bottom line (its
-    part under the selected columns is yellow), the selection, the legend. A right line closes the grid,
+    part under the selected columns is yellow). A right line closes the grid,
     yellow on the selected row in square mode; the two lines are drawn like the frame of a table,
     only when the graph is selected. It uses all of size.y.
     Return (scope, lines used)"""
@@ -4035,7 +4036,6 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     if not active:
         view.mode = 'column'
 
-    P_text = screenState.colorPairs["body"]
     P_selection = UIgraph.addCustomColorTuple((screenState.colors["yellow_bee"], screenState.colors["background"]),
                                               screenState.cursesColors)
     framed = active or scope.selected()  # the frame of the tables: ▌ on the right, ▀ under it
@@ -4076,19 +4076,18 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     elif selected:
         screenState.footer_text += "| graph=enter "
 
-    label_w = HEATMAP_LABEL_WIDTH
     now = time.time()
-    n_lines = max(1, size.y - 5)
-    view.layout(size.x - label_w - 1, n_lines * 2, now)
+    n_lines = max(1, size.y - 3)
+    view.layout(size.x - 1, n_lines * 2, now)
     cursor_col, cursor_row = view.cursor()
     (first_col, first_row), (last_col, last_row) = view.selected_squares()
     t0_sel, t1_sel = view.selection()
     scope.data['cell'] = (t0_sel, t1_sel)
     square_mode = active and view.mode == 'square'
 
-    def put(y, x, text, pair):
+    def put(y, x, text, pair, attr=0):
         try:
-            win.addstr(y, x, text, curses.color_pair(pair))
+            win.addstr(y, x, text, curses.color_pair(pair) | attr)
         except curses.error:
             pass  # the last cell of the window
 
@@ -4145,37 +4144,48 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
         return pairs[(top, bottom)]
 
     # column labels: the top bands, then the column bands, each with its text if it fits
-    x0 = pos.x + label_w
+    x0 = pos.x
     x_right = x0 + view.cols
     colors = screenState.cursesColors
     # the axis bands: the background of the tabs (tab_soft) and the same color a little lighter
     P_axis = [UIgraph.addCustomColorTuple((screenState.colors["white"], UIgraph.addCustomColor(c, colors)), colors)
               for c in background]
     column_fmt, top_fmt = HEATMAP_BAND_TEXT[view.scale_name]
-    for y, unit, fmt in ((pos.y, HEAT.TOP_BAND[view.scale_name], top_fmt),
-                         (pos.y + 1, HEAT.COLUMN_BAND[view.scale_name], column_fmt)):
+    day_fmt = HEATMAP_DAY_TEXT.get(view.scale_name)
+    for y, unit, fmt, first_fmt in ((pos.y, HEAT.TOP_BAND[view.scale_name], top_fmt, day_fmt),
+                                    (pos.y + 1, HEAT.COLUMN_BAND[view.scale_name], column_fmt, None)):
         if unit is None:  # no band on this row
             put(y, x0, ' ' * view.cols, P_axis[0])
             continue
-        for b, x, width, text in heatmap_band_row(view, unit, fmt):
-            put(y, x0 + x, f"{text if len(text) < width else '':<{width}}", P_axis[b % 2])  # a gap after it
-    # the name of the scale in the top right corner, like the selected tab
-    scale_text = f" {view.scale_name} "
+        for b, x, width, text in heatmap_band_row(view, unit, fmt, first_fmt):
+            put(y, x0 + x, f"{text:<{width}}", P_axis[b % 2])  # a gap after it
+    # the names of all the scales (their macro column) 2 rows above the graph (the row of the tab
+    # titles), at its right end, in the colors of the tab bar, the selected one in green (xch): no
+    # half line above them, the half line under them (the row above the graph) in their background.
+    # They end at the right line, which goes up to their top row while the graph is selected
+    # (without the frame, their background takes its place)
+    names = [(f" {text} ", scale == view.scale_name) for scale, text in HEATMAP_SCALE_TEXT.items()]
+    x_names = x = x_right - sum(len(text) for text, _ in names)
+    P_scale = curses.color_pair(screenState.colorPairs["title"])
+    P_scale_selected = curses.color_pair(screenState.colorPairs["xch"])
     try:
-        win.addstr(pos.y, x_right - len(scale_text), scale_text,
-                   curses.color_pair(screenState.colorPairs["xch"]) | curses.A_BOLD)
+        win.addstr(pos.y - 1, x, ' ' * (x_right - x), P_scale)
+        for text, selected in names:
+            win.addstr(pos.y - 2, x, text, (P_scale_selected if selected else P_scale) | curses.A_BOLD)
+            x += len(text)
     except curses.error:
         pass
-    put(pos.y + 1, pos.x, f"{HEATMAP_Y_UNIT[view.scale_name]:>{label_w}}", P_axis[0])
+    for y in (pos.y - 2, pos.y - 1):
+        if framed:
+            put(y, x_right, '▌', P_frame)
+        else:
+            put(y, x_right, ' ', screenState.colorPairs["title"])
     for y in (pos.y, pos.y + 1):
         put(y, x_right, '▌' if framed else ' ', P_frame)
 
     # the grid, closed by the right line
-    y_legend = heatmap_y_legend(view, n_lines)
     for line in range(n_lines):
         y = pos.y + 2 + line
-        text, band = y_legend[line]
-        put(y, pos.x, f"{text:>{label_w}}", P_axis[band])
         for col in range(view.left_col, view.right_col + 1):
             top = cell_color(col, line * 2)
             bottom = cell_color(col, line * 2 + 1)
@@ -4193,35 +4203,53 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     for col in range(max(sel0, view.left_col), min(sel1, view.right_col) + 1):
         put(y_bottom, x0 + col - view.left_col, '▀', P_selection)
 
-    # the selection
-    y = y_bottom + 1
+    # on the row of the scale names, on their left, each after a gap of HEATMAP_INFO_GAP: the color
+    # legend, then the value of the selection on its left. Both white on the tab background, with
+    # the half line under them, like the scale names. They stop at top_left (the end of the tabs):
+    # without space the value loses its column and square part, then it is not drawn, then the legend
     square = view.square_seconds(cursor_col)
     count = value_func(t0_sel, t1_sel)
-    n_squares = (last_col - first_col) * view.n_rows + last_row - first_row + 1
-    what = 'column' if view.mode == 'column' else 'square' if n_squares == 1 else f"{n_squares} squares"
-    text = (f"{what} {heatmap_time_text(t0_sel, square)} → {heatmap_time_text(t1_sel, square)}"
-            f"   {style.count_name}: {count:,}")
+    value = f"{style.count_name}: {count:,}"
     if style.expected_rate:
-        text += f" ({count / (style.expected_rate * (t1_sel - t0_sel)):.0%} of expected)"
+        value += f" ({count / (style.expected_rate * (t1_sel - t0_sel)):.0%} of expected)"
     if start is None or t1_sel <= start:
-        text += "   no data"
-    text += f"   |   column {view.scale_name}, square {HEAT.human_duration(square)}"
-    put(y, pos.x, text[:max(0, size.x)], P_text)
+        value += ", no data"
+    column_text = f" | column {view.scale_name}, square {HEAT.human_duration(square)}"
+    legend = style.legend()
+    legend_w = 1 + sum(len(label) + 2 for _, label in legend) + HEATMAP_LEGEND_SPACE * (len(legend) - 1) + 1
+    x_min = pos.x if top_left is None else top_left
+    x_legend = x_names - HEATMAP_INFO_GAP - legend_w
+    if x_legend >= x_min:
+        try:
+            win.addstr(pos.y - 1, x_legend, ' ' * legend_w, P_scale)
+            x = x_legend
+            win.addstr(pos.y - 2, x, ' ', P_scale)
+            x += 1
+            for k, (color, label) in enumerate(legend):
+                if color == style.no_data:  # the tab background: the lighter no data shade, to be seen
+                    color = background[1]
+                P_square = curses.color_pair(heatmap_pair_fg(screenState, pairs, color, 'tab_soft'))
+                # the space between the items, after the last one a single space (in legend_w)
+                after = ' ' * HEATMAP_LEGEND_SPACE if k < len(legend) - 1 else ' '
+                win.addstr(pos.y - 2, x, '■', P_square)
+                win.addstr(pos.y - 2, x + 1, f" {label}{after}", P_scale)
+                x += len(label) + 2 + len(after)
+            x_end = x_legend - HEATMAP_INFO_GAP
+            for text in (f" {value}{column_text} ", f" {value} "):
+                if x_end - len(text) >= x_min:
+                    win.addstr(pos.y - 2, x_end - len(text), text, P_scale)
+                    win.addstr(pos.y - 1, x_end - len(text), ' ' * len(text), P_scale)
+                    break
+        except curses.error:
+            pass
 
-    # legend
-    x = pos.x
-    for color, label in style.legend():
-        put(y + 1, x, '██', heatmap_pair_fg(screenState, pairs, color))
-        put(y + 1, x + 3, label, P_text)
-        x += len(label) + 6
-
-    return scope, n_lines + 5
+    return scope, n_lines + 3
 
 
-def heatmap_pair_fg(screenState: ScreenState, pairs: dict, color):
-    """Pair of an rgb color on the background"""
-    key = ('fg', color)
+def heatmap_pair_fg(screenState: ScreenState, pairs: dict, color, background_name: str = 'background'):
+    """Pair of an rgb color on the background (a name of screenState.colors)"""
+    key = ('fg', color, background_name)
     if key not in pairs:
-        background = UIgraph.customColors_findByValue(screenState.cursesColors, screenState.colors["background"])
+        background = UIgraph.customColors_findByValue(screenState.cursesColors, screenState.colors[background_name])
         pairs[key] = UIgraph.addCustomColorTuple_FAST((tuple(color), background), screenState.cursesColors)
     return pairs[key]

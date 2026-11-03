@@ -45,10 +45,8 @@ SCALE_INDEX = {name: i for i, (name, _, _) in enumerate(COLUMN_SCALES)}
 # the bands of two alternating shades that show the passing of time: seconds, 'month' or 'year'.
 # COLUMN_BAND: the columns of a band have one background shade in the graph and on the labels.
 # TOP_BAND: the bigger band, on the labels above the column bands (the day of the hours).
-# ROW_BAND: the bands of a column, shown only on the legend of the y axis
 COLUMN_BAND = {'6m': 24 * 60, '15m': 3600, '6h': DAY, '24h': 'month', '1mo': 'year'}
 TOP_BAND = {'6m': 3600, '15m': DAY, '6h': 'month', '24h': 'year', '1mo': None}  # None: no top band
-ROW_BAND = {'6m': 2 * 60, '15m': 5 * 60, '6h': 3600, '24h': 6 * 3600, '1mo': 7 * DAY}
 BAND_LIGHTNESS = 0.035  # how much lighter the second shade is, in OKLab
 
 # the buckets are counted on the local wall clock (the time with the UTC offset of that moment), from
@@ -272,7 +270,7 @@ class HeatmapStyle:
         if self.presence:
             return [(self.zero, 'no event'), (self.ramp[-1], 'event'), (self.no_data, 'no data')]
         what = 'expected' if self.expected_rate else 'busiest'
-        items = [(self.zero, '0'), (self.ramp[len(self.ramp) // 2], f'½ {what}'), (self.ramp[-1], what)]
+        items = [(self.zero, f'no {self.count_name}'), (self.ramp[len(self.ramp) // 2], f'½ {what}'), (self.ramp[-1], what)]
         if self.over:
             items.append((self.over, f'over {self.over_ratio}x'))
         return items + [(self.no_data, 'no data')]

@@ -5725,6 +5725,17 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
 
 
 REORG_VIEWS = ['forks', 'depth', 'by depth']
+HEAT_TOP_GAP = 2  # the columns between the tabs and the texts of a heat map on their row
+
+
+def reorg_tab_text(name: str, forks) -> str:
+    count = f" ({len(forks)})" if name in ('forks', 'by depth') else ''
+    return f" {name.upper()}{count} "
+
+
+def reorg_tabs_width(forks) -> int:
+    """The columns of the tab titles (create_text_double_space adds a space on each side)"""
+    return sum(len(reorg_tab_text(name, forks)) + 2 for name in REORG_VIEWS)
 REORG_REFRESH = 30  # sec between two scans of the last blocks
 REORG_SCALE = '6h'  # column scale when a heat map opens: a month of forks in ~120 columns
 REORG_TABLE_LEGEND = ['time', 'ago', 'fork at height', 'depth', 'orphaned blocks', 'orphaned tip']
@@ -5874,7 +5885,7 @@ def screen_reorgs(stdscr, keyboardState, screenState, fullNodeState: FullNodeSta
             win, screenState, keyboardState, main_scope, tab_name, pos,
             UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2),
             reorg_time_series(main_scope), views[view], style, scopeAction_open_reorg_cell,
-            value_method=value_method)
+            value_method=value_method, top_left=pos.x + reorg_tabs_width(forks) + HEAT_TOP_GAP)
     else:
         forks.sort(key=lambda f: (f.depth, f.tip_height), reverse=True)
         rows, keys = reorg_table_rows(forks, now)
@@ -5903,8 +5914,7 @@ def screen_reorgs(stdscr, keyboardState, screenState, fullNodeState: FullNodeSta
     P_tab_soft = screenState.colorPairs["tab_soft"]
     pos = pos_tab_title
     for name in REORG_VIEWS:
-        count = f" ({len(forks)})" if name in ('forks', 'by depth') else ''
-        text = f" {name.upper()}{count} "
+        text = reorg_tab_text(name, forks)
         selected_tab = name == view
         P_used = P_title if selected_tab else P_tab_title
         ELEMENTS.create_text_double_space(win, screenState, pos, text, P_used, C_background, 3, True)
@@ -5992,15 +6002,19 @@ LOG_LINES_MAX = 5000  # most log lines shown for each filter of a selection
 HARVEST_STYLE = HEAT.HeatmapStyle(
     HEAT.make_ramp([(224, 50, 44), (240, 140, 26), (242, 211, 60)], 7),
     expected_rate=1 / 9.375, over=(245, 245, 238))
-COUNT_STYLE = HEAT.HeatmapStyle(
-    HEAT.ramp_from_seed((80, 150, 210), 7, (0, 10, 45)), zero=(20, 30, 65))
+COUNT_RAMP = HEAT.ramp_from_seed((80, 150, 210), 7, (0, 10, 45))
+
+
+def count_style(count_name: str):
+    """A heat map style that counts lines, named count_name (e.g. 'no warnings' on the legend)"""
+    return HEAT.HeatmapStyle(COUNT_RAMP, zero=(20, 30, 65), count_name=count_name)
 
 # (tab name, regex of the lines that are events, style, column scale when the tab opens)
 LOG_HEATMAP_FILTERS = [
     ('harvester', r'eligible for farming', HARVEST_STYLE, HEAT.SCALE_INDEX['15m']),
-    ('errors', r': ERROR ', COUNT_STYLE, HEAT.SCALE_INDEX['24h']),
-    ('warnings', r': WARNING ', COUNT_STYLE, HEAT.SCALE_INDEX['24h']),
-    ('all lines', None, COUNT_STYLE, HEAT.SCALE_INDEX['6h']),
+    ('errors', r': ERROR ', count_style('errors'), HEAT.SCALE_INDEX['24h']),
+    ('warnings', r': WARNING ', count_style('warnings'), HEAT.SCALE_INDEX['24h']),
+    ('all lines', None, count_style('lines'), HEAT.SCALE_INDEX['6h']),
 ]
 LOG_HEATMAP_SOURCES = {}  # tab name -> HEAT.LogFileSource, kept while the app runs
 
@@ -6120,7 +6134,8 @@ def screen_log_heatmap(stdscr, keyboardState, screenState, fullNodeState: FullNo
         graph_scope, used = ELEMENTS.create_time_heatmap(
             win, screenState, keyboardState, main_scope, f"log_heatmap_{tab_name}", pos,
             UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2),
-            series, view, style, scopeAction_open_heatmap_cell)
+            series, view, style, scopeAction_open_heatmap_cell,
+            top_left=pos.x + sum(len(f" {name.upper()} ") + 2 for name, *_ in LOG_HEATMAP_FILTERS) + HEAT_TOP_GAP)
     elif not source.error:
         put_text(win, pos + UIgraph.Point(0, 1), "reading the log...", P_text, bold=True)
 
