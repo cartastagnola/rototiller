@@ -43,9 +43,9 @@ SOURCE_CHAIN = 'chain'
 SOURCE_MEMPOOL = 'mempool'
 
 # a puzzle that only returns its conditions: (q . conditions)
-QUOTED_CONDITIONS_KEY = 'quoted_conditions'
+QUOTED_CONDITIONS_KEY = PUZ.QUOTED_CONDITIONS_KEY
 # prefix of the key of a puzzle not curried, grouped by shape
-SHAPE_KEY_PREFIX = 'shape_'
+SHAPE_KEY_PREFIX = PUZ.SHAPE_KEY_PREFIX
 # atoms with this length or more are data (hashes, amounts, keys), they are not part of the shape
 SHAPE_DATA_ATOM_LENGTH = 4
 
@@ -87,24 +87,21 @@ def create_puzzles_db(conn):
     conn.commit()
 
 
-def catalog_label(puzzle_key: str):
-    """Name and family from the puzzle catalogs in resources/puzzles/catalog.
-    Return (name, family, status)"""
-    if puzzle_key == QUOTED_CONDITIONS_KEY:
-        return 'quoted conditions', '', TYPES.PuzzleStatus.KNOWN
+def catalog_classification(puzzle_key: str, puzzle_reveal: bytes = None) -> dict:
+    """PUZ.classify_key of a key, with its label and status. puzzle_reveal: an example, for the
+    custody"""
+    puzzle = PyProgram.from_bytes(bytes(puzzle_reveal)) if puzzle_reveal else None
+    c = PUZ.classify_key(puzzle_key, puzzle)
+    c['label'] = PUZ.classification_label(c, puzzle_key)
+    c['status'] = PUZ.layered_puzzle_status(puzzle_key)
+    return c
 
-    layered = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key)
-    if layered is not None:
-        # the family is only shown: it is the one of the entry's type in puzzle_types.json
-        family = CONF.PUZZLE_TYPES.get(layered.get('puzzle_type'), {}).get('family', '')
-        return layered['name'], family, TYPES.PuzzleStatus.KNOWN
 
-    # puzzle with a single layer that is in the base catalog
-    known = CONF.KNOWN_PUZZLES.get(puzzle_key)
-    if known is not None:
-        return known['name'], '', TYPES.PuzzleStatus.KNOWN
-
-    return None, '', TYPES.PuzzleStatus.UNKNOWN
+def catalog_label(puzzle_key: str, puzzle_reveal: bytes = None):
+    """Return (label, family, status): the name in resources/puzzles/catalog, or a label made
+    from the classification; the family; KNOWN when every layer is known or it is named"""
+    c = catalog_classification(puzzle_key, puzzle_reveal)
+    return c['label'], c['family'][0] or '', c['status']
 
 
 def shape_hash(puzzle: PyProgram) -> str:
@@ -150,62 +147,51 @@ def sub_puzzle_name(sub_puzzle_hash: str) -> str:
     return PUZ.compare_to_known_puzzles(sub_puzzle_hash)
 
 
-def puzzle_type_key(name: str) -> str:
-    """Key in puzzle_types.json made from a puzzle name: 'My puzzle v1' -> 'MY_PUZZLE_V1'"""
-    return re.sub(r'[^A-Z0-9]+', '_', name.upper()).strip('_') or 'PUZZLE'
+OVERRIDE_FIELDS = ('family', 'puzzle_type', 'custody', 'project')
 
 
 def save_known_puzzle(puzzle_key: str, sub_puzzle_hashes: list, sub_puzzle_names: list,
-                      name: str, family: str, example_coin_id: str = None, tags: list = None):
-    """Add or rename a puzzle in layered_puzzles.json, an empty name removes it.
-    The family goes in puzzle_types.json with a type made from the name, a puzzle that
-    already has a type with the same family keeps it (eg: a new variant of NFT_V1).
-    The family is also the first tag of the entry (PUZ.layered_puzzle_tags), the tags added
-    by hand stay. With tags (eg: from the names review page) the entry gets exactly these
-    tags, after the family.
-    The files are read from disk and only this entry changes, the edits made by hand stay.
-    Raise ValueError if a file is not valid json."""
+                      name: str, family: str = None, example_coin_id: str = None, tags: list = None,
+                      overrides: dict = None, puzzle: PyProgram = None):
+    """Save a name in catalog/layered_puzzles.json, and the overrides: family, puzzle_type,
+    custody, project, each kept only when it is not the value the layers give (None removes
+    it). Without overrides, family is the only one. An entry left with no name and no override
+    is removed. Saving moves the entry out of puzzle_harvesting/layered_puzzles.json.
+    tags: labels added by hand. puzzle: a puzzle reveal of the key, for the derived custody.
+    The file is read from disk and only this entry changes, the edits made by hand stay.
+    Raise ValueError if the file is not valid json."""
+    changes = overrides if overrides is not None else {'family': family}
+    derived = PUZ.classify_key(puzzle_key, puzzle, overrides=False)
+
+    def edit(layered: dict):
+        entry = dict(layered.get(puzzle_key, {}))
+        if name:
+            entry['name'] = name
+        else:
+            entry.pop('name', None)
+        for field, value in changes.items():
+            value = (value or '').strip() or None
+            if value and value != derived[field][0]:
+                entry[field] = value
+            else:
+                entry.pop(field, None)
+        if tags:
+            entry['tags'] = list(tags)
+        overrides = {'name', 'family', 'puzzle_type', 'custody', 'project', 'tags'} & set(entry)
+        if not overrides:
+            return layered.pop(puzzle_key, None) is not None
+        entry['sub_puzzle_hashes'] = sub_puzzle_hashes
+        entry['sub_puzzle_names'] = sub_puzzle_names
+        if example_coin_id:
+            entry['example_coin_id'] = example_coin_id
+        layered[puzzle_key] = entry
+
     with CONF.LAYERED_PUZZLES_LOCK:
-        if not name:
-            PUZ.update_catalog_file(CONF.KNOWN_LAYERED_PUZZLES_PATH, CONF.KNOWN_LAYERED_PUZZLES,
-                                    lambda layered: layered.pop(puzzle_key, None) is not None)
-            return
-
-        family = family or 'UNKNOWN'
-        puzzle_type = None
-
-        def add_type(types: dict):
-            nonlocal puzzle_type
-            old = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key)
-            if old is not None and old['puzzle_type'] in types and types[old['puzzle_type']]['family'] == family:
-                puzzle_type = old['puzzle_type']
-                return False
-            base = puzzle_type_key(name)
-            puzzle_type = base
-            n = 2
-            while puzzle_type in types and types[puzzle_type]['family'] != family:
-                puzzle_type = f"{base}_{n}"
-                n += 1
-            if puzzle_type in types:
-                return False
-            types[puzzle_type] = {'name': name, 'family': family}
-
-        def add_entry(layered: dict):
-            old_tags = layered.get(puzzle_key, {}).get('tags')
-            entry = {
-                'puzzle_type': puzzle_type,
-                'name': name,
-                'sub_puzzle_hashes': sub_puzzle_hashes,
-                'sub_puzzle_names': sub_puzzle_names,
-                'tags': (list(dict.fromkeys([family] + list(tags))) if tags is not None
-                         else PUZ.layered_puzzle_tags(family, sub_puzzle_names, old_tags)),
-            }
-            if example_coin_id:
-                entry['example_coin_id'] = example_coin_id
-            layered[puzzle_key] = entry
-
-        PUZ.update_catalog_file(CONF.PUZZLE_TYPES_PATH, CONF.PUZZLE_TYPES, add_type)
-        PUZ.update_catalog_file(CONF.KNOWN_LAYERED_PUZZLES_PATH, CONF.KNOWN_LAYERED_PUZZLES, add_entry)
+        PUZ.update_catalog_file(CONF.KNOWN_LAYERED_PUZZLES_PATH, CONF.KNOWN_LAYERED_PUZZLES, edit)
+    with CONF.UNKNOWN_LAYERED_PUZZLES_LOCK:
+        if CONF.UNKNOWN_LAYERED_PUZZLES.pop(puzzle_key, None) is not None:
+            with open(CONF.UNKNOWN_LAYERED_PUZZLES_PATH, 'w') as f:
+                json.dump(CONF.UNKNOWN_LAYERED_PUZZLES, f, indent=4)
 
 
 @dataclass
@@ -221,8 +207,11 @@ class PuzzleEntry:
     example_puzzle_reveal: bytes
 
     def label(self):
-        """Return (name, family, status)"""
-        return catalog_label(self.puzzle_key)
+        """Return (label, family, status)"""
+        return catalog_label(self.puzzle_key, self.example_puzzle_reveal)
+
+    def classification(self):
+        return catalog_classification(self.puzzle_key, self.example_puzzle_reveal)
 
     def sub_puzzle_names(self):
         return [sub_puzzle_name(h) for h in self.sub_puzzle_hashes]
@@ -261,6 +250,20 @@ class PuzzleCatalog:
         with self.lock:
             self.entries = {row[0]: PuzzleEntry.from_row(row) for row in rows}
             self.version += 1
+        # the unknown combinations seen before puzzle_harvesting/ existed (or emptied)
+        for entry in list(self.entries.values()):
+            self.harvest(entry)
+
+    @staticmethod
+    def harvest(entry: 'PuzzleEntry'):
+        """Put an unknown combination in puzzle_harvesting/ (PUZ.harvest_unknown)"""
+        if not entry.example_puzzle_reveal:
+            return
+        try:
+            PUZ.harvest_unknown(entry.puzzle_key, entry.sub_puzzle_hashes,
+                                PyProgram.from_bytes(bytes(entry.example_puzzle_reveal)))
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"PUZZLE HARVEST {entry.puzzle_key[:40]} failed: {e}")
 
     def record_seen(self, puzzle_key: str, sub_puzzle_hashes: list, source: str,
                     coin_id: str, height: int, puzzle_reveal_hex: str):
@@ -278,6 +281,8 @@ class PuzzleCatalog:
             entry.last_seen = now
             self.dirty.add(puzzle_key)
             self.version += 1
+        if is_new:
+            self.harvest(entry)
         return is_new
 
     def flush(self, scan_job: str = None, scan_height: int = None):
@@ -301,6 +306,11 @@ class PuzzleCatalog:
 
     def set_name(self, puzzle_key: str, name: str, family: str):
         """Save the name and family in layered_puzzles.json, an empty name removes the puzzle"""
+        self.set_classification(puzzle_key, name, {'family': family})
+
+    def set_classification(self, puzzle_key: str, name: str, overrides: dict):
+        """Save the name and the overrides (family, puzzle_type, custody, project; None: the
+        value the layers give) in layered_puzzles.json"""
         with self.lock:
             entry = self.entries[puzzle_key]
             sub_puzzle_hashes = list(entry.sub_puzzle_hashes)
@@ -310,7 +320,9 @@ class PuzzleCatalog:
                             for h in sub_puzzle_hashes]
         sub_puzzle_names = [name if not name.startswith('unknown_puzz_') else CONF.UNKNOWN_PUZZLE
                             for name in sub_puzzle_names]
-        save_known_puzzle(puzzle_key, sub_puzzle_hashes, sub_puzzle_names, name, family, example_coin_id)
+        reveal = self.entries[puzzle_key].example_puzzle_reveal
+        save_known_puzzle(puzzle_key, sub_puzzle_hashes, sub_puzzle_names, name, example_coin_id=example_coin_id,
+                          overrides=overrides, puzzle=PyProgram.from_bytes(bytes(reveal)) if reveal else None)
         with self.lock:
             self.version += 1
 
@@ -339,9 +351,9 @@ class PuzzleCatalog:
         return catalog_label(puzzle_key)
 
     def families(self):
-        """Families in puzzle_types.json"""
+        """The families of puzzle_types.json"""
         with CONF.LAYERED_PUZZLES_LOCK:
-            return sorted({data['family'] for data in CONF.PUZZLE_TYPES.values()})
+            return list(CONF.PUZZLE_TYPES.get('families', {}))
 
 
 def scan_coin_spend(catalog: PuzzleCatalog, coin_spend: dict, source: str, height: int,

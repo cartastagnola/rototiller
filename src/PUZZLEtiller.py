@@ -72,8 +72,220 @@ def get_puzzle_reveals_and_solutions(spend_bundle: str):
     return reveals, solutions
 
 
+# In a key, a known puzzle curried in two steps: the program curried once is not a layer of
+# its own (its hash changes with the data curried in it), it is marked with CURRIED_AGAIN and
+# the known puzzle follows it. Eg: every Forge pool is
+# singleton_top_layer_v1_1|action|+|forge_multi_reserve_finalizer|forge_reserve_amount
+CURRIED_AGAIN = '+'
+CURRIED_AGAIN_NAME = '(curried again)'
+
+
+def known_base_of(program: PyProgram):
+    """The hash of the known puzzle that a curried program is made of, uncurrying it as many
+    times as needed, or None. Only the shared catalog counts (the key is the same everywhere)."""
+    for _ in range(8):
+        base, _ = program.uncurry()
+        if base == program:
+            return None
+        base_hash = base.get_tree_hash().hex()
+        if base_hash in CONF.KNOWN_PUZZLES:
+            return base_hash
+        program = base
+    return None
+
+
+# keys of the puzzles that are not curried and not in the catalog (SCAN.classify_puzzle)
+QUOTED_CONDITIONS_KEY = 'quoted_conditions'  # a puzzle that only returns its conditions: (q . conditions)
+SHAPE_KEY_PREFIX = 'shape_'  # code not curried, grouped by shape
+
+
+# --- Classification of a layer combination ------------------------------------------
+# Family, puzzle type, custody and project come from fields on the base puzzles of
+# catalog/puzzles.json (family on the family layers, puzzle_type on the purpose layers,
+# custody on the p2 puzzles, inner_arg on the layers that wrap an inner puzzle, project where
+# the sources give no single one), read by hash; an entry of layered_puzzles.json can
+# override them. The names, types and families are for people: no code decides from them.
+
+HELD_CUSTODIES = ('KEY', 'KEYS', 'OFFER', 'SINGLETON', 'ANYONE')  # someone holds the coin
+FAMILY_ASSET = {'XCH': 'XCH', 'CAT': 'CAT', 'SINGLETON': 'SINGLETON'}  # the type of a held coin
+CHIA_PROJECT = 'chia'
+_custody_cache = {}  # puzzle key -> (custody, origin): puzzles.json is read once, at start
+
+
+def uncurry_fully(program: PyProgram):
+    """(base hash, args) of a known puzzle curried once or more (the args of every curry, in
+    the order they are passed), or (None, None)"""
+    levels = []
+    for _ in range(8):
+        mod, curried_args = program.uncurry()
+        if mod == program:
+            return None, None
+        levels.append(list(curried_args.as_iter()))
+        mod_hash = mod.get_tree_hash().hex()
+        if mod_hash in CONF.KNOWN_PUZZLES:
+            return mod_hash, [arg for level in reversed(levels) for arg in level]
+        program = mod
+    return None, None
+
+
+def walk_custody(puzzle: PyProgram):
+    """(custody, origin) of a puzzle: walk from the outside in, through the inner puzzle
+    argument (inner_arg) of each known layer, to the innermost puzzle. A whole puzzle of the
+    catalog ends the walk (a compiled puzzle with constants looks curried). An argument that
+    is only a hash: HIDDEN. An unknown layer: go on with its last argument that is a program,
+    the origin becomes 'guessed'."""
+    origin = 'walk'
+    for _ in range(30):
+        puzzle_hash = puzzle.get_tree_hash().hex()
+        if puzzle_hash in CONF.KNOWN_PUZZLES:
+            return CONF.KNOWN_PUZZLES[puzzle_hash].get('custody', 'CONTRACT'), origin
+        base_hash, args = uncurry_fully(puzzle)
+        if base_hash is None:
+            mod, curried_args = puzzle.uncurry()
+            programs = [arg for arg in curried_args.as_iter() if arg.atom is None] if mod != puzzle else []
+            if not programs:
+                return 'UNKNOWN', origin
+            puzzle, origin = programs[-1], 'guessed'
+            continue
+        base = CONF.KNOWN_PUZZLES[base_hash]
+        inner_arg = base.get('inner_arg')
+        if inner_arg is None:
+            return base.get('custody', 'CONTRACT'), origin
+        if inner_arg > len(args):
+            logging(debug_logger, "DEBUG", f"CATALOG inner_arg {inner_arg} of {base['name']} past its {len(args)} args")
+            return 'UNKNOWN', origin
+        inner = args[inner_arg - 1]
+        if inner.atom is not None:
+            return 'HIDDEN', origin
+        puzzle = inner
+    return 'UNKNOWN', origin
+
+
+def source_projects(puzzle_hash: str) -> set:
+    """The projects of a base puzzle: its project field, else the projects of its sources"""
+    entry = CONF.KNOWN_PUZZLES.get(puzzle_hash, {})
+    if entry.get('project'):
+        return {entry['project']}
+    project_of = {source: project for project, sources in CONF.PUZZLE_TYPES.get('projects', {}).items()
+                  for source in sources}
+    return {project_of.get(source.get('project'), source.get('project')) for source in entry.get('sources', [])}
+
+
+def known_projects() -> list:
+    """Every project of the catalog: the projects list of puzzle_types.json and the projects of
+    the sources and of the project fields of catalog/puzzles.json"""
+    projects = set(CONF.PUZZLE_TYPES.get('projects', {}))
+    for puzzle_hash in CONF.KNOWN_PUZZLES:
+        projects |= source_projects(puzzle_hash)
+    projects.discard(None)
+    return sorted(projects)
+
+
+def layer_hashes(puzzle_key: str) -> list:
+    """The layers of a key, without the CURRIED_AGAIN markers"""
+    return [h for h in puzzle_key.split('|') if h != CURRIED_AGAIN]
+
+
+def all_layers_known(puzzle_key: str) -> bool:
+    if puzzle_key == QUOTED_CONDITIONS_KEY:
+        return True
+    return all(h in CONF.KNOWN_PUZZLES for h in layer_hashes(puzzle_key))
+
+
+def classify_key(puzzle_key: str, puzzle: PyProgram = None, overrides: bool = True) -> dict:
+    """name, family, puzzle_type, custody, project of a layer combination, each value with
+    its origin: 'set' (layered_puzzles.json), 'layer N', 'walk', 'guessed', 'held', ...
+    puzzle: a puzzle reveal with this key, for the custody (cached per key).
+    overrides=False: what the layers give, without the entry's overrides."""
+    entry = (CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key) or {}) if overrides else {}
+    out = {'name': entry.get('name')}
+    if puzzle_key == QUOTED_CONDITIONS_KEY:
+        out.update(family=('XCH', 'quoted conditions'), custody=('ANYONE', 'quoted conditions'),
+                   puzzle_type=('XCH', 'held'), project=(CHIA_PROJECT, 'quoted conditions'))
+        return out
+    if puzzle_key.startswith(SHAPE_KEY_PREFIX):
+        out.update(family=(None, 'unknown code'), custody=('UNKNOWN', 'unknown code'),
+                   puzzle_type=(None, 'unknown code'), project=('unknown', 'unknown code'))
+        return out
+    layers = layer_hashes(puzzle_key)
+    fields = [CONF.KNOWN_PUZZLES.get(h, {}) for h in layers]
+
+    # family: the outer layer
+    family_layer = bool(fields) and 'family' in fields[0]
+    if 'family' in entry:
+        out['family'] = (entry['family'], 'set')
+    elif family_layer:
+        out['family'] = (fields[0]['family'], 'layer 1')
+    elif layers and layers[0] in CONF.KNOWN_PUZZLES:
+        out['family'] = ('XCH', 'no family layer')
+    else:
+        out['family'] = ('XCH', 'unknown outer layer')
+
+    # custody: the innermost puzzle
+    if 'custody' in entry:
+        out['custody'] = (entry['custody'], 'set')
+    elif puzzle_key in _custody_cache:
+        out['custody'] = _custody_cache[puzzle_key]
+    elif puzzle is not None:
+        out['custody'] = _custody_cache[puzzle_key] = walk_custody(puzzle)
+    elif len(layers) == 1 and layers[0] in CONF.KNOWN_PUZZLES:
+        out['custody'] = (fields[0].get('custody', 'CONTRACT'), 'layer 1')
+    else:
+        out['custody'] = (None, 'no example')
+
+    # type: the outermost purpose layer inside the family layer, else the asset of a held coin
+    if 'puzzle_type' in entry:
+        out['puzzle_type'] = (entry['puzzle_type'], 'set')
+    else:
+        start = 1 if family_layer else 0
+        found = next(((f['puzzle_type'], f'layer {i + 1}') for i, f in enumerate(fields)
+                      if i >= start and 'puzzle_type' in f), None)
+        if found:
+            out['puzzle_type'] = found
+        elif out['custody'][0] in HELD_CUSTODIES:
+            out['puzzle_type'] = (FAMILY_ASSET.get(out['family'][0]), 'held')
+        else:
+            out['puzzle_type'] = (None, 'app contract' if out['custody'][0] == 'CONTRACT' else 'not known')
+
+    # project: the projects of the layers, without chia's own
+    if 'project' in entry:
+        out['project'] = (entry['project'], 'set')
+    else:
+        projects = set()
+        for h in layers:
+            projects |= source_projects(h)
+        projects.discard(CHIA_PROJECT)
+        if len(projects) == 1:
+            out['project'] = (projects.pop(), 'layers')
+        elif projects:
+            out['project'] = (' + '.join(sorted(projects)), 'undecided')
+        elif any(h not in CONF.KNOWN_PUZZLES for h in layers):
+            out['project'] = ('unknown', 'unknown layer')
+        else:
+            out['project'] = (CHIA_PROJECT, 'layers')
+    return out
+
+
+def classification_label(c: dict, puzzle_key: str) -> str:
+    """The name of a combination, or a label made from its classification"""
+    if c.get('name'):
+        return c['name']
+    puzzle_type, custody = c['puzzle_type'][0], c['custody'][0]
+    if puzzle_type:
+        return f"{puzzle_type} ({custody})" if custody else puzzle_type
+    inside = layer_hashes(puzzle_key)[1 if c['family'][1] == 'layer 1' else 0:]
+    core = next((CONF.KNOWN_PUZZLES[h]['name'].lstrip('-').split('-')[-1] for h in inside
+                 if h in CONF.KNOWN_PUZZLES), None)
+    if core:
+        return f"{c['project'][0]}: {core}"
+    # nothing known inside: the name it has in puzzle_harvesting/, if any
+    return CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, {}).get('name')
+
+
 def compare_to_known_puzzles(puzzle_hash):
     """Look up a puzzle hash in known puzzles, then in saved unknown puzzles. """
+    if puzzle_hash == CURRIED_AGAIN:
+        return CURRIED_AGAIN_NAME
     # Check against known puzzles first
     puzzle = CONF.KNOWN_PUZZLES.get(str(puzzle_hash), None)
     if puzzle is not None:
@@ -162,111 +374,53 @@ def update_catalog_file(path, target: dict, change):
     _replace_in_place(target, data)
 
 
-def layered_puzzle_tags(family: str, sub_puzzle_names: list, old_tags: list = None) -> list:
-    """Tags of an entry of layered_puzzles.json: the family (also when it is in puzzle_types.json),
-    then a tag for each known sub-puzzle, the last part of its name
-    ('--cni-nft_puzzles-nft_state_layer' -> 'nft_state_layer'). The tags of old_tags that are
-    not a family are kept: they were added by hand."""
-    tags = [family]
-    for name in sub_puzzle_names:
-        if name.startswith(('?', '(', 'not curried')):
-            continue  # unknown or not curried layer
-        tag = name.rsplit('-', 1)[-1]
-        if tag and not tag.startswith('unknown') and tag not in tags:
-            tags.append(tag)
-    families = {data['family'] for data in CONF.PUZZLE_TYPES.values()}
-    tags += [tag for tag in old_tags or [] if tag not in tags and tag not in families]
-    return tags
-
-
 def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
-    """Save a layered puzzle combination that is not named yet in
-    puzzle_harvesting/layered_puzzles.json: named unknown_layered_NN if a sub-puzzle is
-    unknown, auto_layered_NN if all are known. The catalog (catalog/layered_puzzles.json)
-    is written only when the user saves a name.
-
-    Args:
-        puzzle_key: The pipe-separated hash string used as key.
-        sub_hashes: List of sub-puzzle hashes.
-        sub_names: List of resolved sub-puzzle names.
-
-    Returns:
-        The generated name for the layered combination.
-    """
-    has_unknown = any(hash not in CONF.KNOWN_PUZZLES for hash in sub_hashes)
-    target_dict = CONF.UNKNOWN_LAYERED_PUZZLES
-    target_path = CONF.UNKNOWN_LAYERED_PUZZLES_PATH
-    lock = CONF.UNKNOWN_LAYERED_PUZZLES_LOCK
-    prefix = "unknown_layered" if has_unknown else "auto_layered"
-
-    def add_entry(catalog: dict):
-        """Add the entry to the catalog, return (puzzle_type, name, added)"""
-        if puzzle_key in catalog:
-            entry = catalog[puzzle_key]
-            return entry['puzzle_type'], entry['name'], False
-
-        #find max unkonw puzzle
-        max_num = 0
-        for entry in catalog.values():
-            name = entry.get('name', '')
-            if name.startswith(prefix + '_'):
-                try:
-                    num = int(name.split('_')[-1])
-                    if num > max_num:
-                        max_num = num
-                except ValueError:
-                    pass
-
-        new_name = f"{prefix}_{max_num + 1:02d}"
-        new_type = f"type_{new_name}"
-
-        catalog[puzzle_key] = {
-            "puzzle_type": new_type,
-            "name": new_name,
-            "sub_puzzle_hashes": sub_hashes,
-            "sub_puzzle_names": sub_names
-        }
-        if not has_unknown:
-            # a new type is not in puzzle_types.json yet: UNKNOWN family
-            catalog[puzzle_key]["tags"] = layered_puzzle_tags('UNKNOWN', sub_names)
-        return new_type, new_name, True
-
-    with lock:
-        if puzzle_key in target_dict:
-            entry = target_dict[puzzle_key]
-            return entry['puzzle_type'], entry['name']
-
+    """Save a layer combination with an unknown layer in puzzle_harvesting/layered_puzzles.json,
+    named unknown_layered_NN, and return its name. A combination whose layers are all known is
+    not saved: its classification comes from its layers (classify_key).
+    The catalog (catalog/layered_puzzles.json) is written only when the user saves a name."""
+    with CONF.UNKNOWN_LAYERED_PUZZLES_LOCK:
+        target = CONF.UNKNOWN_LAYERED_PUZZLES
+        if puzzle_key in target:
+            return target[puzzle_key]['name']
+        numbers = [int(e['name'].rsplit('_', 1)[-1]) for e in target.values()
+                   if e.get('name', '').startswith('unknown_layered_') and e['name'].rsplit('_', 1)[-1].isdigit()]
+        name = f"unknown_layered_{max(numbers, default=0) + 1:02d}"
+        target[puzzle_key] = {'name': name, 'sub_puzzle_hashes': sub_hashes, 'sub_puzzle_names': sub_names}
         # local file, only roto writes it
-        new_type, new_name, added = add_entry(target_dict)
-        with open(target_path, 'w') as f:
-            json.dump(target_dict, f, indent=4)
-        return new_type, new_name
+        with open(CONF.UNKNOWN_LAYERED_PUZZLES_PATH, 'w') as f:
+            json.dump(target, f, indent=4)
+        return name
 
 
-def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list):
-    """Compare a list of sub-puzzle hashes against known layered puzzles.
+def harvest_unknown(puzzle_key: str, sub_puzzle_hashes: list, puzzle: PyProgram):
+    """Put a combination with an unknown layer in puzzle_harvesting/: the combination in
+    layered_puzzles.json (unknown_layered_NN) and its unknown puzzles in puzzles.json
+    (unknown_puzz_NN, by unroll_puzzle_to_nodes). Called by the scanners for the keys they
+    see first; a known or named combination, or one already harvested, is skipped.
+    Return True if something was added."""
+    if (puzzle_key in CONF.KNOWN_LAYERED_PUZZLES or puzzle_key in CONF.UNKNOWN_LAYERED_PUZZLES
+            or puzzle_key.startswith((QUOTED_CONDITIONS_KEY, SHAPE_KEY_PREFIX)) or all_layers_known(puzzle_key)):
+        return False
+    unroll_puzzle_to_nodes(puzzle)  # saves the unknown puzzles
+    save_layered_puzzle(puzzle_key, sub_puzzle_hashes, [compare_to_known_puzzles(h) for h in sub_puzzle_hashes])
+    return True
 
-    If the combination is not found, save it to the appropriate catalog
-    (known or unknown layered puzzles) and return the generated name.
 
-    Args:
-        sub_puzzle_hashes: List of sub-puzzle hash strings.
-
-    Returns:
-        The puzzle name if found, or a generated name if newly saved.
-    """
+def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list, puzzle: PyProgram = None):
+    """(puzzle type, label) of a layer combination: its derived type ('-' when it has none) and
+    its name, or a label made from its classification. A combination with an unknown layer that
+    is not in the catalog is saved in puzzle_harvesting/layered_puzzles.json.
+    puzzle: the puzzle reveal, for the custody."""
     puzzle_key = '|'.join(sub_puzzle_hashes)
-
-    puzzle = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
-    if puzzle is not None:
-        return puzzle['puzzle_type'], puzzle['name']
-
-    puzzle = CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, None)
-    if puzzle is not None:
-        return puzzle['puzzle_type'], puzzle['name']
-
-    sub_names = [compare_to_known_puzzles(h) for h in sub_puzzle_hashes]
-    return save_layered_puzzle(puzzle_key, sub_puzzle_hashes, sub_names)
+    named = puzzle_key in CONF.KNOWN_LAYERED_PUZZLES and CONF.KNOWN_LAYERED_PUZZLES[puzzle_key].get('name')
+    if not named and not all_layers_known(puzzle_key):
+        harvest_name = CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, {}).get('name') or save_layered_puzzle(
+            puzzle_key, sub_puzzle_hashes, [compare_to_known_puzzles(h) for h in sub_puzzle_hashes])
+        c = classify_key(puzzle_key, puzzle)
+        return c['puzzle_type'][0] or '-', harvest_name
+    c = classify_key(puzzle_key, puzzle)
+    return c['puzzle_type'][0] or '-', classification_label(c, puzzle_key)
 
 
 def print_tree_path(path: list, level):
@@ -500,9 +654,13 @@ def unroll_puzzle_to_nodes(puzzle: PyProgram, level: int = 0, array: list = None
         node['hash'] = mod_hash
         node['puzz_name'] = mod_name
         node['disassembly'] = rs_disassemble(bytes(mod))  # should we put the disassembly of the mod?
+        base_hash = known_base_of(mod) if mod_name == CONF.UNKNOWN_PUZZLE else None
+        if base_hash is not None:
+            # a known puzzle curried again: not an unknown puzzle, it is not saved
+            node['puzz_name'] = f"{compare_to_known_puzzles(base_hash)}, curried again"
 
         # Save unknown template with an example curried instance
-        if mod_name == CONF.UNKNOWN_PUZZLE:
+        if mod_name == CONF.UNKNOWN_PUZZLE and base_hash is None:
             save_unknown_puzzle(
                 mod_hash,
                 mod,
@@ -597,8 +755,13 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
 
     if mod != puzzle and not puzzle_is_known:
 
-        array[0].append(mod_name)
-        array[1].append(mod_hash)
+        if not mod_is_known and known_base_of(mod) is not None:
+            # a known puzzle curried again: the known puzzle is added by the recursion below
+            array[0].append(CURRIED_AGAIN_NAME)
+            array[1].append(CURRIED_AGAIN)
+        else:
+            array[0].append(mod_name)
+            array[1].append(mod_hash)
 
         # Check if the mod itself can be uncurried further
         mod2, curried_args2 = mod.uncurry()
@@ -646,7 +809,7 @@ def unroll_puzzle_from_coin_id(coin_record: TYPES.CoinRecordRoto):
             logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
             unroll_puzzles = unroll_puzzle_to_nodes(program)
             puz_names, puz_hashes = unroll_puzzle_to_names(program)
-            layered_puzzle_type, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            layered_puzzle_type, layered_puzzle_name = compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes, program)
             logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
             puz = TYPES.PuzzleRecord(out, puzzle_disassembled, unroll_puzzles, layered_puzzle_type, layered_puzzle_name,
@@ -746,9 +909,9 @@ def get_type_unspent_coin(coin_record: TYPES.CoinRecordRoto):
 
 
 def layered_puzzle_status(puzzle_key: str) -> TYPES.PuzzleStatus:
-    """KNOWN if the layer combination is in catalog/layered_puzzles.json, or if it is one
-    layer that is in catalog/puzzles.json (the key of one layer is its hash)"""
-    if puzzle_key in CONF.KNOWN_LAYERED_PUZZLES or puzzle_key in CONF.KNOWN_PUZZLES:
+    """KNOWN if every layer is in catalog/puzzles.json (the classification comes from the
+    layers) or the combination is in catalog/layered_puzzles.json"""
+    if puzzle_key in CONF.KNOWN_LAYERED_PUZZLES or all_layers_known(puzzle_key):
         return TYPES.PuzzleStatus.KNOWN
     return TYPES.PuzzleStatus.UNKNOWN
 

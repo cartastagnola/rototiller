@@ -1,6 +1,10 @@
 """Scan every spend of the chain and list all the puzzles that exist (by layers).
 Reads the node DB read-only, writes OUT_DB. Resumable: chunks already done are skipped.
-usage: chain_scan.py OUT_DB [--workers N] [--chunk N] [--from H] [--to H]"""
+The combinations with an unknown layer go into resources/puzzles/puzzle_harvesting/ too,
+like rototiller's own scanners do (do not run rototiller at the same time: both write
+those files).
+usage: chain_scan.py OUT_DB [--workers N] [--chunk N] [--from H] [--to H]
+       chain_scan.py OUT_DB --harvest   (only fill puzzle_harvesting/ from OUT_DB)"""
 import argparse, json, multiprocessing as mp, os, sqlite3, sys, time, traceback
 from collections import OrderedDict
 
@@ -14,6 +18,7 @@ from chia.consensus.default_constants import DEFAULT_CONSTANTS
 from chia.types.blockchain_format.program import Program as PyProgram
 import src.CONFtiller as CONF
 import src.SCANtiller as SCAN
+import src.PUZZLEtiller as PUZ
 
 CACHE_SIZE = 300_000
 
@@ -85,6 +90,23 @@ def open_out(path):
     return out
 
 
+def harvest(key, subs, reveal):
+    """A combination with an unknown layer goes into puzzle_harvesting/ (PUZ.harvest_unknown)"""
+    try:
+        return PUZ.harvest_unknown(key, subs, PyProgram.from_bytes(bytes(reveal)))
+    except Exception as e:
+        sys.stderr.write(f"harvest {key[:40]}: {e}\n")
+        return False
+
+
+def harvest_all(out):
+    """Fill puzzle_harvesting/ from the puzzles already in OUT_DB"""
+    rows = out.execute("SELECT puzzle_key, sub_puzzle_hashes, example_puzzle_reveal FROM puzzles").fetchall()
+    added = sum(harvest(key, json.loads(subs), reveal) for key, subs, reveal in rows if reveal is not None)
+    print(f"{len(rows):,} puzzle keys, {added:,} added to puzzle_harvesting/ "
+          f"({len(CONF.UNKNOWN_LAYERED_PUZZLES):,} combinations, {len(CONF.UNKNOWN_PUZZLES):,} puzzles there now)", flush=True)
+
+
 def merge(out, found):
     for key, (subs, count, first_h, last_h, coin_id, reveal) in found.items():
         row = out.execute("SELECT seen_count, first_height, last_height FROM puzzles WHERE puzzle_key = ?",
@@ -92,6 +114,7 @@ def merge(out, found):
         if row is None:
             out.execute("INSERT INTO puzzles VALUES (?,?,?,?,?,?,?,?)",
                         (key, json.dumps(subs), count, first_h, last_h, coin_id, first_h, reveal))
+            harvest(key, subs, reveal)
         else:
             out.execute("UPDATE puzzles SET seen_count = ?, first_height = ?, last_height = ? WHERE puzzle_key = ?",
                         (row[0] + count, min(row[1], first_h), max(row[2], last_h), key))
@@ -107,7 +130,11 @@ def main():
     ap.add_argument('--chunk', type=int, default=20_000)
     ap.add_argument('--from', dest='start', type=int, default=0)
     ap.add_argument('--to', dest='end', type=int, default=None)
+    ap.add_argument('--harvest', action='store_true', help='only fill puzzle_harvesting/ from OUT_DB')
     a = ap.parse_args()
+    if a.harvest:
+        harvest_all(open_out(a.out_db))
+        return
 
     end = a.end
     if end is None:

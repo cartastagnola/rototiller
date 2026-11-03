@@ -2,12 +2,13 @@ import json, collections, re, hashlib, sys
 R, N = sys.argv[1], sys.argv[2]
 ps = json.load(open('resources/puzzles/chain_scan/all_puzzles.json'))
 lay = [p for p in ps if p['kind'] == '2+ layers']
-# counted on the 2+ layer puzzles only, so their families (and row ids) stay the same
+# counted on the 2+ layer puzzles only, so their variant groups (and row ids) stay the same
 nkeys = collections.Counter(l for p in lay for l in set(p['layers']))
 # puzzles with 1 layer get a row too: a name in layered_puzzles.json puts the ones of a project
-# under its tag, and gives them a family (a catalog puzzle has none)
+# under its tag
 lay += [p for p in ps if p['kind'] == '1 layer']
-# proposals for the 1-layer puzzles of the catalog: layer name -> (tag, what it does, guessed, family)
+# proposals for the 1-layer puzzles of the catalog: layer name -> (tag, what it does, guessed, family
+# (not used: the family comes from the layers, see all_puzzles.json))
 ONE_LAYER = {
     '--cni-p2_delegated_puzzle_or_hidden_puzzle': ('STD', 'standard transaction', False, 'STD'),
     '--cni-p2_singleton_or_delayed_puzhash': ('PLOTNFT', 'pool reward (p2 singleton or delayed puzzle hash)', False, 'UNKNOWN'),
@@ -42,24 +43,10 @@ ONE_LAYER = {
     '--forge_v16-forge_reserve_launcher': ('FORGE', 'reserve launcher', False, 'UNKNOWN'),
     '--circuit-circuit_puzzles-statutes_launcher': ('CIRCUIT', 'statutes launcher', False, 'UNKNOWN'),
 }
-fam = collections.defaultdict(list)
+groups = collections.defaultdict(list)
 saved_file = json.load(open('resources/puzzles/catalog/layered_puzzles.json'))
 puzzle_types = json.load(open('resources/puzzles/catalog/puzzle_types.json'))
-def family_of(first_layer):
-    """Family from the outer layer, the same rule as apply_review.py"""
-    return 'CAT' if 'cat_v' in first_layer else 'SINGLETON' if 'singleton' in first_layer else 'UNKNOWN'
 names = {k: v for k, v in json.load(open(f'{R}/names.json')).items()}
-def layer_tags(layers):
-    """Puzzle tags from the layers, the same rule as PUZ.layered_puzzle_tags: the last part of
-    each known layer name ('--cni-nft_puzzles-nft_state_layer' -> 'nft_state_layer')"""
-    tags = []
-    for n in layers:
-        if n == '*' or n.startswith(('?', '(', 'not curried')):
-            continue
-        t = n.rsplit('-', 1)[-1]
-        if t and not t.startswith('unknown') and t not in tags:
-            tags.append(t)
-    return tags
 # layers identified by hand, kept out of the '*' wildcard so they get their own row
 KEEP = set()
 NEW_IDS = {}
@@ -68,31 +55,27 @@ LABELS = {}
 for p in lay:
     # the layer of a 1-layer puzzle is the whole puzzle, never per-instance data
     one_layer = len(p['layers']) == 1
-    fam[tuple('*' if l.startswith('?') and nkeys[l] == 1 and l not in KEEP and not one_layer else l for l in p['layers'])].append(p)
-fams = sorted(fam.items(), key=lambda kv: -sum(p['seen'] for p in kv[1]))
+    groups[tuple('*' if l.startswith('?') and nkeys[l] == 1 and l not in KEEP and not one_layer else l for l in p['layers'])].append(p)
+ordered = sorted(groups.items(), key=lambda kv: -sum(p['seen'] for p in kv[1]))
 def short(l):
     l = re.sub(r'^--cni-', '', l); l = re.sub(r'^--', '', l)
     for a in ('nft_puzzles-','cat_puzzles-','did_puzzles-','pool_puzzles-','mips_puzzles-','architecture_puzzles-','member_puzzles-','circuit_puzzles-','vc_puzzles-'): l = l.replace(a,'')
     return l
-items, used, families = [], collections.OrderedDict(), {}
-for i, (pat, g) in enumerate(fams):
+items, used, variant_groups = [], collections.OrderedDict(), {}
+for i, (pat, g) in enumerate(ordered):
     pid = hashlib.sha1('|'.join(pat).encode()).hexdigest()
     # a 1-layer puzzle: the proposal above, or no project known yet
-    one_fam = ONE_LAYER[pat[0]][3] if len(pat) == 1 and pat[0] in ONE_LAYER else None
+    one_layer = len(pat) == 1 and pat[0] in ONE_LAYER
     if pid in names: tag, desc, uns = names[NEW_IDS.get(pat, pid)][:3]
-    elif one_fam: tag, desc, uns = ONE_LAYER[pat[0]][:3]
+    elif one_layer: tag, desc, uns = ONE_LAYER[pat[0]][:3]
     else: tag, desc, uns = 'UNKNOWN', f"unidentified {pat[0].lstrip('?')}", True
-    known = sorted({p['name'] for p in g if p['name']})
     seen = sum(p['seen'] for p in g)
-    named = [saved_file[p['key']]['name'] for p in g if p['key'] in saved_file]
+    named = [saved_file[p['key']]['name'] for p in g if saved_file.get(p['key'], {}).get('name')]
     types = sorted({saved_file[p['key']].get('puzzle_type', '') for p in g if p['key'] in saved_file} - {''})
-    # family: the saved one when the family has one, else from the outer layer
-    saved_fams = sorted({puzzle_types[t]['family'] for t in types if t in puzzle_types})
-    family = saved_fams[0] if len(saved_fams) == 1 else one_fam or family_of(g[0]['layers'][0])
-    # puzzle tags without the family (the family is always the first one, chosen on the row):
-    # the ones in layered_puzzles.json, else from the layers
-    saved_tags = [t for p in g if p['key'] in saved_file for t in saved_file[p['key']].get('tags', [])[1:]]
-    ptags = list(dict.fromkeys(saved_tags)) if saved_tags else layer_tags(pat)
+    # family: the one rototiller derives from the layers (all_puzzles.json), the same for the group
+    family = g[0]['family'] or 'XCH'
+    # puzzle tags: only the labels added by hand (the family and the layers are derived)
+    ptags = list(dict.fromkeys(t for p in g for t in saved_file.get(p['key'], {}).get('tags', [])))
     cur = f"{seen:,} spends  ·  heights {min(p['first_height'] for p in g):,}–{max(p['last_height'] for p in g):,}" + \
           (f"  ·  {len(g)} kinds" if len(g) > 1 else '') + f"  ·  {len(pat)} layer{'s' if len(pat) > 1 else ''}"
     items.append(dict(id=pid, hash=pid, group=tag, tagBase=tag, tagSuffix='', desc=desc, proposed=f"{tag}: {desc}",
@@ -100,7 +83,7 @@ for i, (pat, g) in enumerate(fams):
                       saved=dict(names=sorted(set(named)), types=types, keys=len(named), total=len(g)) if named else None,
                       example_key=g[0]['key'], family=family, ptags=ptags))
     used[tag] = used.get(tag, 0) + seen
-    families[pid] = dict(layers=list(pat), keys=[dict(key=p['key'], layer_hashes=p['layer_hashes'], layers=p['layers'], example_coin=p['example_coin']) for p in g])
+    variant_groups[pid] = dict(layers=list(pat), keys=[dict(key=p['key'], layer_hashes=p['layer_hashes'], layers=p['layers'], example_coin=p['example_coin']) for p in g])
 tag_notes = {'TIBET_SWAP': 'was TIBET_SW in the first review', 'WARP_GREEN': 'was WARP_G; you wrote WART_GREEN, read as WARP_GREEN',
              'OPTION_CONTRACT': 'CHIP-45; the chip number is secondary info', 'UNKNOWN': 'no layer is known',
              'SINGLETON': 'singleton with an inner puzzle of no known project', 'REWARD_DIST': 'reward distributor (slot machine app)',
@@ -113,24 +96,24 @@ rules = [dict(id='tag-' + t.lower(), group='Project tags', proposed=t, current='
 # (a setting, not a row to review)
 rules.append(dict(id='fmt-separator', group='Name format', proposed='separator', current='',
                   file='', hash='', unsure=False, rule=dict(kind='sep', proposed=' - ')))
-# puzzle tags: the ones in layered_puzzles.json and the ones from the layers; more can be added
-# in the Puzzle tags tab
-saved_ptags = sorted({t for v in saved_file.values() for t in v.get('tags', [])[1:]})
+# puzzle tags: the ones added by hand in layered_puzzles.json; more can be added in the Puzzle
+# tags tab
+saved_ptags = sorted({t for v in saved_file.values() for t in v.get('tags', [])})
 rules.append(dict(id='cfg-ptags', group='Puzzle tags', proposed='puzzle tags', current='', file='', hash='', unsure=False,
-                  rule=dict(kind='ptags', saved=saved_ptags, layers=sorted({t for it in items for t in it['ptags']} - set(saved_ptags)))))
-# the families rototiller knows (puzzle_types.json); more can be added in the Families tab
+                  rule=dict(kind='ptags', saved=saved_ptags, layers=[])))
+# the families of puzzle_types.json
 rules.append(dict(id='cfg-families', group='Families', proposed='families', current='', file='', hash='', unsure=False,
-                  rule=dict(kind='families', families=sorted({t['family'] for t in puzzle_types.values()}))))
+                  rule=dict(kind='families', families=list(puzzle_types['families']))))
 order = list(used)  # tags by first appearance in spend order
 items.sort(key=lambda it: (order.index(it['group']), -it['seen']))  # rules stay first
 json.dump(rules + items, open(f'{R}/items.json', 'w'))
-json.dump(families, open(f'{R}/families.json', 'w'))
+json.dump(variant_groups, open(f'{R}/variant_groups.json', 'w'))
 head = open(f'{N}/head.html').read().replace('<title>Puzzle Names Review</title>', '<title>Chain Puzzle Names</title>')
 body = open(f'{N}/body.html').read().replace('<h1>Puzzle names review</h1>', '<h1>Chain puzzle names</h1>') \
-    .replace('&lt;TAG&gt;[_VERSION][_RUE]: &lt;what it does&gt;', '&lt;PROJECT_TAG&gt;: &lt;what it does&gt;  ·  one row per family of puzzles seen on chain') \
+    .replace('&lt;TAG&gt;[_VERSION][_RUE]: &lt;what it does&gt;', '&lt;PROJECT_TAG&gt;: &lt;what it does&gt;  ·  one row per variant group seen on chain') \
     .replace('Search names, files, notes', 'Search names, layers, notes') \
     .replace('<div id="applyPanel" hidden></div>', '<button type="button" class="gapply" id="submitBtn" title="Send the reviewed names, Claude writes them in layered_puzzles.json">Submit names</button><span class="status" id="subInfo"></span>\n    <div id="applyPanel" hidden></div>')
 script = open(f'{N}/script.js').read().replace("const LOCAL_KEY = 'puzzle-names-review';", "const LOCAL_KEY = 'layered-names-review';") + open(f'{R}/submit.js').read()
 data = json.dumps(rules + items).replace('</', '<\\/')
 open(f'{R}/layered-names-review.html', 'w').write(head + body + '<script type="application/json" id="data">' + data + '</script>\n<script>\n' + script + '</script>\n')
-print(len(rules), 'tags', len(items), 'families', sum(it['unsure'] for it in items), 'guessed')
+print(len(rules), 'tags', len(items), 'variant groups', sum(it['unsure'] for it in items), 'guessed')

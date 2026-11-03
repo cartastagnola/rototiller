@@ -2006,7 +2006,7 @@ def load_the_loaders(address_loaders: AddressLoaders):
             logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
             unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
             puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
-            layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+            layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes, program)
             logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
             with address_loaders.lock:
@@ -2311,7 +2311,7 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                 logging(debug_logger, "DEBUG", f"LOAD i fetcher program: {program}")
                 unroll_puzzles = PUZ.unroll_puzzle_to_nodes(program)
                 puz_names, puz_hashes = PUZ.unroll_puzzle_to_names(program)
-                layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes)
+                layered_puzzle_type, layered_puzzle_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(puz_hashes, program)
                 logging(debug_logger, "DEBUG", f"LOAD puz_hashes: {puz_hashes}")
 
                 with address_loaders.lock:
@@ -5392,11 +5392,12 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     pos += UIgraph.Point(0,3)
 
     entries, version = SCAN.CATALOG.snapshot()
-    labels = {e.puzzle_key: e.label() for e in entries}
+    # derived from the layers (PUZ.classify_key): the custody walk is cached per key
+    classes = {e.puzzle_key: e.classification() for e in entries}
     entries.sort(key=lambda e: -e.seen_count)
     status_count = {status: 0 for status in PUZZLE_VIEWS}
-    for name, family, status in labels.values():
-        status_count[status] += 1
+    for c in classes.values():
+        status_count[c['status']] += 1
 
     # left/right switch between the unknown and the known puzzles (like the address viewer),
     # enter goes into the list and esc comes back. Each list keeps its cursor
@@ -5418,27 +5419,26 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     pos += UIgraph.Point(0, 2)
     screenState.footer_text += "| switch list=←→ "
 
-    if view == TYPES.PuzzleStatus.KNOWN:
-        legend = ['name', 'family', 'layers', 'seen', 'first seen in', 'last seen']
-        column_widths = [30, 12, 70, None, None, None]
-    else:
-        legend = ['layers', 'seen', 'first seen in', 'last seen']
-        column_widths = [100, None, None, None]
+    # name (or a label made from the classification), then the classification
+    legend = ['name', 'family', 'puzzle type', 'custody', 'project', 'layers', 'seen', 'first seen in', 'last seen']
+    column_widths = [28, 9, 14, 9, 16, 38, None, None, None]
     rows = []
     keys = []
     for e in entries:
-        name, family, status = labels[e.puzzle_key]
-        if status != view:
+        c = classes[e.puzzle_key]
+        if c['status'] != view:
             continue
-        row = [
+        rows.append([
+            c['label'] or '-',
+            c['family'][0] or '-',
+            c['puzzle_type'][0] or '-',
+            c['custody'][0] or '-',
+            c['project'][0] or '-',
             ' > '.join(e.sub_puzzle_names()),
             f"{e.seen_count:,}",
             e.source,
             UTILS.timestamp_to_date(e.last_seen),
-        ]
-        if view == TYPES.PuzzleStatus.KNOWN:
-            row = [name or '-', family or '-'] + row
-        rows.append(row)
+        ])
         keys.append(e.puzzle_key)
     if rows:
         tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2)
@@ -5477,6 +5477,9 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
         pos += UIgraph.Point(len(text) + 2, 0)
 
 
+FROM_THE_LAYERS = '(from the layers)'  # the first value of a list: no override
+
+
 def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
 
     height = screenState.screen_size.y
@@ -5497,15 +5500,21 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
 
     puzzle_key = main_scope.data['puzzle_key']
     entry = SCAN.CATALOG.get(puzzle_key)
-    name, family, status = entry.label()
+    c = entry.classification()
+    name, family, status = c['name'], c['family'][0], c['status']
 
     pos = UIgraph.Point(1,1)
     ELEMENTS.create_text_double_space(win, screenState, pos, 'puzzle', P_title, C_background,
                                       3, True, inv_color=False)
     pos += UIgraph.Point(0,3)
 
+    def value(field):
+        v, origin = c[field]
+        return f"{v or '-'} ({origin})"
     lines = [
-        f"status: {status} | name: {name or '-'} | family: {family or '-'}",
+        f"status: {status} | name: {name or '-'}" + ('' if name else f" | label: {c['label']}"),
+        f"family: {value('family')} | puzzle type: {value('puzzle_type')} | custody: {value('custody')} | "
+        f"project: {value('project')}",
         f"seen {entry.seen_count:,} times | first seen in: {entry.source} | "
         f"first seen: {UTILS.timestamp_to_date(entry.first_seen)} | last seen: {UTILS.timestamp_to_date(entry.last_seen)}",
         f"example coin: 0x{entry.example_coin_id} | "
@@ -5517,52 +5526,82 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
         pos += UIgraph.Point(0,1)
     pos += UIgraph.Point(0,1)
 
-    ##### name and family
+    ##### name and classification: the name is text, the other values come from the lists of
+    ##### catalog/puzzle_types.json (edited there, reloaded by rototiller)
     name_length = 40
-    family_length = 30
     scope_name = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'puzzle_name', pos,
                                         "Name: ", name_length, P_text, True, False,
                                         custom_scope_function=ScopeActions.press_enter)
-    pos_family = pos + UIgraph.Point(name_length + 3, 0)
-    if pos_family.x + family_length + 15 > main_win_size.x:
-        pos_family = pos + UIgraph.Point(0, 3)
-    scope_family = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'puzzle_family', pos_family,
-                                          "Family: ", family_length, P_text, True, False,
-                                          custom_scope_function=ScopeActions.press_enter)
-    pos_button = pos_family + UIgraph.Point(family_length + 3, -1)  # buttons are drawn one line up
+    pos_button = pos + UIgraph.Point(len("Name: ") + name_length + 3, -1)  # buttons are drawn one line up
     scope_save = ELEMENTS.create_button(win, screenState, main_scope, 'save', pos_button,
                                         custom_scope_function=ScopeActions.press_enter, button_type='execution')
-    pos = UIgraph.Point(pos.x, pos_family.y + 2)
+    pos += UIgraph.Point(0, 3)
+
+    # drop-down buttons, two a row; the first value of each list is the one the layers give
+    # (no override). They are drawn at the end of the screen, so an open list is on top.
+    overrides_now = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key, {})
+    derived = PUZ.classify_key(puzzle_key, None, overrides=False)
+    menus = []
+    for field, label, values in (('family', 'family', list(CONF.PUZZLE_TYPES.get('families', {}))),
+                                 ('puzzle_type', 'puzzle type', list(CONF.PUZZLE_TYPES.get('types', {}))),
+                                 ('custody', 'custody', list(CONF.PUZZLE_TYPES.get('custodies', {}))),
+                                 ('project', 'project', PUZ.known_projects())):
+        if overrides_now.get(field) and overrides_now[field] not in values:
+            values = values + [overrides_now[field]]  # set by hand, not in the list: kept
+        menus.append((field, label, [f"{derived[field][0] or 'none'} {FROM_THE_LAYERS}"] + values))
+    value_width = max(len(option) for _, _, options in menus for option in options)
+    button_width = lambda label: len(label) + 2 + value_width + 7  # see create_button_menu
+    x_column_2 = pos.x + max(button_width(menus[0][1]), button_width(menus[2][1])) + 2
+    menu_scopes, menu_draws = {}, []
+    for n, (field, label, options) in enumerate(menus):
+        point = UIgraph.Point(pos.x if n % 2 == 0 else x_column_2, pos.y + 4 * (n // 2))
+        draw = lambda only_init, label=label, options=options, point=point: ELEMENTS.create_button_menu(
+            win, screenState, main_scope, label, options, point, only_init, ScopeActions.press_enter, value_width)
+        menu_scopes[field] = (draw(True), options)
+        menu_draws.append(draw)
+    pos += UIgraph.Point(0, 8)
+    if any(scope.selected() or scope is screenState.activeScope for scope, _ in menu_scopes.values()):
+        screenState.footer_text += "| lists: catalog/puzzle_types.json "
 
     if not main_scope.data.get('prompts_filled'):
         main_scope.data['prompts_filled'] = True
         scope_name.data['prompt'] = name or ''
         scope_name.data['cursor'] = len(scope_name.data['prompt'])
-        scope_family.data['prompt'] = family or ''
-        scope_family.data['cursor'] = len(scope_family.data['prompt'])
+        for field, (scope, options) in menu_scopes.items():
+            now = overrides_now.get(field)
+            scope.cursor = options.index(now, 1) if now in options[1:] else 0
 
-    # enter on a prompt or on the button saves both values
+    # enter on the name, on the button or on a list saves everything
     save = False
-    for scope in (scope_name, scope_family, scope_save):
+    for scope in (scope_name, scope_save, *(scope for scope, _ in menu_scopes.values())):
         if scope.data.get('pressed_enter'):
             scope.data['pressed_enter'] = False
             save = True
     if save:
         new_name = scope_name.data['prompt'].strip()
-        new_family = scope_family.data['prompt'].strip().upper()
-        scope_family.data['prompt'] = new_family
+        overrides = {field: options[scope.cursor] if scope.cursor else None
+                     for field, (scope, options) in menu_scopes.items()}
         try:
-            SCAN.CATALOG.set_name(puzzle_key, new_name, new_family)
-            if new_name:
-                screenState.footer_message = f"saved in layered_puzzles.json: {new_name} | family: {new_family or 'UNKNOWN'}"
-            else:
-                screenState.footer_message = "removed from layered_puzzles.json"
+            SCAN.CATALOG.set_classification(puzzle_key, new_name, overrides)
+            # a value is saved only when it is not the one the layers give
+            set_fields = [f for f, v in overrides.items() if v and v != derived[f][0]]
+            screenState.footer_message = (f"saved in layered_puzzles.json: {new_name or '(no name)'}"
+                                          + (f" | set: {', '.join(set_fields)}" if set_fields else ''))
         except ValueError as e:
             # a catalog file edited by hand is not valid json, it is not overwritten
             screenState.footer_message = f"not saved, fix the json in resources/puzzles/catalog first: {e}"
 
-    put_text(win, pos, f"known families: {', '.join(SCAN.CATALOG.families())} | saved in resources/puzzles/catalog/layered_puzzles.json, an empty name removes it", P_text)
-    pos += UIgraph.Point(0,2)
+    puzzle_detail_layers(win, screenState, keyboardState, main_scope, entry, pos, main_win_size)
+    # last, the open one at the end: its list is drawn over the rest
+    for draw in sorted(menu_draws, key=lambda draw: draw(True) is screenState.activeScope):
+        draw(False)
+
+
+def puzzle_detail_layers(win, screenState: ScreenState, keyboardState, main_scope: Scope, entry,
+                         pos: UIgraph.Point, main_win_size: UIgraph.Point):
+    """The layers of the puzzle detail screen, from pos: the uncurried puzzle and the data of
+    the selected layer"""
+    P_text = screenState.colorPairs["body"]
 
     ##### layers: the puzzle uncurried
     if 'nodes' not in main_scope.data:

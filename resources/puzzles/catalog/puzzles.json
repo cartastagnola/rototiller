@@ -14,7 +14,8 @@
                 "path": "puzzles/singleton_launcher.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "adb656e0211e2ab4f42069a4c5efc80dc907e7062be08bf1628c8e5b6d94d25b": {
         "file_name": "p2_singleton_or_delayed_puzhash.clsp",
@@ -31,7 +32,8 @@
                 "path": "puzzles/p2_singleton_or_delayed_puzhash.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "1c77d7d5efde60a7a1d2d27db6d746bc8e568aea1ef8586ca967a0d60b83cc36": {
         "file_name": "p2_conditions.clsp",
@@ -82,7 +84,10 @@
                 "path": "puzzles/singleton_top_layer.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "family": "SINGLETON",
+        "inner_arg": 2,
+        "inner_arg_from": "chia code: puzzle_for_singleton"
     },
     "92aa4bc8060a8836355a1884075141b4791ce1b67ae6092bb166b2845954bc89": {
         "file_name": "decompress_coin_spend_entry_with_prefix.clsp",
@@ -167,7 +172,8 @@
                 "path": "puzzles/p2_1_of_n.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEYS"
     },
     "0ff94726f1a8dea5c3f70d3121945190778d3b2b3fcda3735a1f290977e98341": {
         "file_name": "p2_delegated_conditions.clsp",
@@ -184,7 +190,8 @@
                 "path": "puzzles/p2_delegated_conditions.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEY"
     },
     "493afb89eed93ab86741b2aa61b8f5de495d33ff9b781dfc8919e602b2afa150": {
         "file_name": "genesis_by_coin_id.clsp",
@@ -218,7 +225,10 @@
                 "path": "puzzles/cat_puzzles/cat_v2.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "family": "CAT",
+        "inner_arg": 3,
+        "inner_arg_from": "chia code: construct_cat_puzzle"
     },
     "0876da2005fe6262d4504c27a1b6379227aba8adbbad3758cb0e329a4e74c6cc": {
         "file_name": "everything_with_singleton.clsp",
@@ -320,7 +330,8 @@
                 "path": "puzzles/p2_singleton.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f": {
         "file_name": "singleton_top_layer_v1_1.clsp",
@@ -337,7 +348,10 @@
                 "path": "puzzles/singleton_top_layer_v1_1.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "family": "SINGLETON",
+        "inner_arg": 2,
+        "inner_arg_from": "chia code: puzzle_for_singleton"
     },
     "fc032384cfece9b542c3e1ea77ba119fb1013a3d74b622302c0b670447e4343d": {
         "file_name": "dao_update_proposal.clsp",
@@ -541,7 +555,10 @@
                 "path": "puzzles/did_puzzles/did_innerpuz.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "DID",
+        "inner_arg": 1,
+        "inner_arg_from": "chia code: create_innerpuz"
     },
     "542cde70d1102cd1b763220990873efc8ab15625ded7eae22cc11e21ef2e2f7c": {
         "file_name": "p2_delegated_puzzle.clsp",
@@ -558,7 +575,8 @@
                 "path": "puzzles/p2_delegated_puzzle.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEY"
     },
     "f79a31fcfe3736cc75720617b4cdcb4376b4b8f8f71108617710612b909a4924": {
         "file_name": "p2_singleton_aggregator.clsp",
@@ -660,7 +678,8 @@
                 "path": "puzzles/mips_puzzles/member_puzzles/singleton_member.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "21a3ae8b3ce64d41ca98d6d8df8f465c9e1bfb19ab40284a5da8479ba7fade78": {
         "file_name": "bls_member.clsp",
@@ -677,7 +696,8 @@
                 "path": "puzzles/mips_puzzles/member_puzzles/bls_member.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEY"
     },
     "e6db5ba2eeded13c47216512a7a4662b95121c145580db6312cb711aaadcec32": {
         "file_name": "passkey_member_puzzle_assert.clsp",
@@ -1000,7 +1020,9 @@
                 "path": "puzzles/mips_puzzles/architecture_puzzles/delegated_puzzle_feeder.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "inner_arg": 1,
+        "inner_arg_from": "source parameter INNER_PUZZLE"
     },
     "bcb9aa74893bebcfa2da87271b0330bf2773b6391144ae72262b6824d9c55939": {
         "file_name": "1_of_n.clsp",
@@ -1017,7 +1039,8 @@
                 "path": "puzzles/mips_puzzles/architecture_puzzles/1_of_n.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEYS"
     },
     "a28d59d39f964a93159c986b1914694f6f2f1c9901178f91e8b0ba4045980eef": {
         "file_name": "restrictions.clsp",
@@ -1051,7 +1074,8 @@
                 "path": "puzzles/mips_puzzles/architecture_puzzles/m_of_n.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEYS"
     },
     "d4394f50cb1d6ef130788db2e69ab0087ef79b0737179f201c1d1d2a52df1e59": {
         "file_name": "n_of_n.clsp",
@@ -1085,7 +1109,10 @@
                 "path": "puzzles/vc_puzzles/exigent_metadata_layer.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "VC",
+        "inner_arg": 5,
+        "inner_arg_from": "chia code: construct_exigent_metadata_layer"
     },
     "6a87946257f555ae82aca6a11b5205058b844f634ecb6c7dc6b0c54eb2996308": {
         "file_name": "eml_covenant_morpher.clsp",
@@ -1119,7 +1146,10 @@
                 "path": "puzzles/vc_puzzles/revocation_layer.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "REVOCABLE_CAT",
+        "inner_arg": 3,
+        "inner_arg_from": "chia code: construct_revocation_layer (a hash)"
     },
     "664e6e57ac6a184334a3e743c446c5d28c0dd2ae6f84bad6dacec29ab7a0bd43": {
         "file_name": "acs_transfer_program.clsp",
@@ -1272,7 +1302,9 @@
                 "path": "puzzles/vc_puzzles/covenant_layer.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "inner_arg": 3,
+        "inner_arg_from": "chia code: construct_covenant_layer"
     },
     "4218fbebbb6f3c0907ebe8a672fa5d1e4bc655645a3a0073601e6c9b50b07c47": {
         "file_name": "eml_transfer_program_covenant_adapter.clsp",
@@ -1306,7 +1338,8 @@
                 "path": "puzzles/settlement_payments.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "OFFER"
     },
     "9590eaa169e45b655a31d3c06bbd355a3e2b2e3e410d3829748ce08ab249c39e": {
         "file_name": "p2_singleton_via_delegated_puzzle.clsp",
@@ -1323,7 +1356,8 @@
                 "path": "puzzles/p2_singleton_via_delegated_puzzle.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "13e29a62b42cd2ef72a79e4bacdc59733ca6310d65af83d349360d36ec622363": {
         "file_name": "p2_puzzle_hash.clsp",
@@ -1374,7 +1408,8 @@
                 "path": "puzzles/nft_puzzles/nft_intermediate_launcher.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "0b1ffba1601777c06b78ab38636e9624f2f8da73be9b36e0ce17c8d8ef3bad9f": {
         "file_name": "nft_metadata_updater_updateable.clsp",
@@ -1408,7 +1443,10 @@
                 "path": "puzzles/nft_puzzles/nft_state_layer.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "NFT",
+        "inner_arg": 4,
+        "inner_arg_from": "chia code: UncurriedNFT"
     },
     "c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726": {
         "file_name": "nft_ownership_layer.clsp",
@@ -1425,7 +1463,9 @@
                 "path": "puzzles/nft_puzzles/nft_ownership_layer.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "inner_arg": 4,
+        "inner_arg_from": "chia code: UncurriedNFT"
     },
     "fe8a4b4e27a2e29a4d3fc7ce9d527adbcaccbab6ada3903ccf3ba9a769d2d78b": {
         "file_name": "nft_metadata_updater_default.clsp",
@@ -1476,7 +1516,8 @@
                 "path": "puzzles/pool_puzzles/pool_member_innerpuz.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "PLOTNFT"
     },
     "a317541a765bf8375e1c6e7c13503d0d2cbf56cacad5182befe947e78e2c0307": {
         "file_name": "pool_waitingroom_innerpuz.clsp",
@@ -1493,7 +1534,8 @@
                 "path": "puzzles/pool_puzzles/pool_waitingroom_innerpuz.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "PLOTNFT"
     },
     "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
         "file_name": "p2_delegated_puzzle_or_hidden_puzzle.clsp",
@@ -1510,7 +1552,8 @@
                 "path": "puzzles/p2_delegated_puzzle_or_hidden_puzzle.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEY"
     },
     "0f199d5263ac1a62b077c159404a71abd3f9691cc57520bf1d4c5cb501504457": {
         "file_name": "p2_m_of_n_delegate_direct.clsp",
@@ -1527,7 +1570,8 @@
                 "path": "puzzles/p2_m_of_n_delegate_direct.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEYS"
     },
     "a78577d9c96feb38873d8a03506cd8a38a8c436e65c6028da8b14805f4309fc1": {
         "file_name": "liquidity_tail.clsp",
@@ -1578,7 +1622,8 @@
                 "path": "clsp/v2r_router.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "ROUTER"
     },
     "4d849a220792aa1d2e65f29f4dd2979262bb6f83b069b9c83d12c2571d74f36f": {
         "file_name": "swap.clsp",
@@ -1612,7 +1657,8 @@
                 "path": "clsp/p2_singleton_flashloan.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "6f49720644ea9d41b96873beac0c3dc0e4d20ef688ae0d56d64d74af8add336d": {
         "file_name": "p2_merkle_tree_modified.clsp",
@@ -1636,7 +1682,10 @@
                 "path": "clsp/p2_merkle_tree_modified.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "LIQUIDITY_POOL",
+        "inner_arg": 1,
+        "inner_arg_from": "source parameter INNER_PUZZLE"
     },
     "cf0b1c2b459518b26b6791d600a722ce7fb87c0d03ea6b2f3c77b75e9469d175": {
         "file_name": "v2r_swap.clsp",
@@ -1704,7 +1753,8 @@
                 "path": "clsp/router.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "ROUTER"
     },
     "f21270752cd5e7468815f7d48716ad9b8c42f9f0fe0b49d3b7725aad12590ca2": {
         "file_name": "v2r_rebase.clsp",
@@ -1976,7 +2026,8 @@
                 "path": "circuit_puzzles/statutes_launcher.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "199398e932cb4a49f1f33ed0b35fb540260c4580c83f81d982ef231303fd0113": {
         "file_name": "atom_announcer.clsp",
@@ -2044,7 +2095,8 @@
                 "path": "circuit_puzzles/governance_launcher.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "667f7348deb7f8510d0df470c285c3de1070099ac6a0ede53d637369c5f75139": {
         "file_name": "surplus_auction.clsp",
@@ -2146,7 +2198,10 @@
                 "path": "circuit_puzzles/singleton_top_layer_isa.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "family": "SINGLETON",
+        "inner_arg": 2,
+        "inner_arg_from": "source parameter INNER_PUZZLE"
     },
     "edecc52ef86bafb33ec28590c30baa0704b25f793b9945e7c271625f834e3e54": {
         "file_name": "crt_tail.clsp",
@@ -2792,7 +2847,9 @@
                 "commit": "ed584e3",
                 "path": "crates/chia-sdk-types/src/puzzles/mips/index_wrapper.rs"
             }
-        ]
+        ],
+        "inner_arg": 2,
+        "inner_arg_from": "source parameter INNER_PUZZLE"
     },
     "ef499f5334b8f33d3f8ce339fb314e92ce9d7b4c6b013031476a1ce841e68592": {
         "file_name": "refund.clsp",
@@ -3115,7 +3172,8 @@
                 "path": "puzzles/singleton/p2_delegated_by_singleton.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "b5a39f8d4803f840e15f0f0304fd5b605cb7c68af582b0e167a8dfbf3e742f3e": {
         "file_name": "precommit.clsp",
@@ -3546,7 +3604,8 @@
                 "language": "rue",
                 "compiled": "contracts/v16/compiled/action.rue.hex"
             }
-        ]
+        ],
+        "project": "slot_machine"
     },
     "9d274de59aeaa128d1b0a802b52911838420ef9720d605c78942e8dadfc0810b": {
         "file_name": "finalizer.rue",
@@ -3588,7 +3647,8 @@
                 "language": "rue",
                 "compiled": "contracts/v16/compiled/finalizer.rue.hex"
             }
-        ]
+        ],
+        "project": "slot_machine"
     },
     "3f2358e5141470a084ab2f68126f6f07269f01a690994f364e67c9624bb6e05e": {
         "file_name": "p2_delegated_by_singleton.rue",
@@ -3630,7 +3690,9 @@
                 "language": "rue",
                 "compiled": "contracts/v16/compiled/p2_delegated_by_singleton.rue.hex"
             }
-        ]
+        ],
+        "custody": "SINGLETON",
+        "project": "slot_machine"
     },
     "9b3be8822ce5583da2987336d59cf4bdded39d2747838249fd9afe0238cab6ea": {
         "file_name": "precommit.rue",
@@ -3690,7 +3752,8 @@
                 "language": "rue",
                 "compiled": "contracts/v16/compiled/reserve_finalizer.rue.hex"
             }
-        ]
+        ],
+        "project": "slot_machine"
     },
     "8ab9f3b57a65d7f7a0810f79f7bc1e96bda680d16dd6f51d51e868e13fc7bbb3": {
         "file_name": "slot.rue",
@@ -3732,7 +3795,8 @@
                 "language": "rue",
                 "compiled": "contracts/v16/compiled/slot.rue.hex"
             }
-        ]
+        ],
+        "project": "slot_machine"
     },
     "8811d56e9efd2c9f449ea10cb00e00417b372f46d9d3a00ddf632f292de7e2c3": {
         "file_name": "state_scheduler.rue",
@@ -4380,7 +4444,8 @@
                 "path": "assets/chip-0037/clsp/p2_eip712_message.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "KEY"
     },
     "d5415713619e318bfa7820e06e2b163beef32d82294a5a7fcf9c3c69b0949c88": {
         "file_name": "p2_controller_puzzle.clsp",
@@ -4466,7 +4531,10 @@
                 "language": "chialisp",
                 "section": "Option Contract Puzzle"
             }
-        ]
+        ],
+        "puzzle_type": "OPTION",
+        "inner_arg": 4,
+        "inner_arg_from": "source parameter INNER_PUZZLE"
     },
     "74d33c679add06271714c1fa88195e32384c86c2b1ff67f3740c8be0f54298ac": {
         "file_name": "send_message_banned.clsp",
@@ -4566,7 +4634,8 @@
                 "project": "clvm",
                 "hardcoded": true
             }
-        ]
+        ],
+        "custody": "ANYONE"
     },
     "57bfd1cb0adda3d94315053fda723f2028320faa8338225d99f629e3d46d43a9": {
         "file_name": null,
@@ -4828,7 +4897,8 @@
                 "language": "rue",
                 "compiled": "contracts/v14/compiled/forge_reserve_launcher.rue.hex"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "2aea75cdd9617fedf018a5613cb3212d81a79d72ee93537f4d7b017e64898b8e": {
         "file_name": "forge_action_add.rue",
@@ -5066,7 +5136,8 @@
                 "language": "rue",
                 "compiled": "contracts/v15/compiled/forge_reserve_launcher.rue.hex"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "c68ddf7b8727e3f21f5f73689721a911fe9746a095816ade8689ff4c0f169e71": {
         "file_name": "forge_action_add.rue",
@@ -5174,7 +5245,8 @@
                 "language": "rue",
                 "compiled": "contracts/v16/compiled/forge_reserve_launcher.rue.hex"
             }
-        ]
+        ],
+        "puzzle_type": "LAUNCHER"
     },
     "8b5b948a4c0e713bcb0b28ddb85cc1609d799b40c6fb65b2372de96976ad277a": {
         "file_name": "forge_lp_melt_inner_FORGE.clsp",
@@ -5259,7 +5331,8 @@
                 "path": "clsp/p2_singleton_flashloan.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "custody": "SINGLETON"
     },
     "f5b2e454f879ffbc231d7ec4aa8a61110788c628b744c027063eb753bee473f3": {
         "file_name": "pair_inner_puzzle.clsp",
@@ -5310,7 +5383,8 @@
                 "path": "clsp/router.clsp",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "puzzle_type": "ROUTER"
     },
     "56662b43e88a3430ffe25194117989fbb7a54b77a7e673297acb492d5877ada3": {
         "file_name": "swap.clsp",
@@ -5344,7 +5418,10 @@
                 "path": "chia/wallet/puzzles/cat.clvm",
                 "language": "chialisp"
             }
-        ]
+        ],
+        "family": "CAT",
+        "inner_arg": 3,
+        "inner_arg_from": "chia code: construct_cat_puzzle"
     },
     "65a2adaccae3c679f4193149a6afdd6f0d557dd965f2957ea1e537aa030bf996": {
         "file_name": "referee.clsp",
