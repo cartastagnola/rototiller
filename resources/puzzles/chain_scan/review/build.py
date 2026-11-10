@@ -1,5 +1,9 @@
+"""Build the layered names review: items.json, variant_groups.json and layered-names-review.html
+(page.html with the rows in it), a page to open from disk, no server.
+Run from the repo root: .venv/bin/python resources/puzzles/chain_scan/review/build.py resources/puzzles/chain_scan/review
+(after export.py: it reads all_puzzles.json)"""
 import json, collections, re, hashlib, sys
-R, N = sys.argv[1], sys.argv[2]
+R = sys.argv[1]
 ps = json.load(open('resources/puzzles/chain_scan/all_puzzles.json'))
 lay = [p for p in ps if p['kind'] == '2+ layers']
 # counted on the 2+ layer puzzles only, so their variant groups (and row ids) stay the same
@@ -43,77 +47,106 @@ ONE_LAYER = {
     '--forge_v16-forge_reserve_launcher': ('FORGE', 'reserve launcher', False, 'UNKNOWN'),
     '--circuit-circuit_puzzles-statutes_launcher': ('CIRCUIT', 'statutes launcher', False, 'UNKNOWN'),
 }
-groups = collections.defaultdict(list)
-saved_file = json.load(open('resources/puzzles/catalog/layered_puzzles.json'))
+# --- the local review page: one row per variant group, in three tabs ---
+# confirm: the layers give the puzzle type and the custody, check them and the name
+# fill: some fields are known, fill in the others
+# unknown: nothing of a project is known, research or skip
 puzzle_types = json.load(open('resources/puzzles/catalog/puzzle_types.json'))
-names = {k: v for k, v in json.load(open(f'{R}/names.json')).items()}
-# layers identified by hand, kept out of the '*' wildcard so they get their own row
-KEEP = set()
-NEW_IDS = {}
-# what the unknown layers are, shown next to the hash
-LABELS = {}
+# the first proposals (names.json, by row id): only "what it does", the tag is left empty for now
+names = json.load(open(f'{R}/names.json'))
+FIELDS = ('family', 'puzzle_type', 'custody', 'project')
+groups = collections.defaultdict(list)
 for p in lay:
     # the layer of a 1-layer puzzle is the whole puzzle, never per-instance data
     one_layer = len(p['layers']) == 1
-    groups[tuple('*' if l.startswith('?') and nkeys[l] == 1 and l not in KEEP and not one_layer else l for l in p['layers'])].append(p)
+    groups[tuple('*' if l.startswith('?') and nkeys[l] == 1 and not one_layer else l for l in p['layers'])].append(p)
 ordered = sorted(groups.items(), key=lambda kv: -sum(p['seen'] for p in kv[1]))
 def short(l):
     l = re.sub(r'^--cni-', '', l); l = re.sub(r'^--', '', l)
     for a in ('nft_puzzles-','cat_puzzles-','did_puzzles-','pool_puzzles-','mips_puzzles-','architecture_puzzles-','member_puzzles-','circuit_puzzles-','vc_puzzles-'): l = l.replace(a,'')
     return l
-items, used, variant_groups = [], collections.OrderedDict(), {}
-for i, (pat, g) in enumerate(ordered):
+def guess(pat, family_layer):
+    """what it does, from the innermost known layer inside the family layer: its file name
+    without the project; empty when no such layer is known"""
+    known = [l for l in pat[1 if family_layer else 0:] if l.startswith('--')]
+    # the innermost layer must be known: an unknown one inside does what matters
+    return short(known[-1]).split('-')[-1].replace('_', ' ') if known and known[-1] == pat[-1] else ''
+def tab(f):
+    if f['puzzle_type'] and f['custody'] not in (None, 'UNKNOWN'):
+        return 'confirm'
+    if f['project'] not in (None, 'unknown') or f['puzzle_type'] or f['custody'] not in (None, 'UNKNOWN'):
+        return 'fill'
+    return 'unknown'
+# the behaviour hints (chain_scan/behaviour.py), by layered puzzle fingerprint: only shown, never saved
+try:
+    _beh = json.load(open('resources/puzzles/chain_scan/behaviour.json'))
+except FileNotFoundError:
+    _beh = {}
+BEH = _beh.get('fingerprints', {})
+# the custodies a hint fits (behaviour.py FITS), suggested when the layers give none
+HINT_CUSTODY = _beh.get('fits', {})
+def behaviour(g, custody):
+    """The behaviour of a variant group: its fingerprints' runs together, the shapes and the
+    nearest known puzzles of its fingerprint with the most runs"""
+    bs = [BEH[p['layered_puzzle_fingerprint']] for p in g if p['layered_puzzle_fingerprint'] in BEH]
+    runs = sum(b['runs'] for b in bs)
+    if not runs:
+        return None
+    classes = collections.Counter()
+    for b in bs:
+        for k, v in b['custody_classes'].items(): classes[k] += v * b['runs']
+    hint, n = classes.most_common(1)[0]
+    hint = hint if n >= 0.8 * runs else 'mixed'
+    main = max(bs, key=lambda b: b['runs'])
+    return dict(runs=runs, hint=hint, classes={k: round(v / runs, 2) for k, v in classes.most_common()},
+                like=main['behaves_like'], shapes=[[sh, round(c / main['runs'], 2)] for sh, c in main['shapes'][:3] if c / main['runs'] >= 0.01],
+                stamp=main['stamp'], template=main['template'], disagrees=' · '.join(b['disagrees'] for b in bs if b['disagrees']),
+                # 2. a custody to fill: the layers give none, the conditions say what fits
+                suggest=HINT_CUSTODY.get(hint, []) if custody in (None, 'UNKNOWN', 'HIDDEN') else [])
+items, variant_groups = [], {}
+for pat, g in ordered:
     pid = hashlib.sha1('|'.join(pat).encode()).hexdigest()
-    # a 1-layer puzzle: the proposal above, or no project known yet
-    one_layer = len(pat) == 1 and pat[0] in ONE_LAYER
-    if pid in names: tag, desc, uns = names[NEW_IDS.get(pat, pid)][:3]
-    elif one_layer: tag, desc, uns = ONE_LAYER[pat[0]][:3]
-    else: tag, desc, uns = 'UNKNOWN', f"unidentified {pat[0].lstrip('?')}", True
-    seen = sum(p['seen'] for p in g)
-    named = [saved_file[p['key']]['name'] for p in g if saved_file.get(p['key'], {}).get('name')]
-    types = sorted({saved_file[p['key']].get('puzzle_type', '') for p in g if p['key'] in saved_file} - {''})
-    # family: the one rototiller derives from the layers (all_puzzles.json), the same for the group
-    family = g[0]['family'] or 'XCH'
-    # puzzle tags: only the labels added by hand (the family and the layers are derived)
-    ptags = list(dict.fromkeys(t for p in g for t in saved_file.get(p['key'], {}).get('tags', [])))
-    cur = f"{seen:,} spends  ·  heights {min(p['first_height'] for p in g):,}–{max(p['last_height'] for p in g):,}" + \
-          (f"  ·  {len(g)} kinds" if len(g) > 1 else '') + f"  ·  {len(pat)} layer{'s' if len(pat) > 1 else ''}"
-    items.append(dict(id=pid, hash=pid, group=tag, tagBase=tag, tagSuffix='', desc=desc, proposed=f"{tag}: {desc}",
-                      current=cur, file=' > '.join(short(l) + (f' ({LABELS[l]})' if l in LABELS else '') for l in pat), unsure=uns, seen=seen,
-                      saved=dict(names=sorted(set(named)), types=types, keys=len(named), total=len(g)) if named else None,
-                      example_key=g[0]['key'], family=family, ptags=ptags))
-    used[tag] = used.get(tag, 0) + seen
-    variant_groups[pid] = dict(layers=list(pat), keys=[dict(key=p['key'], layer_hashes=p['layer_hashes'], layers=p['layers'], example_coin=p['example_coin']) for p in g])
-tag_notes = {'TIBET_SWAP': 'was TIBET_SW in the first review', 'WARP_GREEN': 'was WARP_G; you wrote WART_GREEN, read as WARP_GREEN',
-             'OPTION_CONTRACT': 'CHIP-45; the chip number is secondary info', 'UNKNOWN': 'no layer is known',
-             'SINGLETON': 'singleton with an inner puzzle of no known project', 'REWARD_DIST': 'reward distributor (slot machine app)',
-             'VAULT': 'vaults / MIPS', 'XCHANDLES': 'XCHandles (slot machine app)', 'CAT_V1': 'the first CAT version (chia 1.3/1.4)',
-             'STD': 'the standard transaction', 'CHIA': 'base puzzles of chia (p2_*, notification, identity)',
-             'OFFER': 'offers', 'CHIA_GAMING': 'state channel games (Chia-Network/chia-gaming)'}
-rules = [dict(id='tag-' + t.lower(), group='Project tags', proposed=t, current='now: ' + tag_notes.get(t, 'project tag'),
-              file='', hash='', unsure=False, rule=dict(kind='tag', tag=t)) for t in used]
-# separator between the tag and what the puzzle does, ' - ' unless changed in the Name format tab
-# (a setting, not a row to review)
-rules.append(dict(id='fmt-separator', group='Name format', proposed='separator', current='',
-                  file='', hash='', unsure=False, rule=dict(kind='sep', proposed=' - ')))
-# puzzle tags: the ones added by hand in layered_puzzles.json; more can be added in the Puzzle
-# tags tab
-saved_ptags = sorted({t for v in saved_file.values() for t in v.get('tags', [])})
-rules.append(dict(id='cfg-ptags', group='Puzzle tags', proposed='puzzle tags', current='', file='', hash='', unsure=False,
-                  rule=dict(kind='ptags', saved=saved_ptags, layers=[])))
-# the families of puzzle_types.json
-rules.append(dict(id='cfg-families', group='Families', proposed='families', current='', file='', hash='', unsure=False,
-                  rule=dict(kind='families', families=list(puzzle_types['families']))))
-order = list(used)  # tags by first appearance in spend order
-items.sort(key=lambda it: (order.index(it['group']), -it['seen']))  # rules stay first
-json.dump(rules + items, open(f'{R}/items.json', 'w'))
+    p0 = g[0]  # the fields are the same for the whole group (checked in the build below)
+    assert all(all(p[f] == p0[f] for f in FIELDS + ('project_dependencies',)) for p in g), pat
+    fields = {f: p0[f] for f in FIELDS}
+    if len(pat) == 1 and pat[0] in ONE_LAYER:
+        name, guessed = ONE_LAYER[pat[0]][1], ONE_LAYER[pat[0]][2]
+    elif pid in names and not re.search(r'unidentified|^\??[0-9a-f]{8}\b', names[pid][1]):
+        name, guessed = names[pid][1], names[pid][2]
+    else:
+        name, guessed = guess(pat, p0['origins']['family'] == 'layer 1'), True
+    items.append(dict(id=pid, tab=tab(fields), fields=fields, origins=p0['origins'], project_dependencies=p0['project_dependencies'], name=name, guessed=guessed,
+                      layers=[short(l) for l in pat], code_layers=list(pat), seen=sum(p['seen'] for p in g),
+                      first=min(p['first_height'] for p in g), last=max(p['last_height'] for p in g),
+                      behaviour=behaviour(g, fields['custody']),
+                      layered_puzzle_fingerprints=[dict(layered_puzzle_fingerprint=p['layered_puzzle_fingerprint'], layers=p['layers'], coin=p['example_coin'], seen=p['seen']) for p in g]))
+    variant_groups[pid] = dict(layers=list(pat), layered_puzzle_fingerprints=[dict(layered_puzzle_fingerprint=p['layered_puzzle_fingerprint'], layer_hashes=p['layer_hashes'], layers=p['layers'], example_coin=p['example_coin']) for p in g])
+projects = sorted({it['fields']['project'] for it in items} - {None, 'unknown'} | set(puzzle_types['projects']))
+LISTS = dict(family='families', puzzle_type='types', custody='custodies')
+vocab = dict(family=list(puzzle_types['families']), puzzle_type=list(puzzle_types['types']),
+             custody=list(puzzle_types['custodies']), project=projects,
+             # id -> label of each list: the page shows the labels, the verdicts keep the ids
+             labels={**{f: {v: e.get('label', v) for v, e in puzzle_types[l].items()} for f, l in LISTS.items()},
+                     'project': {p: puzzle_types['projects'].get(p, {}).get('label', p) for p in projects}},
+             # for the fields overlay: the values of each field with their meaning
+             desc={f: {v: e.get('description', '') for v, e in puzzle_types[l].items()} for f, l in LISTS.items()},
+             projects=puzzle_types['projects'], project_roles=puzzle_types.get('project_roles', {}),
+)
+# for the code overlay: the source of each catalog layer of the rows (layer name -> where, code)
+catalog = {v['name']: v for v in json.load(open('resources/puzzles/catalog/puzzles.json')).values()}
+code = {}
+for it in items:
+    for l in it['code_layers']:
+        if l in catalog and l not in code:
+            c, src = catalog[l], (catalog[l].get('sources') or [{}])[0]
+            code[l] = dict(file=c.get('file_name'), repo=src.get('repo'), commit=src.get('commit'), path=src.get('path'),
+                           language=src.get('language'), hash=c.get('puzzle_hash'),
+                           text=c.get('clvm') or c.get('bytecode_disassembled') or '',
+                           disassembled=not c.get('clvm'))
+json.dump(items, open(f'{R}/items.json', 'w'))
 json.dump(variant_groups, open(f'{R}/variant_groups.json', 'w'))
-head = open(f'{N}/head.html').read().replace('<title>Puzzle Names Review</title>', '<title>Chain Puzzle Names</title>')
-body = open(f'{N}/body.html').read().replace('<h1>Puzzle names review</h1>', '<h1>Chain puzzle names</h1>') \
-    .replace('&lt;TAG&gt;[_VERSION][_RUE]: &lt;what it does&gt;', '&lt;PROJECT_TAG&gt;: &lt;what it does&gt;  ·  one row per variant group seen on chain') \
-    .replace('Search names, files, notes', 'Search names, layers, notes') \
-    .replace('<div id="applyPanel" hidden></div>', '<button type="button" class="gapply" id="submitBtn" title="Send the reviewed names, Claude writes them in layered_puzzles.json">Submit names</button><span class="status" id="subInfo"></span>\n    <div id="applyPanel" hidden></div>')
-script = open(f'{N}/script.js').read().replace("const LOCAL_KEY = 'puzzle-names-review';", "const LOCAL_KEY = 'layered-names-review';") + open(f'{R}/submit.js').read()
-data = json.dumps(rules + items).replace('</', '<\\/')
-open(f'{R}/layered-names-review.html', 'w').write(head + body + '<script type="application/json" id="data">' + data + '</script>\n<script>\n' + script + '</script>\n')
-print(len(rules), 'tags', len(items), 'variant groups', sum(it['unsure'] for it in items), 'guessed')
+data = json.dumps(dict(items=items, vocab=vocab, code=code)).replace('</', '<\\/')
+page = open(f'{R}/page.html').read().replace('/*DATA*/null', data)
+open(f'{R}/layered-names-review.html', 'w').write(page)
+print(sum(bool(it['behaviour']) for it in items), 'with a behaviour hint,', sum(bool(it['behaviour'] and it['behaviour']['disagrees']) for it in items), 'disagree with the catalog')
+print(len(items), 'variant groups:', dict(collections.Counter(it['tab'] for it in items)), sum(it['guessed'] for it in items), 'guessed names')

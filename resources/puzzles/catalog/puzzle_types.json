@@ -1,60 +1,54 @@
 {
     "families": {
-        "XCH": "a plain coin: no family layer, its amount is XCH",
-        "CAT": "the CAT layer: every child is the same CAT and the amount is kept",
-        "SINGLETON": "the singleton top layer: one child goes on, with the same launcher id"
+        "XCH": {"label": "XCH", "description": "a plain coin: no family layer, its amount is XCH"},
+        "CAT": {"label": "CAT", "description": "the CAT layer: every child is the same CAT and the amount is kept"},
+        "SINGLETON": {"label": "singleton", "description": "one coin that goes on, one child at a time, with its lineage checked: the singleton top layer, or a contract's own code"},
+        "UNKNOWN": {"label": "unknown", "description": "the outer layer is not in the catalog: it may wrap the coin, nobody knows yet"}
     },
     "types": {
-        "XCH": "XCH held by someone (a key, keys, an offer, a singleton, anyone)",
-        "CAT": "a CAT held by someone",
-        "REVOCABLE_CAT": "a CAT with the revocation layer",
-        "NFT": "a singleton with the NFT state layer",
-        "DID": "a singleton with the DID inner puzzle",
-        "PLOTNFT": "a pool singleton (plot NFT)",
-        "VAULT": "a singleton whose inner puzzle is a MIPS custody tree",
-        "VC": "a verified credential",
-        "OPTION": "an option contract (CHIP-45)",
-        "LIQUIDITY_POOL": "a TibetSwap pair",
-        "ROUTER": "a TibetSwap router",
-        "DATALAYER": "a DataLayer store",
-        "LAUNCHER": "a coin that launches a singleton or a CAT",
-        "SINGLETON": "a singleton with no purpose layer"
+        "XCH": {"label": "XCH", "description": "XCH held by someone (a key, keys, an offer, a singleton, anyone)"},
+        "CAT": {"label": "CAT", "description": "a CAT held by someone"},
+        "REVOCABLE_CAT": {"label": "revocable CAT", "description": "a CAT with the revocation layer"},
+        "NFT": {"label": "NFT", "description": "a singleton with the NFT state layer"},
+        "DID": {"label": "DID", "description": "a singleton with the DID inner puzzle"},
+        "PLOTNFT": {"label": "plot NFT", "description": "a pool singleton (plot NFT)"},
+        "VAULT": {"label": "vault", "description": "a singleton whose inner puzzle is a MIPS custody tree"},
+        "VERIFIED_CREDENTIAL": {"label": "verified credential", "description": "a verified credential"},
+        "OPTION": {"label": "option", "description": "an option contract (CHIP-45)"},
+        "LIQUIDITY_POOL": {"label": "liquidity pool", "description": "a TibetSwap pair"},
+        "ROUTER": {"label": "router", "description": "a TibetSwap router"},
+        "DATALAYER": {"label": "DataLayer store", "description": "a DataLayer store"},
+        "LAUNCHER": {"label": "launcher", "description": "a coin that launches a singleton or a CAT"},
+        "SINGLETON": {"label": "singleton", "description": "a singleton with no purpose layer"}
     },
     "custodies": {
-        "KEY": "a key signs: the standard puzzle, delegated conditions or puzzle, a BLS or EIP-712 member",
-        "KEYS": "several keys: m of n",
-        "OFFER": "settlement payments: whoever fills the offer",
-        "SINGLETON": "a singleton spends it (p2 singleton, a vault member)",
-        "ANYONE": "anyone can spend it (quoted conditions, the identity puzzle)",
-        "CONTRACT": "the puzzle's own rules",
-        "HIDDEN": "only the inner puzzle's hash is curried: it shows in the solution",
-        "UNKNOWN": "the walk met an unknown layer"
+        "KEY": {"label": "key", "description": "a key signs: the standard puzzle, delegated conditions or puzzle, a BLS or EIP-712 member"},
+        "KEYS": {"label": "keys", "description": "several keys: m of n"},
+        "OFFER": {"label": "offer", "description": "settlement payments: whoever fills the offer"},
+        "SINGLETON": {"label": "singleton", "description": "a singleton spends it (p2 singleton, a vault member)"},
+        "ANYONE": {"label": "anyone", "description": "anyone can spend it (quoted conditions, the identity puzzle)"},
+        "CONTRACT": {"label": "contract", "description": "the puzzle's own rules"},
+        "HIDDEN": {"label": "hidden", "description": "only the inner puzzle's hash is curried: it shows in the solution"},
+        "UNKNOWN": {"label": "unknown", "description": "the walk met an unknown layer"}
     },
     "projects": {
-        "chia": [
-            "cni",
-            "chia_blockchain_cat_v1",
-            "chia_blockchain_custody",
-            "clvm",
-            "sdk"
-        ],
-        "slot_machine": [
-            "slot_machine",
-            "slot_machine_rue"
-        ],
-        "tibet": [
-            "tibet",
-            "tibet_v1_beta"
-        ],
-        "forge": [
-            "forge_v14",
-            "forge_v15",
-            "forge_v16",
-            "forge_clsp"
-        ],
-        "reward_distributor": [
-            "reward_distributor",
-            "reward_distributor_rue"
-        ]
+        "chia": {"label": "chia", "role": "base", "sources": ["cni", "chia_blockchain_cat_v1", "chia_blockchain_custody", "clvm", "sdk"]},
+        "chia_gaming": {"label": "chia_gaming"},
+        "chip_0037": {"label": "chip_0037"},
+        "chip_0045": {"label": "chip_0045"},
+        "circuit": {"label": "circuit"},
+        "dig_datalayer": {"label": "dig_datalayer"},
+        "forge": {"label": "forge", "sources": ["forge_v14", "forge_v15", "forge_v16", "forge_clsp"]},
+        "reward_distributor": {"label": "reward_distributor", "sources": ["reward_distributor", "reward_distributor_rue"]},
+        "slot_machine": {"label": "slot_machine", "role": "framework", "sources": ["slot_machine", "slot_machine_rue"]},
+        "solslot": {"label": "solslot"},
+        "streaming": {"label": "streaming"},
+        "tibet": {"label": "tibet", "sources": ["tibet", "tibet_v1_beta"]},
+        "warp": {"label": "warp"}
+    },
+    "project_roles": {
+        "app": "a project that makes its own puzzles: it leads the puzzles it is in (the default)",
+        "framework": "code that apps build on: it leads only a puzzle with no app in it",
+        "base": "the chain's own puzzles: it leads only a puzzle with nothing else in it, and is never a dependency"
     }
 }

@@ -44,5 +44,55 @@
             "--dig_datalayer-delegation_layer"
         ],
         "example_coin_id": "9aef614bc0f97977475ca3f42f8d0e61d7c7abe5129e40b8ac43beb9cf2e87e1"
+    },
+    "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "name": "standard transaction",
+        "sub_puzzle_hashes": [
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "d1d87afeb7168d46940ea58ee5c8d2b27f3259b40cbaf80e60b42e3e66e16e08"
+    },
+    "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "name": "CAT standard transaction",
+        "sub_puzzle_hashes": [
+            "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-cat_puzzles-cat_v2",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "864a9803feb1b703d0f81df94b3c794b3b976a462b670057f35f5d71f13d4f8f"
+    },
+    "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f|a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2|c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726|025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f|e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52": {
+        "name": "NFT_V1",
+        "sub_puzzle_hashes": [
+            "7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f",
+            "a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2",
+            "c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726",
+            "025dee0fb1e9fa110302a7e9bfb6e381ca09618e2778b0184fa5c6b275cfce1f",
+            "e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_top_layer_v1_1",
+            "--cni-nft_puzzles-nft_state_layer",
+            "--cni-nft_puzzles-nft_ownership_layer",
+            "--cni-nft_puzzles-nft_ownership_transfer_program_one_way_claim_with_royalties",
+            "--cni-p2_delegated_puzzle_or_hidden_puzzle"
+        ],
+        "example_coin_id": "f441bfeaf7813ac3b867190a4b6e11840954a5e1ebe51c72fd0fbb7ba518e626"
+    },
+    "eff07522495060c066f66f32acc2a77e3a3e737aca8baea4d1a64ea4cdc13da9": {
+        "name": "Launcher",
+        "sub_puzzle_hashes": [
+            "eff07522495060c066f66f32acc2a77e3a3e737aca8baea4d1a64ea4cdc13da9"
+        ],
+        "sub_puzzle_names": [
+            "--cni-singleton_launcher"
+        ],
+        "example_coin_id": "8aa8e8a972aea85961b43ff0b4bbeb6b6f1215a9fdce7c8d87a932d2b6b354e9"
     }
 }

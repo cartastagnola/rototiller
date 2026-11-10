@@ -41,6 +41,13 @@ from clvm_tools.binutils import disassemble as bu_disassemble
 #               paths relative to "subdir"
 #   "files":    only these files of "subdir" are compiled, paths relative to "subdir".
 #               They can end in .clvm (old repos), not only .clsp
+#   "history":  every version of the puzzles in the whole history of the repo (every branch
+#               and tag) is compiled, not only the latest one, see parse_history_puzzles.
+#               The clone is a full one, not shallow. Chialisp only
+#   "hashes_only": the catalog gets only the name, puzzle hash and sources of each puzzle,
+#               not its code (CODE_FIELDS): for repos whose license does not allow copying
+#               the code. Rototiller never reads the code from the catalog (the coin screen
+#               shows the coin's own puzzle reveal)
 SOURCES = [
     {
         "name": "cni",
@@ -228,6 +235,27 @@ SOURCES = [
         "url": "https://github.com/awizardxch/forge-puzzles.git",
         "subdir": "contracts",
         "exclude": ["v14", "v15", "forge_lp_mint_inner_FORGE.clsp"],
+    },
+    {
+        # Solslot (Sols Lot): tokenized real world assets on Chia, by Matthew S. Hintz. On
+        # testnet11 in 2026-11, mainnet expected. The puzzles are in solslot_puzzles/
+        # (populis_puzzles/ until the rename to Solslot, 2026-07-12); release-manifests/ has
+        # copies of old versions. They change often (13 versions of vault_singleton_inner), so
+        # every version of the history is built.
+        # The repo is public but its LICENSE is proprietary, all rights reserved (no copying,
+        # no disassembling): the catalog gets only the names, hashes and sources, not the code.
+        # sgt_tail (pgt_tail before) is genesis_by_coin_id and eip712_member_v2 is the sdk
+        # eip712_member: those two entries keep project "chia" (set by hand). The test fixtures
+        # are excluded (test_fixture_bls_member is the cni bls_member)
+        "name": "solslot",
+        "url": "https://github.com/MattHintz/solslot-protocol.git",
+        "subdir": "",
+        "history": True,
+        "hashes_only": True,
+        "exclude": ["populis_puzzles/test_fixture_bls_member.clsp",
+                    "populis_puzzles/test_fixture_eip712_member.clsp",
+                    "solslot_puzzles/test_fixture_bls_member.clsp",
+                    "solslot_puzzles/test_fixture_eip712_member.clsp"],
     },
 ]
 
@@ -445,10 +473,11 @@ SCRIPT_DIR = pathlib.Path(__file__).parent.resolve()
 CACHE_DIR = SCRIPT_DIR / "repo_sources"
 
 
-def ensure_repo(name: str, url: str, sparse: list = None, ref: str = None) -> pathlib.Path:
+def ensure_repo(name: str, url: str, sparse: list = None, ref: str = None, full: bool = False) -> pathlib.Path:
     """Shallow-clone a repo into CACHE_DIR if it isn't already cached.
     With *sparse* only those folders are checked out (see "sparse" in SOURCES).
-    With *ref* only that commit is fetched and checked out (see "ref" in SOURCES)."""
+    With *ref* only that commit is fetched and checked out (see "ref" in SOURCES).
+    With *full* the whole history is cloned, every branch and tag (see "history" in SOURCES)."""
     dest = CACHE_DIR / name
     if dest.exists():
         print(f"[cache] Using existing clone: {dest}")
@@ -466,8 +495,9 @@ def ensure_repo(name: str, url: str, sparse: list = None, ref: str = None) -> pa
         return dest
     print(f"[git] Cloning {url} …")
     sparse_args = ["--filter=blob:none", "--sparse"] if sparse else []
+    depth_args = [] if full else ["--depth", "1"]
     subprocess.run(
-        ["git", "clone", "--depth", "1", *sparse_args, url, str(dest)],
+        ["git", "clone", *depth_args, *sparse_args, url, str(dest)],
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -852,6 +882,211 @@ def parse_markdown_puzzles(src, repo_path, store, include_dirs, source_of=None):
         print(f"  → {name} ({puzzle_hash})")
 
 
+def git_output(repo_path: pathlib.Path, *args, text=True):
+    """Output of a git command run in the clone repo_path"""
+    return subprocess.run(["git", "-C", str(repo_path), *args], check=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=text).stdout
+
+
+# the files of a commit written to a temporary folder to compile its puzzles: the .clsp files
+# and the files they can include
+HISTORY_SUFFIXES = (".clsp", ".clib", ".clinc")
+
+
+def parse_history_puzzles(src, repo_path, store, prefix, exclude=(), source_of=None):
+    """Compile every version of the .clsp files under src["subdir"] in the whole history of the
+    clone, every branch and tag (see "history" in SOURCES), into *store* keyed by puzzle hash.
+    - a version of a file is a puzzle hash: a commit that changes only its comments, or files
+      it does not include, gives no new version. A commit is compiled in a temporary folder
+      (its .clsp, .clib and .clinc files); a file is compiled again only when it or an
+      include file changed
+    - the version of a file at HEAD gets the name parse_puzzles gives (<prefix>-<folders>-<stem>),
+      a file deleted before HEAD gives it to its last version. Its other versions are
+      <name>_CHANGED_FOUND_ON_<yy_mm_dd>, the date of the first commit that has them (the
+      suffix merge_into_catalog gives to a changed puzzle)
+    - every file that has the puzzle hash is a source item, at the first commit that has it.
+      A puzzle hash of more files (a copied or moved file) takes the name of the file where it
+      is the HEAD version, else the last version of a deleted file, else an old version; among
+      equals, of the file that had it last (then first)
+    - a committed <file>.clsp.hex that is another puzzle is printed (the repo did not rebuild it)
+    - the compiled versions are cached between runs in build/<source>_compiled.json (git-ignored,
+      dropped when the compiler version changes): a run compiles only the new versions
+    The paths in *exclude* (files or folders, relative to src["subdir"]) are skipped."""
+    import hashlib
+    import io
+    import tarfile
+    from importlib.metadata import version
+
+    if git_output(repo_path, "rev-parse", "--is-shallow-repository").strip() == "true":
+        raise ValueError(f"{repo_path} is a shallow clone: delete it, a history source needs the whole history")
+    subdir = src.get("subdir", "").strip("/")
+
+    compiler = f"chia-blockchain {version('chia-blockchain')}, clvm_tools_rs {version('clvm_tools_rs')}"
+    cache_file = BUILD_DIR / f"{src['name']}_compiled.json"
+    cache = {"compiler": compiler, "programs": {}}
+    if cache_file.exists():
+        with open(cache_file) as f:
+            saved = json.load(f)
+        if saved.get("compiler") == compiler:
+            cache = saved
+        else:
+            print(f"  compiler changed ({saved.get('compiler')} -> {compiler}): every version is compiled again")
+
+    def cache_key(blob, includes):
+        return f"{blob}|{hashlib.sha256(json.dumps(includes).encode()).hexdigest()}"
+
+    def save_cache():
+        BUILD_DIR.mkdir(exist_ok=True)
+        tmp_file = cache_file.with_name(cache_file.name + ".tmp")
+        with open(tmp_file, "w") as f:
+            json.dump(cache, f)
+        os.replace(tmp_file, cache_file)
+
+    def is_puzzle(path):
+        if not path.endswith(".clsp") or (subdir and not path.startswith(subdir + "/")):
+            return False
+        rel = path[len(subdir) + 1:] if subdir else path
+        return not any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in exclude)
+
+    compiled = {}       # (.clsp blob, include files) -> (puzzle hash, Program), None if it does not compile
+    hex_hashes = {}     # blob of a committed .clsp.hex -> its puzzle hash
+    programs = {}       # puzzle hash -> (Program, .clsp blob)
+    stale_hex = set()   # (path, compiled puzzle hash, puzzle hash of the committed hex)
+
+    def compile_commit(sha, files):
+        """{path: puzzle hash} of the puzzles of a commit; files is {path: blob}"""
+        includes = tuple(sorted((p, b) for p, b in files.items() if p.endswith((".clib", ".clinc"))))
+        puzzles = [p for p in files if is_puzzle(p)]
+        todo = []
+        for p in puzzles:
+            key = (files[p], includes)
+            if key in compiled:
+                continue
+            hex_text = cache["programs"].get(cache_key(*key))  # compiled in an earlier run
+            if hex_text is None:
+                todo.append(p)
+            else:
+                prog = Program.fromhex(hex_text)
+                compiled[key] = (str(prog.get_tree_hash()), prog)
+        if todo:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                root = pathlib.Path(tmp_dir)
+                paths = [p for p in files if p.endswith(HISTORY_SUFFIXES)]
+                archive = git_output(repo_path, "archive", "--format=tar", sha, "--", *paths, text=False)
+                with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+                    tar.extractall(root, filter="data")
+                search_paths = [root / subdir] + resolve_include_dirs(src, root)
+                for p in todo:
+                    key = (files[p], includes)
+                    if key in compiled:  # the same file in two folders
+                        continue
+                    print(f"  compiling {p} at {sha[:10]} …")
+                    try:
+                        prog = load_clvm_from_file(root / p, search_paths)
+                    except Exception as exc:
+                        print(f"  [ERROR] skipped {p} at {sha[:10]}: {exc}", file=sys.stderr)
+                        compiled[key] = None
+                        continue
+                    compiled[key] = (str(prog.get_tree_hash()), prog)
+                    cache["programs"][cache_key(*key)] = bytes(prog).hex()
+            save_cache()  # an interrupted run keeps what it compiled
+        versions = {}
+        for p in puzzles:
+            result = compiled[(files[p], includes)]
+            if result is None:
+                continue
+            puzzle_hash, prog = result
+            programs.setdefault(puzzle_hash, (prog, files[p]))
+            versions[p] = puzzle_hash
+            hex_blob = files.get(p + ".hex")
+            if hex_blob is not None:
+                if hex_blob not in hex_hashes:
+                    try:
+                        hex_text = git_output(repo_path, "cat-file", "-p", hex_blob).strip()
+                        hex_hashes[hex_blob] = str(Program.fromhex(hex_text).get_tree_hash())
+                    except Exception:
+                        hex_hashes[hex_blob] = "(not a program)"
+                if hex_hashes[hex_blob] != puzzle_hash:
+                    stale_hex.add((p, puzzle_hash, hex_hashes[hex_blob]))
+        return versions
+
+    head = git_output(repo_path, "rev-parse", "HEAD").strip()
+    head_versions = {}
+    tree_versions = {}  # the files of a commit -> its {path: puzzle hash}
+    first = {}          # (path, puzzle hash) -> (date, commit, index) of the first commit that has it
+    last = {}           # (path, puzzle hash) -> index of the last commit that has it
+    commits = [line.split() for line in
+               git_output(repo_path, "log", "--all", "--reverse", "--date-order", "--format=%H %cs").splitlines()]
+    print(f"  {len(commits)} commits")
+    for index, (sha, day) in enumerate(commits):
+        files = {}
+        for item in git_output(repo_path, "ls-tree", "-r", "-z", sha).split("\0"):
+            if item:
+                meta, path = item.split("\t", 1)
+                if path.endswith(HISTORY_SUFFIXES) or path.endswith(".clsp.hex"):
+                    files[path] = meta.split()[2]
+        tree = tuple(sorted(files.items()))
+        if tree not in tree_versions:
+            tree_versions[tree] = compile_commit(sha, files)
+        for path, puzzle_hash in tree_versions[tree].items():
+            first.setdefault((path, puzzle_hash), (day, sha, index))
+            last[(path, puzzle_hash)] = index
+        if sha == head:
+            head_versions = tree_versions[tree]
+
+    lineages = {}  # path -> its puzzle hashes, in the order of their first commit
+    for path, puzzle_hash in first:
+        lineages.setdefault(path, []).append(puzzle_hash)
+    # puzzle hash -> its places, best name first: [(rank, -last index, first index, path, name, commit)]
+    # rank 0: the HEAD version of a file, 1: the last version of a file deleted before HEAD, 2: an old version
+    places = {}
+    for path, hashes in lineages.items():
+        rel = path[len(subdir) + 1:] if subdir else path
+        *folders, file_name = rel.split("/")
+        name = "-".join([prefix, *folders, file_name[:-len(".clsp")]])
+        at_head = path in head_versions
+        current = head_versions[path] if at_head else max(hashes, key=lambda h: last[(path, h)])
+        used = set()
+        for puzzle_hash in hashes:
+            day, sha, index = first[(path, puzzle_hash)]
+            version_name, rank = name, 0 if at_head else 1
+            if puzzle_hash != current:
+                version_name = base = f"{name}{CHANGED_SUFFIX}{day[2:].replace('-', '_')}"
+                n = 2
+                while version_name in used:  # changed again on the same day
+                    version_name = f"{base}_{n}"
+                    n += 1
+                used.add(version_name)
+                rank = 2
+            places.setdefault(puzzle_hash, []).append(
+                (rank, -last[(path, puzzle_hash)], index, path, version_name, sha))
+
+    entries = []
+    for puzzle_hash, found in places.items():
+        found.sort()
+        rank, _, _, path, name, sha = found[0]
+        day = first[(path, puzzle_hash)][0]
+        entry = {"file_name": path.split("/")[-1], "name": name, "puzzle_hash": puzzle_hash}
+        if not src.get("hashes_only"):  # (the disassembly is slow)
+            prog, blob = programs[puzzle_hash]
+            entry.update({
+                "bytecode": prog.to_json_dict(),
+                "bytecode_disassembled": bu_disassemble(prog),
+                "clvm": git_output(repo_path, "cat-file", "-p", blob),
+            })
+        if source_of is not None:
+            entry["sources"] = [source_of(repo_path / p, commit=c) for _, _, _, p, _, c in found]
+        entries.append(((rank < 2, day), entry))
+    # the current versions last: previous_version takes the last entry of a name as the newest
+    for _, entry in sorted(entries, key=lambda e: e[0]):
+        store[entry["puzzle_hash"]] = entry
+        print(f"  → {entry['name']} ({entry['puzzle_hash']})")
+    for path, puzzle_hash, hex_hash in sorted(stale_hex):
+        print(f"  [warn] committed {path}.hex is {hex_hash}, the file compiles to {puzzle_hash}",
+              file=sys.stderr)
+    print(f"  {len(store)} puzzle hashes from {len(lineages)} files, {len(commits)} commits")
+
+
 # The combined catalog is never rewritten from scratch: the compiled puzzles are merged
 # into the existing file (see merge_into_catalog), the entries already there are kept.
 CATALOG_FILE = SCRIPT_DIR / "catalog" / "puzzles.json"
@@ -861,6 +1096,9 @@ BUILD_DIR = SCRIPT_DIR / "build"
 
 # fields of the old catalog entries that are now in "sources"
 LEGACY_SOURCE_FIELDS = ("language", "markdown_section", "source")
+
+# the code of a puzzle in a catalog entry: a "hashes_only" source (see SOURCES) does not store it
+CODE_FIELDS = ("bytecode", "bytecode_disassembled", "clvm")
 
 
 def merge_sources(entry: dict, new_sources: list) -> bool:
@@ -879,6 +1117,21 @@ def merge_sources(entry: dict, new_sources: list) -> bool:
     for field in LEGACY_SOURCE_FIELDS:
         entry.pop(field, None)
     return changed
+
+
+def add_puzzle(store: dict, puzzle_hash: str, puzzle: dict):
+    """Add a built puzzle to store. A puzzle hash built by more sources keeps all their places
+    (merge_sources); the first source gives the name and the code, but an entry without code
+    (a hashes_only source) gives its place to one with code"""
+    old = store.get(puzzle_hash)
+    if old is None:
+        store[puzzle_hash] = puzzle
+    elif "bytecode" not in old and "bytecode" in puzzle:
+        new = dict(puzzle)
+        merge_sources(new, old.get("sources", []))
+        store[puzzle_hash] = new
+    else:
+        merge_sources(old, puzzle.get("sources", []))
 
 
 # the classification fields set by hand on a puzzle (see docs/puzzles.md): they say what the
@@ -1008,7 +1261,8 @@ if __name__ == "__main__":
 
     for src in SOURCES:
         print(f"\n=== {src['name']} ===")
-        repo_path = ensure_repo(src.get("repo", src["name"]), src["url"], src.get("sparse"), src.get("ref"))
+        repo_path = ensure_repo(src.get("repo", src["name"]), src["url"], src.get("sparse"), src.get("ref"),
+                                src.get("history", False))
         puzzle_root = get_puzzle_root(repo_path, src.get("subdir", ""))
 
         if not puzzle_root.exists():
@@ -1021,7 +1275,9 @@ if __name__ == "__main__":
         repo_catalog = {}
         exclude = {puzzle_root / entry for entry in src.get("exclude", [])}
         source_of = lambda file_path, src=src, repo_path=repo_path, **extra: make_source(src, repo_path, file_path, **extra)
-        if src.get("language", "chialisp") == "rue":
+        if src.get("history"):
+            parse_history_puzzles(src, repo_path, repo_catalog, f"--{src['name']}", src.get("exclude", []), source_of)
+        elif src.get("language", "chialisp") == "rue":
             compiled_dir = repo_path / src["compiled_dir"] if "compiled_dir" in src else None
             parse_rue_puzzles(
                 str(puzzle_root),
@@ -1049,28 +1305,26 @@ if __name__ == "__main__":
                 source_of=source_of,
             )
 
+        if src.get("hashes_only"):
+            for puzzle in repo_catalog.values():
+                for field in CODE_FIELDS:
+                    puzzle.pop(field, None)
+
         BUILD_DIR.mkdir(exist_ok=True)
         out_file = BUILD_DIR / f"{src['name']}.json"
         with open(out_file, "w") as f:
             json.dump(repo_catalog, f, indent=4)
         print(f"Wrote {out_file} ({len(repo_catalog)} puzzles)")
 
-        # a puzzle hash built by more sources keeps all their places
         for puzzle_hash, puzzle in repo_catalog.items():
-            if puzzle_hash in all_puzzles:
-                merge_sources(all_puzzles[puzzle_hash], puzzle["sources"])
-            else:
-                all_puzzles[puzzle_hash] = puzzle
+            add_puzzle(all_puzzles, puzzle_hash, puzzle)
 
     print("\n=== hardcoded ===")
     hardcoded = build_hardcoded_puzzles()
     for puzzle in hardcoded.values():
         print(f"  → {puzzle['name']} ({puzzle['puzzle_hash']})")
     for puzzle_hash, puzzle in hardcoded.items():
-        if puzzle_hash in all_puzzles:
-            merge_sources(all_puzzles[puzzle_hash], puzzle["sources"])
-        else:
-            all_puzzles[puzzle_hash] = puzzle
+        add_puzzle(all_puzzles, puzzle_hash, puzzle)
 
     # Combined catalog (backwards-compatible name): merge into the existing file
     catalog = {}

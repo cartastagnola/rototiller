@@ -207,8 +207,30 @@
                 "commit": "cfe5ced68af8b5e9d5e2cc66071bbe6497f9eda8",
                 "path": "puzzles/cat_puzzles/genesis_by_coin_id.clsp",
                 "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/sgt_tail.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/pgt_tail.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "8d8cd43ec9a3b42cdc010e1c4b4edddac9160367",
+                "path": "populis_puzzles/pgt_tail.clsp",
+                "language": "chialisp"
             }
-        ]
+        ],
+        "project": "chia"
     },
     "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a": {
         "file_name": "cat_v2.clsp",
@@ -1110,7 +1132,7 @@
                 "language": "chialisp"
             }
         ],
-        "puzzle_type": "VC",
+        "puzzle_type": "VERIFIED_CREDENTIAL",
         "inner_arg": 5,
         "inner_arg_from": "chia code: construct_exigent_metadata_layer"
     },
@@ -2032,6 +2054,7 @@
     "199398e932cb4a49f1f33ed0b35fb540260c4580c83f81d982ef231303fd0113": {
         "file_name": "atom_announcer.clsp",
         "name": "--circuit-circuit_puzzles-atom_announcer",
+        "family": "SINGLETON",
         "puzzle_hash": "199398e932cb4a49f1f33ed0b35fb540260c4580c83f81d982ef231303fd0113",
         "bytecode": "0xff02ffff01ff02ff5effff04ff02ffff04ff03ffff04ffff02ff32ffff04ff02ffff04ff8317ffffff80808080ffff04ffff02ffff03ff830bffffffff01ff02ff830bffffff831fffff80ffff01831fffff80ff0180ffff04ffff02ff32ffff04ff02ffff04ff830bffffff80808080ff80808080808080ffff04ffff01ffffffff333cff3eff4243ffff47ff4801ff01ff0220ffffffff02ffff03ff05ffff01ff02ffff03ffff09ff09ff0b80ffff012cffff01ff02ff22ffff04ff02ffff04ff0dffff04ff0bff808080808080ff0180ffff01ff018080ff0180ff02ffff03ffff07ff0580ffff01ff0bff5cffff02ff32ffff04ff02ffff04ff09ff80808080ffff02ff32ffff04ff02ffff04ff0dff8080808080ffff01ff0bff2cff058080ff0180ffff02ffff03ff05ffff01ff02ffff03ffff09ff11ff2080ffff01ff02ffff03ff0bffff01ff0880ffff01ff02ff2affff04ff02ffff04ff0dffff04ff19ffff04ff17ff80808080808080ff0180ffff01ff02ffff03ffff09ff11ff7480ffff01ff02ffff03ffff20ffff02ffff03ff19ffff01ff02ffff03ffff07ff2980ffff01ff0180ffff01ff02ffff03ffff09ffff0dff2980ff2c80ffff01ff09ff29ff2e80ffff01ff018080ff018080ff0180ffff01ff018080ff018080ffff01ff02ff2affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff808080808080ffff01ff088080ff0180ffff01ff02ffff03ffff21ffff09ff11ff5880ffff09ff11ff788080ffff01ff02ffff03ffff20ffff02ffff03ffff07ff1980ffff01ff02ffff03ffff07ff3980ffff01ff02ffff03ffff07ff5980ffff01ff0180ffff01ff02ffff03ffff09ffff0dff5980ffff012180ffff01ff09ffff0cff59ff80ff2c80ff2e80ffff01ff018080ff018080ff0180ffff01ff018080ff0180ffff01ff018080ff018080ffff01ff02ff2affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff808080808080ffff01ff088080ff0180ffff01ff02ffff03ffff21ffff09ff11ff3080ffff09ff11ff288080ffff01ff02ffff03ffff20ffff02ffff03ffff07ff1980ffff01ff02ffff03ffff07ff2980ffff01ff0180ffff01ff02ffff03ffff09ffff0dff2980ffff012180ffff01ff09ffff0cff29ff80ff2c80ff2e80ffff01ff018080ff018080ff0180ffff01ff018080ff018080ffff01ff02ff2affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff808080808080ffff01ff088080ff0180ffff01ff02ff2affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff80808080808080ff018080ff018080ff018080ff0180ffff01ff02ffff03ff0bffff01ff04ff0bffff04ff17ff808080ffff01ff088080ff018080ff0180ff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffffff0bff5cffff0bff5cff8201baff0580ffff0bff5cff0bff82013a8080ffff02ffff03ff05ffff01ff0bff8201faffff02ff26ffff04ff02ffff04ff09ffff04ffff02ff56ffff04ff02ffff04ff0dff80808080ff808080808080ffff018201ba80ff0180ff0bff82017affff02ff26ffff04ff02ffff04ff05ffff04ffff02ff56ffff04ff02ffff04ff07ff80808080ff808080808080ff43ffff02ff7effff04ff02ffff04ff03ffff04ffff02ff2affff04ff02ffff04ff17ffff04ff80ffff04ff80ff808080808080ff8080808080ff02ffff03ff8200f3ffff01ff0880ffff01ff02ffff03ffff09ff15ff82013380ffff01ff02ffff03ffff02ffff03ffff09ff21ff1580ffff01ff20ff832ffff980ffff01ff22ffff02ff22ffff04ff02ffff04ff31ffff04ff15ff8080808080ff832ffff98080ff0180ffff01ff02ffff03ffff02ffff03ffff20ff2380ffff01ff20ff2380ffff01ff09ffff0dffff05ffff04ff23ff80808080ff7c8080ff0180ffff01ff04ffff04ff30ffff04ffff0eff2eff5d80ff808080ffff04ffff02ffff03ff8317fff9ffff01ff04ff24ffff04ffff30ff8327fff9ffff0bff82017affff02ff26ffff04ff02ffff04ff29ffff04ff8337fff9ff808080808080ff820bf980ff808080ffff01ff02ffff03ffff09ff820179ff8080ffff01ff02ffff03ffff09ff8205f9ff8080ffff01ff02ffff03ffff09ff820bf9ff8080ffff01ff02ffff03ffff09ff8217f9ff8080ffff01ff02ffff03ffff09ff822ff9ff8080ffff01ff02ffff03ffff09ff825ff9ff8080ffff01ff02ffff03ffff09ff8300bff9ff8080ffff01ff02ffff03ffff09ff83017ff9ff8080ffff01ff02ffff03ffff09ff8302fff9ff8080ffff01ff02ffff03ffff09ff8305fff9ff8080ffff01ff02ffff03ffff09ff830bfff9ff8080ffff01ff04ff24ffff04ff8200b9ff808080ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff018080ff0180ffff04ffff04ff54ffff04ffff02ff76ffff04ff02ffff04ff29ffff04ffff0bff2cff2980ffff04ffff02ff32ffff04ff02ffff04ff59ff80808080ffff04ffff0bff2cff8200b980ffff04ffff0bff2cff82017980ffff04ffff0bff2cff8202f980ffff04ffff0bff2cff8205f980ffff04ffff0bff2cff820bf980ffff04ffff0bff2cff8217f980ffff04ffff0bff2cff822ff980ffff04ffff02ff32ffff04ff02ffff04ff825ff9ff80808080ffff04ffff0bff2cff8300bff980ffff04ffff0bff2cff83017ff980ffff04ffff0bff2cff8302fff980ffff04ffff0bff2cff8305fff980ffff04ffff0bff2cff830bfff980ff80808080808080808080808080808080808080ff808080ffff02ff835ffff9ffff04ffff04ff29ffff04ff59ffff04ff8200b9ffff04ff820179ffff04ff8202f9ffff04ff8205f9ffff04ff8217f9ffff04ff822ff9ffff04ff825ff9ffff04ff8300bff9ffff04ff83017ff9ffff04ff8302fff9ffff04ff8305fff9ffff04ff830bfff9ff808080808080808080808080808080ffff04ffff02ffff03ffff09ff5dff8202f980ffff015dffff01ff018080ff0180ffff04ff23ffff04ff53ffff04ff2bffff04ff8201b3ff8080808080808080808080ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff018080ff0180ff018080",
         "bytecode_disassembled": "(a (q 2 94 (c 2 (c 3 (c (a 50 (c 2 (c 0x17ffff ()))) (c (a (i 0x0bffff (q 2 0x0bffff 0x1fffff) (q . 0x1fffff)) 1) (c (a 50 (c 2 (c 0x0bffff ()))) ())))))) (c (q (((51 . 60) 62 66 . 67) (71 72 . 1) 1 2 . 32) (((a (i 5 (q 2 (i (= 9 11) (q . 44) (q 2 34 (c 2 (c 13 (c 11 ()))))) 1) (q 1)) 1) 2 (i (l 5) (q 11 92 (a 50 (c 2 (c 9 ()))) (a 50 (c 2 (c 13 ())))) (q 11 44 5)) 1) (a (i 5 (q 2 (i (= 17 32) (q 2 (i 11 (q 8) (q 2 42 (c 2 (c 13 (c 25 (c 23 ())))))) 1) (q 2 (i (= 17 116) (q 2 (i (not (a (i 25 (q 2 (i (l 41) (q 1) (q 2 (i (= (strlen 41) 44) (q 9 41 46) (q 1)) 1)) 1) (q 1)) 1)) (q 2 42 (c 2 (c 13 (c 11 (c (c 9 23) ()))))) (q 8)) 1) (q 2 (i (any (= 17 88) (= 17 120)) (q 2 (i (not (a (i (l 25) (q 2 (i (l 57) (q 2 (i (l 89) (q 1) (q 2 (i (= (strlen 89) (q . 33)) (q 9 (substr 89 () 44) 46) (q 1)) 1)) 1) (q 1)) 1) (q 1)) 1)) (q 2 42 (c 2 (c 13 (c 11 (c (c 9 23) ()))))) (q 8)) 1) (q 2 (i (any (= 17 48) (= 17 40)) (q 2 (i (not (a (i (l 25) (q 2 (i (l 41) (q 1) (q 2 (i (= (strlen 41) (q . 33)) (q 9 (substr 41 () 44) 46) (q 1)) 1)) 1) (q 1)) 1)) (q 2 42 (c 2 (c 13 (c 11 (c (c 9 23) ()))))) (q 8)) 1) (q 2 42 (c 2 (c 13 (c 11 (c (c 9 23) ())))))) 1)) 1)) 1)) 1) (q 2 (i 11 (q 4 11 (c 23 ())) (q 8)) 1)) 1) 2 (0x4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a . 0x9dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2) 0x02a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222 . 0x02a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5) ((sha256 92 (sha256 92 442 5) (sha256 92 11 314)) (a (i 5 (q 11 506 (a 38 (c 2 (c 9 (c (a 86 (c 2 (c 13 ()))) ()))))) (q . 442)) 1) 11 378 (a 38 (c 2 (c 5 (c (a 86 (c 2 (c 7 ()))) ()))))) 67 (a 126 (c 2 (c 3 (c (a 42 (c 2 (c 23 (c () (c () ()))))) ())))) 2 (i 243 (q 8) (q 2 (i (= 21 307) (q 2 (i (a (i (= 33 21) (q 32 0x2ffff9) (q 34 (a 34 (c 2 (c 49 (c 21 ())))) 0x2ffff9)) 1) (q 2 (i (a (i (not 35) (q 32 35) (q 9 (strlen (f (c 35 ()))) 124)) 1) (q 4 (c 48 (c (concat 46 93) ())) (c (a (i 0x17fff9 (q 4 36 (c (48 0x27fff9 (sha256 378 (a 38 (c 2 (c 41 (c 0x37fff9 ()))))) 3065) ())) (q 2 (i (= 377 ()) (q 2 (i (= 1529 ()) (q 2 (i (= 3065 ()) (q 2 (i (= 6137 ()) (q 2 (i (= 12281 ()) (q 2 (i (= 24569 ()) (q 2 (i (= 0x00bff9 ()) (q 2 (i (= 0x017ff9 ()) (q 2 (i (= 0x02fff9 ()) (q 2 (i (= 0x05fff9 ()) (q 2 (i (= 0x0bfff9 ()) (q 4 36 (c 185 ())) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1)) 1) (c (c 84 (c (a 118 (c 2 (c 41 (c (sha256 44 41) (c (a 50 (c 2 (c 89 ()))) (c (sha256 44 185) (c (sha256 44 377) (c (sha256 44 761) (c (sha256 44 1529) (c (sha256 44 3065) (c (sha256 44 6137) (c (sha256 44 12281) (c (a 50 (c 2 (c 24569 ()))) (c (sha256 44 0x00bff9) (c (sha256 44 0x017ff9) (c (sha256 44 0x02fff9) (c (sha256 44 0x05fff9) (c (sha256 44 0x0bfff9) ())))))))))))))))))) ())) (a 0x5ffff9 (c (c 41 (c 89 (c 185 (c 377 (c 761 (c 1529 (c 6137 (c 12281 (c 24569 (c 0x00bff9 (c 0x017ff9 (c 0x02fff9 (c 0x05fff9 (c 0x0bfff9 ())))))))))))))) (c (a (i (= 93 761) (q . 93) (q 1)) 1) (c 35 (c 83 (c 43 (c 435 ())))))))))) (q 8)) 1) (q 8)) 1) (q 8)) 1)) 1) 1))",
@@ -2118,6 +2141,7 @@
     "5fc89001dd4f5601fce0d8abfdfaa02503534b461014f065dcef12760f062b78": {
         "file_name": "collateral_vault.clsp",
         "name": "--circuit-circuit_puzzles-collateral_vault",
+        "family": "SINGLETON",
         "puzzle_hash": "5fc89001dd4f5601fce0d8abfdfaa02503534b461014f065dcef12760f062b78",
         "bytecode": "0xff02ffff01ff02ff56ffff04ff02ffff04ff03ffff04ffff02ff52ffff04ff02ffff04ff825dffff80808080ffff04ffff02ff52ffff04ff02ffff04ff8215ffff80808080ffff04ffff02ff8215ffff822dff80ffff04ffff02ff52ffff04ff02ffff04ff17ff80808080ff8080808080808080ffff04ffff01ffffffffff02ffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff40ffff0bff40ff8201a0ff0580ffff0bff40ff0bff8201208080ff02ffff03ff05ffff01ff0bff8201e0ffff02ff50ffff04ff02ffff04ff09ffff04ffff02ff70ffff04ff02ffff04ff0dff80808080ff808080808080ffff018201a080ff0180ffffff0bff820160ffff02ff50ffff04ff02ffff04ff05ffff04ffff02ff70ffff04ff02ffff04ff07ff80808080ff80808080808033ff3c3effffff4243ff4748ffff4901ff0102ffffffff20ff02ffff03ff05ffff01ff02ffff03ffff09ff09ff0b80ffff015cffff01ff02ff62ffff04ff02ffff04ff0dffff04ff0bff808080808080ff0180ffff01ff018080ff0180ffff02ffff03ffff07ff0580ffff01ff0bff40ffff02ff52ffff04ff02ffff04ff09ff80808080ffff02ff52ffff04ff02ffff04ff0dff8080808080ffff01ff0bff5cff058080ff0180ff02ffff03ff05ffff01ff04ff09ffff02ff72ffff04ff02ffff04ff0dffff04ff0bff808080808080ffff010b80ff0180ffffff02ffff03ff05ffff01ff02ffff03ffff09ff11ff6880ffff01ff0880ffff01ff02ffff03ffff09ff11ff6c80ffff01ff02ffff03ffff02ffff03ff19ffff01ff02ffff03ffff07ff2980ffff01ff0180ffff01ff02ffff03ffff09ffff0dff2980ff5c80ffff01ff09ff29ff6a80ffff01ff018080ff018080ff0180ffff01ff018080ff0180ffff01ff0880ffff01ff02ffff03ffff07ff1980ffff01ff02ffff03ffff09ff29ff5a80ffff01ff02ffff03ff0bffff01ff0880ffff01ff02ff4affff04ff02ffff04ff0dffff04ff59ffff04ff17ff80808080808080ff0180ffff01ff02ff4affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff80808080808080ff0180ffff01ff02ff4affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff80808080808080ff018080ff0180ffff01ff02ffff03ffff21ffff09ff11ff4480ffff09ff11ff648080ffff01ff02ffff03ffff02ffff03ffff07ff1980ffff01ff02ffff03ffff07ff3980ffff01ff02ffff03ffff07ff5980ffff01ff0180ffff01ff02ffff03ffff09ffff0dff5980ffff012180ffff01ff09ffff0cff59ff80ff5c80ff6a80ffff01ff018080ff018080ff0180ffff01ff018080ff0180ffff01ff018080ff0180ffff01ff0880ffff01ff02ff4affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff80808080808080ff0180ffff01ff02ffff03ffff21ffff09ff11ff5880ffff09ff11ff788080ffff01ff02ffff03ffff02ffff03ffff07ff1980ffff01ff02ffff03ffff07ff2980ffff01ff0180ffff01ff02ffff03ffff09ffff0dff2980ffff012180ffff01ff09ffff0cff29ff80ff5c80ff6a80ffff01ff018080ff018080ff0180ffff01ff018080ff0180ffff01ff0880ffff01ff02ff4affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff80808080808080ff0180ffff01ff02ff4affff04ff02ffff04ff0dffff04ff0bffff04ffff04ff09ff1780ff80808080808080ff018080ff018080ff018080ff0180ffff01ff02ffff03ff0bffff01ff04ff0bffff04ff17ff808080ffff01ff088080ff018080ff018043ff5343ffffff53ff02ff48ffff04ff02ffff04ff11ffff04ffff02ffff03ffff07ff0b80ffff01ff02ff52ffff04ff02ffff04ff09ff80808080ffff010b80ff0180ffff04ff15ff808080808080ffff02ff76ffff04ff02ffff04ff03ffff04ffff02ff4affff04ff02ffff04ff2fffff04ff80ffff04ff80ff808080808080ff8080808080ff02ff4effff04ff02ffff04ff03ffff04ff13ff8080808080ffffff02ff6effff04ff02ffff04ff03ffff04ffff02ff66ffff04ff02ffff04ffff04ffff04ff820131ff82017980ffff04ff13ff808080ffff04ffff06ffff04ff820131ff8201798080ff8080808080ff8080808080ff02ff5effff04ff02ffff04ff03ffff04ffff02ff8305dfe1ffff04ffff04ff8202e1ffff04ff8205e1ffff04ff820be1ffff04ff8217e1ffff04ff820161ffff04ff822fe1ffff04ff0bffff04ff8200b1ff808080808080808080ffff04ff75ff80808080ff8080808080ffff02ff7effff04ff02ffff04ff03ffff04ffff02ff72ffff04ff02ffff04ff820151ffff04ff2bff8080808080ff8080808080ff02ffff03ffff09ffff0dff82015180ff4280ffff01ff02ffff03ffff09ff820141ff82015180ffff01ff02ffff03ffff02ffff03ffff02ff62ffff04ff02ffff04ff820201ffff04ff820151ff8080808080ffff01ff22ffff20ff822f8180ffff09ff8202c1ff825f818080ffff01ff02ff62ffff04ff02ffff04ff820301ffff04ff820151ff808080808080ff0180ffff01ff04ffff04ff58ffff04ffff0eff6aff8202c180ff808080ffff04ffff04ff68ffff04ffff02ff48ffff04ff02ffff04ff820281ffff04ffff02ff52ffff04ff02ffff04ff820281ff80808080ffff04ff820bc1ffff04ffff0bff5cff4580ffff04ffff0bff5cff8200a580ffff04ffff02ff52ffff04ff02ffff04ff820165ff80808080ffff04ffff0bff5cff8202e580ffff04ffff0bff5cff8205e580ff8080808080808080808080ffff04ff45ffff04ffff04ff8202e5ff8080ff8080808080ffff04ffff04ff6cffff04ff6affff04ff45ffff04ff8200a5ffff04ff820165ffff04ff8202e5ffff04ff8205e5ff8080808080808080ffff02ffff03ff83027f81ffff01ff04ffff04ff54ffff04ffff30ff83047f81ffff0bff820160ffff02ff50ffff04ff02ffff04ff820281ffff04ff830a7f81ff808080808080ff83167f8180ff808080ffff04ffff04ff74ffff04ffff02ff48ffff04ff02ffff04ff820281ffff04ffff02ff52ffff04ff02ffff04ff820281ff80808080ffff04ff820bc1ffff04ffff0bff5cff820b8180ffff04ffff0bff5cff82178180ffff04ffff02ff52ffff04ff02ffff04ff822f81ff80808080ffff04ffff0bff5cff825f8180ffff04ffff0bff5cff8300bf8180ff8080808080808080808080ff808080ffff04ffff04ff4cffff04ff820b81ff808080ff0b808080ffff01ff04ffff04ff74ffff04ffff02ff48ffff04ff02ffff04ff820281ffff04ffff02ff52ffff04ff02ffff04ff820281ff80808080ffff04ff820bc1ffff04ffff0bff5cff8080ffff04ffff0bff5cff8080ffff04ffff0bff5cff8080ffff04ffff0bff5cff825f8180ffff04ffff0bff5cff8080ff8080808080808080808080ff808080ffff04ffff04ff4cffff04ff80ff808080ff0b808080ff0180808080ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ff018080",
         "bytecode_disassembled": "(a (q 2 86 (c 2 (c 3 (c (a 82 (c 2 (c 24063 ()))) (c (a 82 (c 2 (c 5631 ()))) (c (a 5631 11775) (c (a 82 (c 2 (c 23 ()))) ()))))))) (c (q ((((a (0x4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a . 0x9dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2) 0x02a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222 . 0x02a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5) (sha256 64 (sha256 64 416 5) (sha256 64 11 288)) 2 (i 5 (q 11 480 (a 80 (c 2 (c 9 (c (a 112 (c 2 (c 13 ()))) ()))))) (q . 416)) 1) ((sha256 352 (a 80 (c 2 (c 5 (c (a 112 (c 2 (c 7 ()))) ()))))) . 51) 60 . 62) ((66 . 67) 71 . 72) (73 . 1) 1 . 2) (((not 2 (i 5 (q 2 (i (= 9 11) (q . 92) (q 2 98 (c 2 (c 13 (c 11 ()))))) 1) (q 1)) 1) (a (i (l 5) (q 11 64 (a 82 (c 2 (c 9 ()))) (a 82 (c 2 (c 13 ())))) (q 11 92 5)) 1) 2 (i 5 (q 4 9 (a 114 (c 2 (c 13 (c 11 ()))))) (q . 11)) 1) ((a (i 5 (q 2 (i (= 17 104) (q 8) (q 2 (i (= 17 108) (q 2 (i (a (i 25 (q 2 (i (l 41) (q 1) (q 2 (i (= (strlen 41) 92) (q 9 41 106) (q 1)) 1)) 1) (q 1)) 1) (q 8) (q 2 (i (l 25) (q 2 (i (= 41 90) (q 2 (i 11 (q 8) (q 2 74 (c 2 (c 13 (c 89 (c 23 ())))))) 1) (q 2 74 (c 2 (c 13 (c 11 (c (c 9 23) ())))))) 1) (q 2 74 (c 2 (c 13 (c 11 (c (c 9 23) ())))))) 1)) 1) (q 2 (i (any (= 17 68) (= 17 100)) (q 2 (i (a (i (l 25) (q 2 (i (l 57) (q 2 (i (l 89) (q 1) (q 2 (i (= (strlen 89) (q . 33)) (q 9 (substr 89 () 92) 106) (q 1)) 1)) 1) (q 1)) 1) (q 1)) 1) (q 8) (q 2 74 (c 2 (c 13 (c 11 (c (c 9 23) ())))))) 1) (q 2 (i (any (= 17 88) (= 17 120)) (q 2 (i (a (i (l 25) (q 2 (i (l 41) (q 1) (q 2 (i (= (strlen 41) (q . 33)) (q 9 (substr 41 () 92) 106) (q 1)) 1)) 1) (q 1)) 1) (q 8) (q 2 74 (c 2 (c 13 (c 11 (c (c 9 23) ())))))) 1) (q 2 74 (c 2 (c 13 (c 11 (c (c 9 23) ())))))) 1)) 1)) 1)) 1) (q 2 (i 11 (q 4 11 (c 23 ())) (q 8)) 1)) 1) . 67) 83 . 67) ((83 2 72 (c 2 (c 17 (c (a (i (l 11) (q 2 82 (c 2 (c 9 ()))) (q . 11)) 1) (c 21 ()))))) (a 118 (c 2 (c 3 (c (a 74 (c 2 (c 47 (c () (c () ()))))) ())))) 2 78 (c 2 (c 3 (c 19 ())))) ((a 110 (c 2 (c 3 (c (a 102 (c 2 (c (c (c 305 377) (c 19 ())) (c (r (c 305 377)) ())))) ())))) 2 94 (c 2 (c 3 (c (a 0x05dfe1 (c (c 737 (c 1505 (c 3041 (c 6113 (c 353 (c 12257 (c 11 (c 177 ())))))))) (c 117 ()))) ())))) (a 126 (c 2 (c 3 (c (a 114 (c 2 (c 337 (c 43 ())))) ())))) 2 (i (= (strlen 337) 66) (q 2 (i (= 321 337) (q 2 (i (a (i (a 98 (c 2 (c 513 (c 337 ())))) (q 34 (not 12161) (= 705 24449)) (q 2 98 (c 2 (c 769 (c 337 ()))))) 1) (q 4 (c 88 (c (concat 106 705) ())) (c (c 104 (c (a 72 (c 2 (c 641 (c (a 82 (c 2 (c 641 ()))) (c 3009 (c (sha256 92 69) (c (sha256 92 165) (c (a 82 (c 2 (c 357 ()))) (c (sha256 92 741) (c (sha256 92 1509) ())))))))))) (c 69 (c (c 741 ()) ())))) (c (c 108 (c 106 (c 69 (c 165 (c 357 (c 741 (c 1509 ()))))))) (a (i 0x027f81 (q 4 (c 84 (c (48 0x047f81 (sha256 352 (a 80 (c 2 (c 641 (c 0x0a7f81 ()))))) 0x167f81) ())) (c (c 116 (c (a 72 (c 2 (c 641 (c (a 82 (c 2 (c 641 ()))) (c 3009 (c (sha256 92 2945) (c (sha256 92 6017) (c (a 82 (c 2 (c 12161 ()))) (c (sha256 92 24449) (c (sha256 92 0x00bf81) ())))))))))) ())) (c (c 76 (c 2945 ())) 11))) (q 4 (c 116 (c (a 72 (c 2 (c 641 (c (a 82 (c 2 (c 641 ()))) (c 3009 (c (sha256 92 ()) (c (sha256 92 ()) (c (sha256 92 ()) (c (sha256 92 24449) (c (sha256 92 ()) ())))))))))) ())) (c (c 76 (c () ())) 11))) 1)))) (q 8)) 1) (q 8)) 1) (q 8)) 1) 1))",
@@ -2240,6 +2264,7 @@
     "4d2c41e0cc40967eeae367e2a153d1d51a9049a155ea3d4e7218aec6b0d89e58": {
         "file_name": "announcer_registry.clsp",
         "name": "--circuit-circuit_puzzles-announcer_registry",
+        "family": "SINGLETON",
         "puzzle_hash": "4d2c41e0cc40967eeae367e2a153d1d51a9049a155ea3d4e7218aec6b0d89e58",
         "bytecode": "0xff02ffff01ff02ff56ffff04ff02ffff04ff03ffff04ffff02ff825fffff8300bfff80ffff04ffff02ff62ffff04ff02ffff04ff825fffff80808080ff808080808080ffff04ffff01ffffffffff333cff3fff4042ffff43ff4647ff48ff4950ffffff0102ffffffa04bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459aa09dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2ffa102a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222a102a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5ffff0bff64ffff0bff64ff820194ff0580ffff0bff64ff0bff8201148080ff02ffff03ff05ffff01ff0bff8201d4ffff02ff8200b4ffff04ff02ffff04ff09ffff04ffff02ff8200f4ffff04ff02ffff04ff0dff80808080ff808080808080ffff0182019480ff0180ffffff0bff820154ffff02ff8200b4ffff04ff02ffff04ff05ffff04ffff02ff8200f4ffff04ff02ffff04ff07ff80808080ff808080808080ff4353ff01ff81ff02ffffffff20ff02ffff03ffff07ff0580ffff01ff0bff64ffff02ff62ffff04ff02ffff04ff09ff80808080ffff02ff62ffff04ff02ffff04ff0dff8080808080ffff01ff0bff5cff058080ff0180ff43ff5381fcffff20ff2173ffff02ff4cffff04ff02ffff04ff11ffff04ffff02ffff03ffff07ff0b80ffff01ff02ff62ffff04ff02ffff04ff09ff80808080ffff010b80ff0180ffff04ff15ff808080808080ff726dffffffff02ffff03ffff02ffff03ffff09ff44ff1180ffff01ff09ff8200ecff2980ffff01ff018080ff0180ffff0159ffff01ff02ffff03ff0dffff01ff02ff46ffff04ff02ffff04ff0dff80808080ffff01ff088080ff018080ff0180ffff02ffff03ff05ffff01ff02ff8200a6ffff04ff02ffff04ff0dffff04ff0bffff04ffff04ffff04ff09ffff04ff0bffff04ffff04ff09ff8080ff80808080ff1780ff808080808080ffff011780ff0180ff02ffff03ff05ffff01ff02ff8200e6ffff04ff02ffff04ff0dffff04ffff10ff0bff5c80ff8080808080ffff010b80ff0180ffff02ff8200b6ffff04ff02ffff04ff03ffff04ffff02ff46ffff04ff02ffff04ff0bff80808080ff8080808080ffff02ff8200feffff04ff02ffff04ff03ffff04ffff02ffff03ffff09ff2bff8200ba80ffff01ff02ff8200f6ffff04ff02ffff04ff03ffff04ff5bff8080808080ffff01ff02ff8200aeffff04ff02ffff04ff03ffff04ffff02ff4cffff04ff02ffff04ff820179ffff04ffff02ff62ffff04ff02ffff04ff8217f9ff80808080ff8080808080ffff04ff82015bffff04ff82009bff8080808080808080ff0180ff8080808080ff02ff4effff04ff02ffff04ff03ffff04ffff0bff820154ffff02ff8200b4ffff04ff02ffff04ff8200b1ffff04ff2bff808080808080ff8080808080ffffff02ffff03ffff09ffff0dff2580ff4280ffff01ff02ffff03ffff09ffff0dff5580ff4280ffff01ff04ffff04ff25ff8300bfe180ffff04ff83017fe1ffff04ff8302ffe1ffff04ffff04ffff04ff48ffff04ffff0112ffff04ffff0eff8200acffff02ff62ffff04ff02ffff04ffff04ff8200b1ffff04ff825fe1ffff04ff25ffff04ff5cff83017fe180808080ff8080808080ffff04ff0bff8080808080ff8080ff8080808080ffff01ff088080ff0180ffff01ff088080ff0180ffff02ff8200eeffff04ff02ffff04ff03ffff04ffff02ff5affff04ff02ffff04ffff04ff822ff1ffff04ff2fff808080ffff04ff826ff1ff8080808080ff8080808080ff02ffff03ffff02ffff03ffff15ff2dff8200bc80ffff01ff02ffff03ffff15ffff0189010000000000000000ff2d80ffff01ff02ffff03ffff09ffff10ff2d80ff2d80ffff015cffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff02ffff03ffff09ff8200a9ff8200fa80ffff01ff02ff5effff04ff02ffff04ff03ffff04ffff02ff8200e6ffff04ff02ffff04ff8300bfe1ffff04ff80ff8080808080ffff04ff820169ff808080808080ffff01ff04ff8300bfe1ffff04ffff0101ffff04ff2dffff04ffff02ffff03ffff09ff83015fe1ffff30ff49ff820b69ffff01018080ffff01ff04ffff04ff60ffff04ffff02ff62ffff04ff02ffff04ff825fe1ff80808080ff808080ffff04ffff04ff50ffff04ffff0bff0bff8200acffff02ff62ffff04ff02ffff04ffff04ff8200eaffff04ff4aff2d8080ff8080808080ff808080ffff04ffff04ff8200b0ffff04ff83015fe1ff808080ff80808080ffff01ff088080ff0180ff808080808080ff0180ffff01ff088080ff0180ffff02ff8200beffff04ff02ffff04ff03ffff04ffff30ff8204f7ffff02ff4cffff04ff02ffff04ff8205c1ffff04ffff0bff5cff8205c180ffff04ffff0bff5cff2980ffff04ff8217c1ff80808080808080ff8206f780ffff04ffff06ffff14ff820177ff0b8080ff808080808080ffff02ffff03ffff02ffff03ffff15ff82016dff8200bc80ffff01ff02ffff03ffff15ffff0189010000000000000000ff82016d80ffff01ff02ffff03ffff09ffff10ff82016d80ff82016d80ffff015cffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff02ffff03ffff02ffff03ffff15ff8202edff8200bc80ffff01ff02ffff03ffff15ffff0189010000000000000000ff8202ed80ffff01ff02ffff03ffff09ffff10ff8202ed80ff8202ed80ffff015cffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff02ffff03ffff02ffff03ffff15ff820dedff8200bc80ffff01ff02ffff03ffff15ffff0189010000000000000000ff820ded80ffff01ff02ffff03ffff09ffff10ff820ded80ff820ded80ffff015cffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff02ffff03ffff09ffff0dff820bed80ff4280ffff01ff02ffff03ffff09ffff0dff8217ed80ff4280ffff01ff02ffff03ffff15ff82016dff830bff8180ffff01ff02ffff03ffff15ff8200b1ff82028180ffff01ff02ffff03ffff15ff15ff8080ffff01ff02ffff03ffff15ff820101ff8202ed80ffff01ff04ff80ffff04ffff10ff8305ff81ffff010180ffff04ffff10ff82016dff8200b180ffff04ffff04ffff04ff8200f0ffff04ffff013fffff04ffff0eff8200acffff02ff62ffff04ff02ffff04ffff04ff8202c1ffff04ff83017f81ffff04ff825f81ff8202ed808080ff8080808080ffff04ff0bff8080808080ffff04ffff04ff8200f8ffff04ffff018302bf20ff808080ffff04ffff04ff60ffff04ffff0124ff808080ffff04ffff04ff50ffff04ffff0bff29ff8200acffff02ff62ffff04ff02ffff04ffff04ff8200eaffff04ff4aff8200b18080ff8080808080ff808080ffff04ffff04ff50ffff04ffff0bff29ff8200acffff02ff62ffff04ff02ffff04ffff04ff8200eaffff04ff8200aaff8202ed8080ff8080808080ff808080ffff04ffff04ff50ffff04ffff0bff29ff8200acffff02ff62ffff04ff02ffff04ffff04ff8200eaffff04ff8200f2ff82016d8080ff8080808080ff808080ffff04ffff04ff8200a8ffff04ff8217edff808080ffff04ffff04ff50ffff04ffff0bffff02ff4cffff04ff02ffff04ff820b81ffff04ffff0bff5cff820b8180ffff04ffff0bff5cff5180ffff04ff825f81ff80808080808080ffff02ff62ffff04ff02ffff04ffff04ff8217edffff02ff8200a6ffff04ff02ffff04ff8302ff81ffff04ffff05ffff14ff8202edff158080ffff04ffff02ffff03ffff15ff17ff8080ffff01ff04ffff04ff820bedffff04ff17ffff04ffff04ff820bedff8080ff80808080ff8080ffff01ff018080ff0180ff80808080808080ff8080808080ff808080ff808080808080808080ff8080808080ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ffff01ff088080ff0180ff04ffff04ff60ffff04ffff0eff8200acff5980ff808080ffff04ffff04ff8200b8ffff04ff80ff808080ffff04ffff02ffff03ffff07ff2580ffff01ff04ff8200e8ffff04ffff30ff45ffff0bff820154ffff02ff8200b4ffff04ff02ffff04ff8217f1ffff04ff65ff808080808080ff8080ff808080ffff01ff04ff48ffff04ffff0104ffff04ff25ff8080808080ff0180ffff04ffff04ff58ffff04ffff02ff4cffff04ff02ffff04ff8217f1ffff04ffff0bff5cff8217f180ffff04ffff02ff62ffff04ff02ffff04ff822ff1ff80808080ffff04ffff02ff62ffff04ff02ffff04ff825ff1ff80808080ffff04ffff0bff5cff8300bff180ffff04ffff0bff5cff83017ff180ff808080808080808080ff808080ffff04ffff04ff40ffff04ffff02ff4cffff04ff02ffff04ff8217f1ffff04ffff0bff5cff8217f180ffff04ffff02ff62ffff04ff02ffff04ff822ff1ff80808080ffff04ffff02ff62ffff04ff02ffff04ff13ff80808080ffff04ffff0bff5cff2b80ffff04ffff0bff5cff5b80ff808080808080808080ffff04ff80ff80808080ffff04ffff04ff44ffff04ff8200acffff04ff13ffff04ff2bffff04ff5bff808080808080ff8200bb808080808080ff018080",
         "bytecode_disassembled": "(a (q 2 86 (c 2 (c 3 (c (a 24575 0x00bfff) (c (a 98 (c 2 (c 24575 ()))) ()))))) (c (q ((((51 . 60) 63 64 . 66) (67 70 . 71) 72 73 . 80) ((q . 2) ((0x4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a . 0x9dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2) 0x02a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222 . 0x02a8d5dd63fba471ebcb1f3e8f7c1e1879b7152a6e7298a91ce119a63400ade7c5) (sha256 100 (sha256 100 404 5) (sha256 100 11 276)) 2 (i 5 (q 11 468 (a 180 (c 2 (c 9 (c (a 244 (c 2 (c 13 ()))) ()))))) (q . 404)) 1) ((sha256 340 (a 180 (c 2 (c 5 (c (a 244 (c 2 (c 7 ()))) ()))))) 67 . 83) 1 -1 . 2) (((not 2 (i (l 5) (q 11 100 (a 98 (c 2 (c 9 ()))) (a 98 (c 2 (c 13 ())))) (q 11 92 5)) 1) 67 83 . -4) (not 33 . 115) (a 76 (c 2 (c 17 (c (a (i (l 11) (q 2 98 (c 2 (c 9 ()))) (q . 11)) 1) (c 21 ()))))) 114 . 109) (((a (i (a (i (= 68 17) (q 9 236 41) (q 1)) 1) (q . 89) (q 2 (i 13 (q 2 70 (c 2 (c 13 ()))) (q 8)) 1)) 1) (a (i 5 (q 2 166 (c 2 (c 13 (c 11 (c (c (c 9 (c 11 (c (c 9 ()) ()))) 23) ()))))) (q . 23)) 1) 2 (i 5 (q 2 230 (c 2 (c 13 (c (+ 11 92) ())))) (q . 11)) 1) (a 182 (c 2 (c 3 (c (a 70 (c 2 (c 11 ()))) ())))) (a 254 (c 2 (c 3 (c (a (i (= 43 186) (q 2 246 (c 2 (c 3 (c 91 ())))) (q 2 174 (c 2 (c 3 (c (a 76 (c 2 (c 377 (c (a 98 (c 2 (c 6137 ()))) ())))) (c 347 (c 155 ()))))))) 1) ())))) 2 78 (c 2 (c 3 (c (sha256 340 (a 180 (c 2 (c 177 (c 43 ()))))) ())))) ((a (i (= (strlen 37) 66) (q 2 (i (= (strlen 85) 66) (q 4 (c 37 0x00bfe1) (c 0x017fe1 (c 0x02ffe1 (c (c (c 72 (c (q . 18) (c (concat 172 (a 98 (c 2 (c (c 177 (c 24545 (c 37 (c 92 0x017fe1)))) ())))) (c 11 ())))) ()) ())))) (q 8)) 1) (q 8)) 1) (a 238 (c 2 (c 3 (c (a 90 (c 2 (c (c 12273 (c 47 ())) (c 28657 ())))) ())))) 2 (i (a (i (> 45 188) (q 2 (i (> (q . 0x010000000000000000) 45) (q 2 (i (= (+ 45) 45) (q . 92) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 2 (i (= 169 250) (q 2 94 (c 2 (c 3 (c (a 230 (c 2 (c 0x00bfe1 (c () ())))) (c 361 ()))))) (q 4 0x00bfe1 (c (q . 1) (c 45 (c (a (i (= 0x015fe1 (48 73 2921 (q . 1))) (q 4 (c 96 (c (a 98 (c 2 (c 24545 ()))) ())) (c (c 80 (c (sha256 11 172 (a 98 (c 2 (c (c 234 (c 74 45)) ())))) ())) (c (c 176 (c 0x015fe1 ())) ()))) (q 8)) 1) ()))))) 1) (q 8)) 1) (a 190 (c 2 (c 3 (c (48 1271 (a 76 (c 2 (c 1473 (c (sha256 92 1473) (c (sha256 92 41) (c 6081 ())))))) 1783) (c (r (divmod 375 11)) ()))))) (a (i (a (i (> 365 188) (q 2 (i (> (q . 0x010000000000000000) 365) (q 2 (i (= (+ 365) 365) (q . 92) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 2 (i (a (i (> 749 188) (q 2 (i (> (q . 0x010000000000000000) 749) (q 2 (i (= (+ 749) 749) (q . 92) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 2 (i (a (i (> 3565 188) (q 2 (i (> (q . 0x010000000000000000) 3565) (q 2 (i (= (+ 3565) 3565) (q . 92) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 2 (i (= (strlen 3053) 66) (q 2 (i (= (strlen 6125) 66) (q 2 (i (> 365 0x0bff81) (q 2 (i (> 177 641) (q 2 (i (> 21 ()) (q 2 (i (> 257 749) (q 4 () (c (+ 0x05ff81 (q . 1)) (c (+ 365 177) (c (c (c 240 (c (q . 63) (c (concat 172 (a 98 (c 2 (c (c 705 (c 0x017f81 (c 24449 749))) ())))) (c 11 ())))) (c (c 248 (c (q . 0x02bf20) ())) (c (c 96 (c (q . 36) ())) (c (c 80 (c (sha256 41 172 (a 98 (c 2 (c (c 234 (c 74 177)) ())))) ())) (c (c 80 (c (sha256 41 172 (a 98 (c 2 (c (c 234 (c 170 749)) ())))) ())) (c (c 80 (c (sha256 41 172 (a 98 (c 2 (c (c 234 (c 242 365)) ())))) ())) (c (c 168 (c 6125 ())) (c (c 80 (c (sha256 (a 76 (c 2 (c 2945 (c (sha256 92 2945) (c (sha256 92 81) (c 24449 ())))))) (a 98 (c 2 (c (c 6125 (a 166 (c 2 (c 0x02ff81 (c (f (divmod 749 21)) (c (a (i (> 23 ()) (q 4 (c 3053 (c 23 (c (c 3053 ()) ()))) ()) (q 1)) 1) ())))))) ())))) ())) ())))))))) ())))) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) (q 8)) 1) 4 (c 96 (c (concat 172 89) ())) (c (c 184 (c () ())) (c (a (i (l 37) (q 4 232 (c (48 69 (sha256 340 (a 180 (c 2 (c 6129 (c 101 ()))))) ()) ())) (q 4 72 (c (q . 4) (c 37 ())))) 1) (c (c 88 (c (a 76 (c 2 (c 6129 (c (sha256 92 6129) (c (a 98 (c 2 (c 12273 ()))) (c (a 98 (c 2 (c 24561 ()))) (c (sha256 92 0x00bff1) (c (sha256 92 0x017ff1) ())))))))) ())) (c (c 64 (c (a 76 (c 2 (c 6129 (c (sha256 92 6129) (c (a 98 (c 2 (c 12273 ()))) (c (a 98 (c 2 (c 19 ()))) (c (sha256 92 43) (c (sha256 92 91) ())))))))) (c () ()))) (c (c 68 (c 172 (c 19 (c 43 (c 91 ()))))) 187)))))) 1))",
@@ -4602,8 +4627,16 @@
                 "commit": "ed584e3",
                 "path": "crates/chia-sdk-types/src/puzzles/mips/members/eip712_member.rs",
                 "url": "https://github.com/MattHintz/solslot-protocol/blob/108ac023d836cf0198775eebd377880d0f8d6aef/solslot_puzzles/eip712_member_v2.clsp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "3967adb44600ce968b10b6303d92722ab3e04b38",
+                "path": "solslot_puzzles/eip712_member_v2.clsp",
+                "language": "chialisp"
             }
-        ]
+        ],
+        "project": "chia"
     },
     "63e04374ced7e7f9ab0f46e9bad1b4e82bf3edf671ea355cd60113c7a947ee1e": {
         "file_name": null,
@@ -5705,6 +5738,3023 @@
                 "project": "chia_gaming",
                 "hardcoded": true,
                 "url": "https://github.com/Chia-Network/chia-gaming/blob/78f1e604ebad3a3db3b6b7b70b4c0f9dcdc30ada/clsp/unroll/unroll_puzzle_state_channel_unrolling.hex"
+            }
+        ]
+    },
+    "04fce99610fc9f91a21b847aba5016c48e5c2ee274323b77e6456736025b5962": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-governance_singleton_inner_CHANGED_FOUND_ON_26_04_10",
+        "puzzle_hash": "04fce99610fc9f91a21b847aba5016c48e5c2ee274323b77e6456736025b5962",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3b097c9b20114de75c1bec5abfc1013e5974b7e81211f7a785ab83661979a977": {
+        "file_name": "p2_deed_settlement.clsp",
+        "name": "--solslot-populis_puzzles-p2_deed_settlement_CHANGED_FOUND_ON_26_04_10",
+        "puzzle_hash": "3b097c9b20114de75c1bec5abfc1013e5974b7e81211f7a785ab83661979a977",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/p2_deed_settlement.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4fd36459e76545cdfd74ffc51422d4711c904cf656138b32c7864948a9e3c729": {
+        "file_name": "pool_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-pool_singleton_inner_CHANGED_FOUND_ON_26_04_10",
+        "puzzle_hash": "4fd36459e76545cdfd74ffc51422d4711c904cf656138b32c7864948a9e3c729",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/pool_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "404b6286899f7d6998f9679415140274348e824e814e6dd91b42cbc6c07436bc": {
+        "file_name": "pool_token_tail.clsp",
+        "name": "--solslot-populis_puzzles-pool_token_tail_CHANGED_FOUND_ON_26_04_10",
+        "puzzle_hash": "404b6286899f7d6998f9679415140274348e824e814e6dd91b42cbc6c07436bc",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/pool_token_tail.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8f16f2c750d17e5b894923aa0bce4fb17ca03eb4127acd38e23bccfbc094aca2": {
+        "file_name": "smart_deed_inner.clsp",
+        "name": "--solslot-populis_puzzles-smart_deed_inner_CHANGED_FOUND_ON_26_04_10",
+        "puzzle_hash": "8f16f2c750d17e5b894923aa0bce4fb17ca03eb4127acd38e23bccfbc094aca2",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/smart_deed_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a4e89eb26ab54e071ece89cc43084d1b5c2725730c4692e436ed5fa5aed39206": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_04_10",
+        "puzzle_hash": "a4e89eb26ab54e071ece89cc43084d1b5c2725730c4692e436ed5fa5aed39206",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a7bdc669f648ebe98ab86fba06d51e39e80f4c9536937a4a9a8b0b6d2c62f263": {
+        "file_name": "smart_deed_inner.clsp",
+        "name": "--solslot-populis_puzzles-smart_deed_inner_CHANGED_FOUND_ON_26_04_21",
+        "puzzle_hash": "a7bdc669f648ebe98ab86fba06d51e39e80f4c9536937a4a9a8b0b6d2c62f263",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "296b3b1dd2cc369aa841a1e39feb121cbc57d2bc",
+                "path": "populis_puzzles/smart_deed_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d1c7c0bfa470eba1d27691910d67f41ea9c685af3b93398c67ba6ef94dc734c7": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_04_21",
+        "puzzle_hash": "d1c7c0bfa470eba1d27691910d67f41ea9c685af3b93398c67ba6ef94dc734c7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "296b3b1dd2cc369aa841a1e39feb121cbc57d2bc",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "5be601b4cf82235c2a2a538566a784ab1f760fba2ae3f9f63ab7d3b65472621f": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-governance_singleton_inner_CHANGED_FOUND_ON_26_04_26",
+        "puzzle_hash": "5be601b4cf82235c2a2a538566a784ab1f760fba2ae3f9f63ab7d3b65472621f",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "8d8cd43ec9a3b42cdc010e1c4b4edddac9160367",
+                "path": "populis_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d5e1b165f0394f45291bc58ff21e7c13963862f7e8280d732ef030d304e20389": {
+        "file_name": "pool_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-pool_singleton_inner_CHANGED_FOUND_ON_26_04_26",
+        "puzzle_hash": "d5e1b165f0394f45291bc58ff21e7c13963862f7e8280d732ef030d304e20389",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "4a8a9b8dac65f68817c05c43204e642f666fad99",
+                "path": "populis_puzzles/pool_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "24d6a217ef5a6132ebc735e72ec4c2741023a0b2f1109679fc5994b9ff5b84e8": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_04_26",
+        "puzzle_hash": "24d6a217ef5a6132ebc735e72ec4c2741023a0b2f1109679fc5994b9ff5b84e8",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "8d8cd43ec9a3b42cdc010e1c4b4edddac9160367",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "29ce1acca1da3f3af5ab9df4f7a21b2063fb00ba544c470fd02db37301548f9e": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_04_26_2",
+        "puzzle_hash": "29ce1acca1da3f3af5ab9df4f7a21b2063fb00ba544c470fd02db37301548f9e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "4a8a9b8dac65f68817c05c43204e642f666fad99",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d8df03ac432c0b6cfc404a3b07ddd4143c6a33cfb9a4c2fce0ba95ff2cbb6e05": {
+        "file_name": "pgt_free_inner.clsp",
+        "name": "--solslot-populis_puzzles-pgt_free_inner_CHANGED_FOUND_ON_26_04_26",
+        "puzzle_hash": "d8df03ac432c0b6cfc404a3b07ddd4143c6a33cfb9a4c2fce0ba95ff2cbb6e05",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "8d8cd43ec9a3b42cdc010e1c4b4edddac9160367",
+                "path": "populis_puzzles/pgt_free_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "6f88916240c341874f2cf43f50a4ad6c42e9422da5fa725e29c125b23b0690cf": {
+        "file_name": "protocol_config_inner.clsp",
+        "name": "--solslot-populis_puzzles-protocol_config_inner_CHANGED_FOUND_ON_26_05_02",
+        "puzzle_hash": "6f88916240c341874f2cf43f50a4ad6c42e9422da5fa725e29c125b23b0690cf",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "712ef99d55a48d6e0ec95bdfac1e5330b41a0a92",
+                "path": "populis_puzzles/protocol_config_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ce10f14945934dbc5d68027466752147e68efe2a1d2c8cc5fbc019a6c9a079be": {
+        "file_name": "admin_authority_inner.clsp",
+        "name": "--solslot-populis_puzzles-admin_authority_inner_CHANGED_FOUND_ON_26_05_02",
+        "puzzle_hash": "ce10f14945934dbc5d68027466752147e68efe2a1d2c8cc5fbc019a6c9a079be",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "01df80554e12b157174c2f7772cf32cbf6574b95",
+                "path": "populis_puzzles/admin_authority_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "355a1bd36a9163641a5e05e81c407f2adc9f7a6338e4b9c6c48427e541ece247": {
+        "file_name": "pool_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-pool_singleton_inner_CHANGED_FOUND_ON_26_05_03",
+        "puzzle_hash": "355a1bd36a9163641a5e05e81c407f2adc9f7a6338e4b9c6c48427e541ece247",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "000f57d69f21fcfa50875c4d9cce52cb4ad0dcfe",
+                "path": "populis_puzzles/pool_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8b5ecf9e797a1b4317316c775341a08bd1c7aeb3bc27012dc2f3ebfd95b77db7": {
+        "file_name": "pool_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-pool_singleton_inner_CHANGED_FOUND_ON_26_05_03_2",
+        "puzzle_hash": "8b5ecf9e797a1b4317316c775341a08bd1c7aeb3bc27012dc2f3ebfd95b77db7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "7b2c3ba2a44ccc4730193d00bd5df5edda74d984",
+                "path": "populis_puzzles/pool_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f30a63d7fd6a4f8e6f4442df47914a33def9315b60871bc86ef603420a0058f0": {
+        "file_name": "mint_proposal_inner.clsp",
+        "name": "--solslot-populis_puzzles-mint_proposal_inner_CHANGED_FOUND_ON_26_05_03",
+        "puzzle_hash": "f30a63d7fd6a4f8e6f4442df47914a33def9315b60871bc86ef603420a0058f0",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "477cd3c333d70907dddb3795c28f1ace8ea0b2f6",
+                "path": "populis_puzzles/mint_proposal_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ec6485b6e9eb5584a7bb4822d3b1dbf6e289496f83e06f05b33e9fcbb9c40022": {
+        "file_name": "property_registry_inner.clsp",
+        "name": "--solslot-populis_puzzles-property_registry_inner_CHANGED_FOUND_ON_26_05_03",
+        "puzzle_hash": "ec6485b6e9eb5584a7bb4822d3b1dbf6e289496f83e06f05b33e9fcbb9c40022",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "477cd3c333d70907dddb3795c28f1ace8ea0b2f6",
+                "path": "populis_puzzles/property_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3a785328833824f8c0b1c5359ead2c9b02b6fbd1b7def3b1ad2f8c79ea6f9bc2": {
+        "file_name": "property_registry_inner.clsp",
+        "name": "--solslot-populis_puzzles-property_registry_inner_CHANGED_FOUND_ON_26_05_03_2",
+        "puzzle_hash": "3a785328833824f8c0b1c5359ead2c9b02b6fbd1b7def3b1ad2f8c79ea6f9bc2",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "ec9c91b200583e58f7f6f455f0c67d7d88443026",
+                "path": "populis_puzzles/property_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "aee60ab7431aa9abab461146ca3c29a5cbe6b0d0ffac444a79335dbd83ba76e7": {
+        "file_name": "admin_authority_v2_inner.clsp",
+        "name": "--solslot-populis_puzzles-admin_authority_v2_inner_CHANGED_FOUND_ON_26_05_03",
+        "puzzle_hash": "aee60ab7431aa9abab461146ca3c29a5cbe6b0d0ffac444a79335dbd83ba76e7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "5d89f4a7cf70fc72d2c37cbc3dc89bf3e7f04f4b",
+                "path": "populis_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "09838f058403facd1494059cb694fc6db491ba7a4089de993b17a87b0ed3b00a": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_05_08",
+        "puzzle_hash": "09838f058403facd1494059cb694fc6db491ba7a4089de993b17a87b0ed3b00a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413c42135e11447e21ab66a8b5bb31550aae08c",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "18a28f0fa5904f31c2011621fbd939b2ab3c6c92b608e6a19fcb9f3b5f4f395a": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_05_08_2",
+        "puzzle_hash": "18a28f0fa5904f31c2011621fbd939b2ab3c6c92b608e6a19fcb9f3b5f4f395a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "94b74388eed4ae967553a143d8573d3c141ae148",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4bc23a04a0ea0dfa2fb1de602f5ca2b869e33df432b1269fe2b9f748ecf48936": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_05_08_3",
+        "puzzle_hash": "4bc23a04a0ea0dfa2fb1de602f5ca2b869e33df432b1269fe2b9f748ecf48936",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "007c700e19ee9326b86c8d7ed3212336650fc866",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "04b8a1ec0b942b8b6d55df25d4153a3cc5ee90392121c9a432122d5619f3ccd9": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_05_08_4",
+        "puzzle_hash": "04b8a1ec0b942b8b6d55df25d4153a3cc5ee90392121c9a432122d5619f3ccd9",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "7588a3891a065934e33aec04f730ec74151aadb7",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d2b81c056deff3bae52a626e88d441e049b30983b09e88b5dfd7e04125290b72": {
+        "file_name": "zkpassport_bridge_message.clsp",
+        "name": "--solslot-populis_puzzles-zkpassport_bridge_message_CHANGED_FOUND_ON_26_05_09",
+        "puzzle_hash": "d2b81c056deff3bae52a626e88d441e049b30983b09e88b5dfd7e04125290b72",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "ca8931287deab87564a6a30affb479e4d2659438",
+                "path": "populis_puzzles/zkpassport_bridge_message.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "5eea0c4db9332d36443a3041f5ea5654123cb85a87f3ae19f7c6a28ff529af28": {
+        "file_name": "admin_authority_v2_inner.clsp",
+        "name": "--solslot-populis_puzzles-admin_authority_v2_inner_CHANGED_FOUND_ON_26_05_10",
+        "puzzle_hash": "5eea0c4db9332d36443a3041f5ea5654123cb85a87f3ae19f7c6a28ff529af28",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1576e134bea2a6208a295c2254d6e24ef893bd32",
+                "path": "populis_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "af321c6a531ff04f7d151f6ccb6c9b900f253703ce7f439be7c7077bffb5df32": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_06_14",
+        "puzzle_hash": "af321c6a531ff04f7d151f6ccb6c9b900f253703ce7f439be7c7077bffb5df32",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "c8eef7e03403c9f2bc7fe7ddfa6495447c3d10e5",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "e630c3b3aaf7e7a8f58d3812f72db840b014068229c38526ecab81d5d598dbc8": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-governance_singleton_inner_CHANGED_FOUND_ON_26_06_21",
+        "puzzle_hash": "e630c3b3aaf7e7a8f58d3812f72db840b014068229c38526ecab81d5d598dbc8",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "f85414341db41b4d21c47622b55304973907b960",
+                "path": "populis_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "eecbfc59b0db88fe559e0414b5d7e97de60e2d7cec4fcac8dbd8aa0349d56e49": {
+        "file_name": "pool_token_tail.clsp",
+        "name": "--solslot-populis_puzzles-pool_token_tail_CHANGED_FOUND_ON_26_07_02",
+        "puzzle_hash": "eecbfc59b0db88fe559e0414b5d7e97de60e2d7cec4fcac8dbd8aa0349d56e49",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/pool_token_tail.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0f6b32263b2cb8241de93ad20bf857219f4912dbb07de011a8ef2489f1dbcd53": {
+        "file_name": "pool_token_tail.clsp",
+        "name": "--solslot-solslot_puzzles-pool_token_tail_CHANGED_FOUND_ON_26_07_11",
+        "puzzle_hash": "0f6b32263b2cb8241de93ad20bf857219f4912dbb07de011a8ef2489f1dbcd53",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/pool_token_tail.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "811b1ca1ecdf87bdf47aafd4e3f653dc18159b9014f9c76daa42cae76e7a7f3a": {
+        "file_name": "admin_authority_v2_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_v2_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "811b1ca1ecdf87bdf47aafd4e3f653dc18159b9014f9c76daa42cae76e7a7f3a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ae8c4e339f9f65c2772459ec9dbe792f9ea51c929345fdc6f74a26cefe0a1dd4": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "ae8c4e339f9f65c2772459ec9dbe792f9ea51c929345fdc6f74a26cefe0a1dd4",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a21505befe18b82a51a5644a184aad514b86a1c7e86fce04594e83bf376329d6": {
+        "file_name": "mint_proposal_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-mint_proposal_inner_v2_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "a21505befe18b82a51a5644a184aad514b86a1c7e86fce04594e83bf376329d6",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/mint_proposal_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a053104870b5d74ca5db52a1a7ae18907ca091c05fa852948516a3eafefdd12d": {
+        "file_name": "p2_deed_settlement.clsp",
+        "name": "--solslot-solslot_puzzles-p2_deed_settlement_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "a053104870b5d74ca5db52a1a7ae18907ca091c05fa852948516a3eafefdd12d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/p2_deed_settlement.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "57d52cc4d6fd6c2af5d67cd61e919ecaa1460ec1697d53e08013d3b910ba2f08": {
+        "file_name": "p2_vault.clsp",
+        "name": "--solslot-solslot_puzzles-p2_vault_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "57d52cc4d6fd6c2af5d67cd61e919ecaa1460ec1697d53e08013d3b910ba2f08",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/p2_vault.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "51a6b2f51313dd6c27fe1323baf0e0603d5c5f44a2982a0e7ce56e7d0e89673e": {
+        "file_name": "protocol_config_inner.clsp",
+        "name": "--solslot-solslot_puzzles-protocol_config_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "51a6b2f51313dd6c27fe1323baf0e0603d5c5f44a2982a0e7ce56e7d0e89673e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/protocol_config_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "93517b6f3fe6ed6e11d2e441454a7474243395a512a4e2c9027825354643da39": {
+        "file_name": "quorum_did_inner.clsp",
+        "name": "--solslot-solslot_puzzles-quorum_did_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "93517b6f3fe6ed6e11d2e441454a7474243395a512a4e2c9027825354643da39",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/quorum_did_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7ad993ae356861362f64bd93ae93a69cc0f14286859c8b9e2e183d0328c09b98": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "7ad993ae356861362f64bd93ae93a69cc0f14286859c8b9e2e183d0328c09b98",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6ee424369eb815d38ea06ebbecb2c80e4d61a38e",
+                "path": "solslot_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "81f11be807b668455ce4139dbd71e1303bb1048259cd1416c2a8bc88e27c9c87": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_CHANGED_FOUND_ON_26_07_12_2",
+        "puzzle_hash": "81f11be807b668455ce4139dbd71e1303bb1048259cd1416c2a8bc88e27c9c87",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "bf738533c11b19498e2384ef3ad84daa0f1411827dd01ead744a16aea13fbb7d": {
+        "file_name": "vault_version_registry_inner.clsp",
+        "name": "--solslot-solslot_puzzles-vault_version_registry_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "bf738533c11b19498e2384ef3ad84daa0f1411827dd01ead744a16aea13fbb7d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/vault_version_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8fb4acd38cd2b0c0ac99bda0a7a4891c46b1b8eb5e531fbcf5c1e1a05b96afd1": {
+        "file_name": "zkpassport_bridge_message.clsp",
+        "name": "--solslot-solslot_puzzles-zkpassport_bridge_message_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "8fb4acd38cd2b0c0ac99bda0a7a4891c46b1b8eb5e531fbcf5c1e1a05b96afd1",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6ee424369eb815d38ea06ebbecb2c80e4d61a38e",
+                "path": "solslot_puzzles/zkpassport_bridge_message.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "9b7a8216d08ccabaeefe5140497759b29095b8554ea7fe86440b8573f492f147": {
+        "file_name": "p2_pool_v2.clsp",
+        "name": "--solslot-solslot_puzzles-p2_pool_v2_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "9b7a8216d08ccabaeefe5140497759b29095b8554ea7fe86440b8573f492f147",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "96f89147beae572c9e002c06c46b77d5854aed41",
+                "path": "solslot_puzzles/p2_pool_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1c77cbe76e24d78add3b70a0f1c5431ff58b46aa1a397399a51e4da18df1a423": {
+        "file_name": "p2_pool_v2.clsp",
+        "name": "--solslot-solslot_puzzles-p2_pool_v2_CHANGED_FOUND_ON_26_07_12_2",
+        "puzzle_hash": "1c77cbe76e24d78add3b70a0f1c5431ff58b46aa1a397399a51e4da18df1a423",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/p2_pool_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8be94ee753523e3dfa05f8e90036a0ac9de839b13ca0f1cd66de0908fe99f092": {
+        "file_name": "pool_singleton_inner_v3.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v3_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "8be94ee753523e3dfa05f8e90036a0ac9de839b13ca0f1cd66de0908fe99f092",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "96f89147beae572c9e002c06c46b77d5854aed41",
+                "path": "solslot_puzzles/pool_singleton_inner_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4de5e894a5c4d7cf57cd53332b71e8be652cc8e7c135430e0c2eb83b40828e61": {
+        "file_name": "pool_singleton_inner_v3.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v3_CHANGED_FOUND_ON_26_07_12_2",
+        "puzzle_hash": "4de5e894a5c4d7cf57cd53332b71e8be652cc8e7c135430e0c2eb83b40828e61",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/pool_singleton_inner_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "cd3a6121bb82aeae424030671a9a68c06c7619a2e62349c5f07584aa9f7c872b": {
+        "file_name": "smart_deed_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-smart_deed_inner_v2_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "cd3a6121bb82aeae424030671a9a68c06c7619a2e62349c5f07584aa9f7c872b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "96f89147beae572c9e002c06c46b77d5854aed41",
+                "path": "solslot_puzzles/smart_deed_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3652342e9b6848aae9d5cd8e9b1284992f8cea97fd3877613a319e7fd2da743c": {
+        "file_name": "smart_deed_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-smart_deed_inner_v2_CHANGED_FOUND_ON_26_07_12_2",
+        "puzzle_hash": "3652342e9b6848aae9d5cd8e9b1284992f8cea97fd3877613a319e7fd2da743c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/smart_deed_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "5b565ff4565b31f8fe351972dd58dd1e1f159b8ec39424db459ea3aa5cdd372c": {
+        "file_name": "sgt_free_inner.clsp",
+        "name": "--solslot-solslot_puzzles-sgt_free_inner_CHANGED_FOUND_ON_26_07_12",
+        "puzzle_hash": "5b565ff4565b31f8fe351972dd58dd1e1f159b8ec39424db459ea3aa5cdd372c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/sgt_free_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7f8b97229d0a47a5245d69ea5a8e4c5269c5652c9a32bb117a9149ebf63ad57d": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_CHANGED_FOUND_ON_26_07_16",
+        "puzzle_hash": "7f8b97229d0a47a5245d69ea5a8e4c5269c5652c9a32bb117a9149ebf63ad57d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6b4359e78e3c5cf0453a4f0ba6402d8687532361",
+                "path": "solslot_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "2a43121d71655697b5c37f6cbd00beafa0e9a1145933aabc2fbc765ae7edeec4": {
+        "file_name": "admin_authority_v2_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_v2_inner_CHANGED_FOUND_ON_26_07_18",
+        "puzzle_hash": "2a43121d71655697b5c37f6cbd00beafa0e9a1145933aabc2fbc765ae7edeec4",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "b2b8c4e8a4fbe8d1663a2730ac0eb8f1667753cf",
+                "path": "solslot_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "dbe5426a2fc544884b8abee2145a46341dbfdf7cdbb79068ef229063bccabe31": {
+        "file_name": "pool_singleton_inner_v3.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v3_CHANGED_FOUND_ON_26_07_18",
+        "puzzle_hash": "dbe5426a2fc544884b8abee2145a46341dbfdf7cdbb79068ef229063bccabe31",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "7a0e75a01ab863581bab1df9a5d80fb7154d841b",
+                "path": "solslot_puzzles/pool_singleton_inner_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a343a3552dd76330f4592bddf5de4800936b0c55181e94196785271230dc2082": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_CHANGED_FOUND_ON_26_07_19",
+        "puzzle_hash": "a343a3552dd76330f4592bddf5de4800936b0c55181e94196785271230dc2082",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1bf12a99ba5e6335cc30dbf58d0bda0cf17f3b3c",
+                "path": "solslot_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "425a84e941ac1b8e2597876a0ff2dcbe0da7a3f5246d121c6faf2e237b478d28": {
+        "file_name": "mint_offer_delegate_v2.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v2_CHANGED_FOUND_ON_26_07_20",
+        "puzzle_hash": "425a84e941ac1b8e2597876a0ff2dcbe0da7a3f5246d121c6faf2e237b478d28",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "58706469ea85d5ad9b91e09190633956653731a6",
+                "path": "solslot_puzzles/mint_offer_delegate_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "08577e23488ff23d717d4e004c1a0dcbe436eaa30dbcb4d3472730330c61803f": {
+        "file_name": "governance_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_v2_CHANGED_FOUND_ON_26_07_27",
+        "puzzle_hash": "08577e23488ff23d717d4e004c1a0dcbe436eaa30dbcb4d3472730330c61803f",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "c70e0b7af3132f3304039d0734be2e8699d4f6c5",
+                "path": "solslot_puzzles/governance_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4bd0d2cdd90235596ae11608a3d76443c306de9ec3a202a422c5f5d25b8e5bbd": {
+        "file_name": "governance_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_v2_CHANGED_FOUND_ON_26_07_27_2",
+        "puzzle_hash": "4bd0d2cdd90235596ae11608a3d76443c306de9ec3a202a422c5f5d25b8e5bbd",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aa40c1f59c3b1ea7ab52fa4620d00896c1d1e96",
+                "path": "solslot_puzzles/governance_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "cbaeb3ee2cd21386668402c02471fd1f12453e72c01becf10674d6a465cc3b03": {
+        "file_name": "governance_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_v2_CHANGED_FOUND_ON_26_07_27_3",
+        "puzzle_hash": "cbaeb3ee2cd21386668402c02471fd1f12453e72c01becf10674d6a465cc3b03",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "03002bdfa4c3e320fc01a1310606bf7cdbcc8f01",
+                "path": "solslot_puzzles/governance_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a62b3955fe9ded542cc478c74fe8cb81bf12e1bfb7b153f69e4a1b5a84dc7291": {
+        "file_name": "governance_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_v2_CHANGED_FOUND_ON_26_07_27_4",
+        "puzzle_hash": "a62b3955fe9ded542cc478c74fe8cb81bf12e1bfb7b153f69e4a1b5a84dc7291",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "dd621da88c15d79a02f648e4176e1e7f7014a838",
+                "path": "solslot_puzzles/governance_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "826e302e23c80b186537bc0106534e878d67b19604158efd100a89bd11a2650e": {
+        "file_name": "protocol_statutes_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-protocol_statutes_inner_v1_CHANGED_FOUND_ON_26_07_27",
+        "puzzle_hash": "826e302e23c80b186537bc0106534e878d67b19604158efd100a89bd11a2650e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "c70e0b7af3132f3304039d0734be2e8699d4f6c5",
+                "path": "solslot_puzzles/protocol_statutes_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "aa4ef5b2090e4e3fd73a008619dbf5c2833f17d3c7f6d6ac9103c81d5b138ed6": {
+        "file_name": "protocol_statutes_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-protocol_statutes_inner_v1_CHANGED_FOUND_ON_26_07_27_2",
+        "puzzle_hash": "aa4ef5b2090e4e3fd73a008619dbf5c2833f17d3c7f6d6ac9103c81d5b138ed6",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "06a3e257c53f9a6724a2983226dc2f3c5f9236f1",
+                "path": "solslot_puzzles/protocol_statutes_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4dad67134bfa399715b69dfe2c9d51b4436ab48261448b2d69f5249f05c09da2": {
+        "file_name": "protocol_statutes_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-protocol_statutes_inner_v1_CHANGED_FOUND_ON_26_07_27_3",
+        "puzzle_hash": "4dad67134bfa399715b69dfe2c9d51b4436ab48261448b2d69f5249f05c09da2",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "03002bdfa4c3e320fc01a1310606bf7cdbcc8f01",
+                "path": "solslot_puzzles/protocol_statutes_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4736e4e79d80cd96164667ddb47d6ce1929abfcda42e6991e947d9e21f40be26": {
+        "file_name": "pool_singleton_inner_v4.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v4_CHANGED_FOUND_ON_26_07_27",
+        "puzzle_hash": "4736e4e79d80cd96164667ddb47d6ce1929abfcda42e6991e947d9e21f40be26",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "06a3e257c53f9a6724a2983226dc2f3c5f9236f1",
+                "path": "solslot_puzzles/pool_singleton_inner_v4.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c9adc5be8c0260a9ea37eeb6407c4f510b77bfee32d474eaad6701a54572f38e": {
+        "file_name": "pool_singleton_inner_v4.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v4_CHANGED_FOUND_ON_26_07_27_2",
+        "puzzle_hash": "c9adc5be8c0260a9ea37eeb6407c4f510b77bfee32d474eaad6701a54572f38e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aa40c1f59c3b1ea7ab52fa4620d00896c1d1e96",
+                "path": "solslot_puzzles/pool_singleton_inner_v4.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f6704dc71b171811a142c1a3ed92867880db3bad1e8e49f0f7c5cdf6d246739f": {
+        "file_name": "pool_singleton_inner_v4.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v4_CHANGED_FOUND_ON_26_07_27_3",
+        "puzzle_hash": "f6704dc71b171811a142c1a3ed92867880db3bad1e8e49f0f7c5cdf6d246739f",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "dd621da88c15d79a02f648e4176e1e7f7014a838",
+                "path": "solslot_puzzles/pool_singleton_inner_v4.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "444f1fe2941d58459a3a134145c391e074538b5bf2da57b531485782314a274d": {
+        "file_name": "vault_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_v2_CHANGED_FOUND_ON_26_07_27",
+        "puzzle_hash": "444f1fe2941d58459a3a134145c391e074538b5bf2da57b531485782314a274d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "06a3e257c53f9a6724a2983226dc2f3c5f9236f1",
+                "path": "solslot_puzzles/vault_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "51886cdab8b1d8219f6fc006ff3ade838fff77244865e0858827faf76dc7b981": {
+        "file_name": "vault_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_v2_CHANGED_FOUND_ON_26_07_27_2",
+        "puzzle_hash": "51886cdab8b1d8219f6fc006ff3ade838fff77244865e0858827faf76dc7b981",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aa40c1f59c3b1ea7ab52fa4620d00896c1d1e96",
+                "path": "solslot_puzzles/vault_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "eeb1d13717cae2c62553f50e9a47d2ca9999bdfecbd3a2c81fe4ae30f8e4592a": {
+        "file_name": "vault_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_v2_CHANGED_FOUND_ON_26_07_28",
+        "puzzle_hash": "eeb1d13717cae2c62553f50e9a47d2ca9999bdfecbd3a2c81fe4ae30f8e4592a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a78dd8a5b97bb032762f6072e588b89262ec057b",
+                "path": "solslot_puzzles/vault_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8530ef99b5f3f0e9b61505a56e1f57447f9dd326688a007a4ae6f2e656433061": {
+        "file_name": "admin_authority_v3_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_v3_inner_CHANGED_FOUND_ON_26_07_29",
+        "puzzle_hash": "8530ef99b5f3f0e9b61505a56e1f57447f9dd326688a007a4ae6f2e656433061",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "3967adb44600ce968b10b6303d92722ab3e04b38",
+                "path": "solslot_puzzles/admin_authority_v3_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "6e6eb04a9afdb0b6fa8eaa4ab5a020c3d8554356e0516e9e4f47711a564a91a5": {
+        "file_name": "mint_offer_delegate_v5.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v5_CHANGED_FOUND_ON_26_07_31",
+        "puzzle_hash": "6e6eb04a9afdb0b6fa8eaa4ab5a020c3d8554356e0516e9e4f47711a564a91a5",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d21faed5e46d973b5c00849a3156c21dbfc4f2e6",
+                "path": "solslot_puzzles/mint_offer_delegate_v5.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "86666fa2b8b4e49efb4e020d0e289270f946e6f6e54c82d58c2b9abb87073775": {
+        "file_name": "mint_offer_inventory_available_v1.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_inventory_available_v1_CHANGED_FOUND_ON_26_07_31",
+        "puzzle_hash": "86666fa2b8b4e49efb4e020d0e289270f946e6f6e54c82d58c2b9abb87073775",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d21faed5e46d973b5c00849a3156c21dbfc4f2e6",
+                "path": "solslot_puzzles/mint_offer_inventory_available_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "fc5f6671112050018a23abf3a2660982a5d83ce8ff168bf18f3bb56079ed764b": {
+        "file_name": "stripe_settlement_receipt_v1.clsp",
+        "name": "--solslot-solslot_puzzles-stripe_settlement_receipt_v1_CHANGED_FOUND_ON_26_07_31",
+        "puzzle_hash": "fc5f6671112050018a23abf3a2660982a5d83ce8ff168bf18f3bb56079ed764b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d21faed5e46d973b5c00849a3156c21dbfc4f2e6",
+                "path": "solslot_puzzles/stripe_settlement_receipt_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "b535d2644fd584436c0533ee5b92cf3bd442a057738824f95fd53f1be21444df": {
+        "file_name": "mint_offer_delegate_v5.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v5_CHANGED_FOUND_ON_26_08_02",
+        "puzzle_hash": "b535d2644fd584436c0533ee5b92cf3bd442a057738824f95fd53f1be21444df",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/mint_offer_delegate_v5.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c00a76ec5f2f825b73822047273f6362fc2298a0634e24269e7e806ce263c18a": {
+        "file_name": "mint_offer_inventory_available_v1.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_inventory_available_v1_CHANGED_FOUND_ON_26_08_02",
+        "puzzle_hash": "c00a76ec5f2f825b73822047273f6362fc2298a0634e24269e7e806ce263c18a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/mint_offer_inventory_available_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f5ff2492b60f5d049ad91f3ac4822fb54e8815fd67b6fefea172f017526f6c32": {
+        "file_name": "sgt_reserve_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-sgt_reserve_inner_v1_CHANGED_FOUND_ON_26_08_02",
+        "puzzle_hash": "f5ff2492b60f5d049ad91f3ac4822fb54e8815fd67b6fefea172f017526f6c32",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/sgt_reserve_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "97b890c0282ef249feaa31689ca9b996b0cfe7af8e70cc5abed710c29b556629": {
+        "file_name": "admin_recovery_authority_member_v1.clsp",
+        "name": "--solslot-solslot_puzzles-admin_recovery_authority_member_v1_CHANGED_FOUND_ON_26_08_23",
+        "puzzle_hash": "97b890c0282ef249feaa31689ca9b996b0cfe7af8e70cc5abed710c29b556629",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "9d7d077fe8018aca77b05decabc40806b93fa797",
+                "path": "solslot_puzzles/admin_recovery_authority_member_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7692d8bfd920dd68a4d68b25c8d0ce3f725b1ad116af69989bb4cca9d38fa818": {
+        "file_name": "mint_offer_delegate.clsp",
+        "name": "--solslot-populis_puzzles-mint_offer_delegate",
+        "puzzle_hash": "7692d8bfd920dd68a4d68b25c8d0ce3f725b1ad116af69989bb4cca9d38fa818",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/mint_offer_delegate.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/mint_offer_delegate.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "eb88dbdba9f651ba24c1724d003ab67040c150ff72205fbcefab5ed416c9fa44": {
+        "file_name": "purchase_payment.clsp",
+        "name": "--solslot-populis_puzzles-purchase_payment",
+        "puzzle_hash": "eb88dbdba9f651ba24c1724d003ab67040c150ff72205fbcefab5ed416c9fa44",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/purchase_payment.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/purchase_payment.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4ba53e3afb6b1b63bb050c44d1685b85b1eacb9ff14bf5043538ae5815359d5b": {
+        "file_name": "quorum_did_inner.clsp",
+        "name": "--solslot-populis_puzzles-quorum_did_inner",
+        "puzzle_hash": "4ba53e3afb6b1b63bb050c44d1685b85b1eacb9ff14bf5043538ae5815359d5b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/quorum_did_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/quorum_did_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "9d383bb7b0b8a252b2469c2e513e8a1e6b3141545917993d78e0eec1294a6c5c": {
+        "file_name": "protocol_config_inner.clsp",
+        "name": "--solslot-populis_puzzles-protocol_config_inner",
+        "puzzle_hash": "9d383bb7b0b8a252b2469c2e513e8a1e6b3141545917993d78e0eec1294a6c5c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "ec9c91b200583e58f7f6f455f0c67d7d88443026",
+                "path": "populis_puzzles/protocol_config_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/protocol_config_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1d3838f04de2d8b864c0b96f7f14d7fc8ec6bd39940806e2fa4087b520138517": {
+        "file_name": "mint_proposal_inner_v2.clsp",
+        "name": "--solslot-populis_puzzles-mint_proposal_inner_v2",
+        "puzzle_hash": "1d3838f04de2d8b864c0b96f7f14d7fc8ec6bd39940806e2fa4087b520138517",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "4c2874356036206d2d777d9cd0716bb367ae4a98",
+                "path": "populis_puzzles/mint_proposal_inner_v2.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/mint_proposal_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0c9cc37324d0d454cc010f274e7cd5dc17e02a40ad7b887311a43b51b5c08b13": {
+        "file_name": "zkpassport_bridge_message.clsp",
+        "name": "--solslot-populis_puzzles-zkpassport_bridge_message",
+        "puzzle_hash": "0c9cc37324d0d454cc010f274e7cd5dc17e02a40ad7b887311a43b51b5c08b13",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "239d6a16466100d5d41a1f5b81eae387b2401877",
+                "path": "populis_puzzles/zkpassport_bridge_message.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/zkpassport_bridge_message.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "55ec3eb4563844beb4deb2753fd177012d6ca0aaec336cf867ae9a4b8e0a8fbc": {
+        "file_name": "admin_authority_v2_inner.clsp",
+        "name": "--solslot-populis_puzzles-admin_authority_v2_inner",
+        "puzzle_hash": "55ec3eb4563844beb4deb2753fd177012d6ca0aaec336cf867ae9a4b8e0a8fbc",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "e23eccaefd81761739cc25996c422f4568b7d700",
+                "path": "populis_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "5cf39809296ad31bf906f7610912ac56fb8c339e0e98444f821f9e363df60d29": {
+        "file_name": "vault_version_registry_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_version_registry_inner",
+        "puzzle_hash": "5cf39809296ad31bf906f7610912ac56fb8c339e0e98444f821f9e363df60d29",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "b951d9d3fed25ccdccd8d7d07423b6badfe4148a",
+                "path": "populis_puzzles/vault_version_registry_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/vault_version_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4176b7fa966f4c4a0fe2609d69e0411046228b3fac7335e6695402bbf926fd4c": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-vault_singleton_inner",
+        "puzzle_hash": "4176b7fa966f4c4a0fe2609d69e0411046228b3fac7335e6695402bbf926fd4c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "ceb141a85b766a0c0091848b6200566634145f9e",
+                "path": "populis_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "52ab762f043036c3c35cb3f3ee952a44292c06d8e903aa6f0b20b125521fe810": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-governance_singleton_inner",
+        "puzzle_hash": "52ab762f043036c3c35cb3f3ee952a44292c06d8e903aa6f0b20b125521fe810",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "cc2609c0e5f2044fa0b0dd7ef1d3ef4a0d7a2f212b2a229eefec9eadb622a500": {
+        "file_name": "p2_deed_settlement.clsp",
+        "name": "--solslot-populis_puzzles-p2_deed_settlement",
+        "puzzle_hash": "cc2609c0e5f2044fa0b0dd7ef1d3ef4a0d7a2f212b2a229eefec9eadb622a500",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/p2_deed_settlement.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/p2_deed_settlement.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "b1c9bc753631a13aaca57232a39c0ebf2e4040aa95931205ee3b597a946c0a87": {
+        "file_name": "pool_singleton_inner.clsp",
+        "name": "--solslot-populis_puzzles-pool_singleton_inner",
+        "puzzle_hash": "b1c9bc753631a13aaca57232a39c0ebf2e4040aa95931205ee3b597a946c0a87",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/pool_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "e4b8384e1a1fb7e17661aee11c67b115def7a5dc81e7437ba7ae5b344bdd2db8": {
+        "file_name": "pool_token_tail.clsp",
+        "name": "--solslot-populis_puzzles-pool_token_tail",
+        "puzzle_hash": "e4b8384e1a1fb7e17661aee11c67b115def7a5dc81e7437ba7ae5b344bdd2db8",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "b50b7eb814c04487c9f2096830d0b58a448b823e",
+                "path": "populis_puzzles/pool_token_tail.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c03a55c6c7bcb90ac625a423753768cef74c23f399eb980aff0a366a7a924258": {
+        "file_name": "property_registry_inner.clsp",
+        "name": "--solslot-populis_puzzles-property_registry_inner",
+        "puzzle_hash": "c03a55c6c7bcb90ac625a423753768cef74c23f399eb980aff0a366a7a924258",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/property_registry_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/property_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4dbba666faeae6d9281153d6734a67a694a3a9246dfed85c676a56d2b1b13349": {
+        "file_name": "collection_nav_registry_inner.clsp",
+        "name": "--solslot-populis_puzzles-collection_nav_registry_inner",
+        "puzzle_hash": "4dbba666faeae6d9281153d6734a67a694a3a9246dfed85c676a56d2b1b13349",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/collection_nav_registry_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/collection_nav_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d832fcb1da90cda80a03baa88b895b37e8181e71e310717ebd9e2b57babe89c4": {
+        "file_name": "p2_pool.clsp",
+        "name": "--solslot-solslot_puzzles-p2_pool",
+        "puzzle_hash": "d832fcb1da90cda80a03baa88b895b37e8181e71e310717ebd9e2b57babe89c4",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/p2_pool.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/p2_pool.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/p2_vault.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/p2_vault.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7dee0963bf040a2610eaf0c70a3df4a92022652a3e1eae92a3a1493887d1704c": {
+        "file_name": "singleton_launcher_with_did.clsp",
+        "name": "--solslot-solslot_puzzles-singleton_launcher_with_did",
+        "puzzle_hash": "7dee0963bf040a2610eaf0c70a3df4a92022652a3e1eae92a3a1493887d1704c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/singleton_launcher_with_did.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "fe77d295545d11e5d688feaf35433b6a1430d90b",
+                "path": "populis_puzzles/singleton_launcher_with_did.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c6437ac122c0972c3486df15f5311d594100f18465fc4823bd2e565671d0ff20": {
+        "file_name": "smart_deed_inner.clsp",
+        "name": "--solslot-solslot_puzzles-smart_deed_inner",
+        "puzzle_hash": "c6437ac122c0972c3486df15f5311d594100f18465fc4823bd2e565671d0ff20",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/smart_deed_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aadde028675231db9e9ea6ef9041baef5385b1d",
+                "path": "populis_puzzles/smart_deed_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "df22dc45fb795ce3392ac003ea78fb7d9fc1a13c366933341bcde43187df8e1e": {
+        "file_name": "pgt_free_inner.clsp",
+        "name": "--solslot-solslot_puzzles-pgt_free_inner",
+        "puzzle_hash": "df22dc45fb795ce3392ac003ea78fb7d9fc1a13c366933341bcde43187df8e1e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/pgt_free_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "029e0b866c086bbd033257d735d1ef59be025918",
+                "path": "populis_puzzles/pgt_free_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "961017e40fd469933e8afb64c5ea38ac252f0749afa2c8ef8c0b3278f6c525c0": {
+        "file_name": "pgt_locked_inner.clsp",
+        "name": "--solslot-solslot_puzzles-pgt_locked_inner",
+        "puzzle_hash": "961017e40fd469933e8afb64c5ea38ac252f0749afa2c8ef8c0b3278f6c525c0",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/pgt_locked_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "8d8cd43ec9a3b42cdc010e1c4b4edddac9160367",
+                "path": "populis_puzzles/pgt_locked_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "156665b711047a7e20c539ba09d235a3d4d2664c0365850f2cf5cca528a692d7": {
+        "file_name": "admin_authority_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_inner",
+        "puzzle_hash": "156665b711047a7e20c539ba09d235a3d4d2664c0365850f2cf5cca528a692d7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/admin_authority_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "ec9c91b200583e58f7f6f455f0c67d7d88443026",
+                "path": "populis_puzzles/admin_authority_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "6bbf560b9e4094b9702e31656732e429a418d21702c5deda2c83bbf9bcf9867c": {
+        "file_name": "mint_proposal_inner.clsp",
+        "name": "--solslot-solslot_puzzles-mint_proposal_inner",
+        "puzzle_hash": "6bbf560b9e4094b9702e31656732e429a418d21702c5deda2c83bbf9bcf9867c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/mint_proposal_inner.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "ec9c91b200583e58f7f6f455f0c67d7d88443026",
+                "path": "populis_puzzles/mint_proposal_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1141f618d7c71297df2fdf22e8d0ee69e8c33d918bdbd267021bacee1c3f3ec0": {
+        "file_name": "pool_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner",
+        "puzzle_hash": "1141f618d7c71297df2fdf22e8d0ee69e8c33d918bdbd267021bacee1c3f3ec0",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3c9539cba3bbf78c31b734925d42accf7134a82",
+                "path": "solslot_puzzles/pool_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4258e4dc7cc52b00985476d5001e83121cceff6b229acafff260fb9363f881e2": {
+        "file_name": "collection_nav_registry_inner.clsp",
+        "name": "--solslot-solslot_puzzles-collection_nav_registry_inner",
+        "puzzle_hash": "4258e4dc7cc52b00985476d5001e83121cceff6b229acafff260fb9363f881e2",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/collection_nav_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3f2cbb847fa3079575b47a31dd5b713867c07926b4dec7af3143c19929e6c07b": {
+        "file_name": "mint_offer_delegate.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate",
+        "puzzle_hash": "3f2cbb847fa3079575b47a31dd5b713867c07926b4dec7af3143c19929e6c07b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/mint_offer_delegate.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "28648fedc879e3dbbde6d269bae3df923b8566b5a666f6e075772e338f1c89ed": {
+        "file_name": "pool_token_tail.clsp",
+        "name": "--solslot-solslot_puzzles-pool_token_tail",
+        "puzzle_hash": "28648fedc879e3dbbde6d269bae3df923b8566b5a666f6e075772e338f1c89ed",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/pool_token_tail.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a8f1ee7f135950140e8e02a3e948e5ba78d8ffe64cc327767da114884acee16c": {
+        "file_name": "property_registry_inner.clsp",
+        "name": "--solslot-solslot_puzzles-property_registry_inner",
+        "puzzle_hash": "a8f1ee7f135950140e8e02a3e948e5ba78d8ffe64cc327767da114884acee16c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/property_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "84a915d06f33ca60a53ca7e82706d1c7ccdef38bde2a36897e1f99da47108a12": {
+        "file_name": "purchase_payment.clsp",
+        "name": "--solslot-solslot_puzzles-purchase_payment",
+        "puzzle_hash": "84a915d06f33ca60a53ca7e82706d1c7ccdef38bde2a36897e1f99da47108a12",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/purchase_payment.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "341151935b773901c3f31db323372c88953d96f44a06345cfab9bba2f06ac5fa": {
+        "file_name": "zkpassport_bridge_message.clsp",
+        "name": "--solslot-solslot_puzzles-zkpassport_bridge_message",
+        "puzzle_hash": "341151935b773901c3f31db323372c88953d96f44a06345cfab9bba2f06ac5fa",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/zkpassport_bridge_message.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8092b7bb3f6c9d7d9e355ebc883afe2c0ef2b89336f8ef3ffb3f0716ef7c18c1": {
+        "file_name": "sgt_locked_inner.clsp",
+        "name": "--solslot-solslot_puzzles-sgt_locked_inner",
+        "puzzle_hash": "8092b7bb3f6c9d7d9e355ebc883afe2c0ef2b89336f8ef3ffb3f0716ef7c18c1",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6e65b30c3866101df43d89e82c7268e75f14ef2c",
+                "path": "solslot_puzzles/sgt_locked_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "bb1379bc24f0a02ca27de58e2200ae4cd1fc1e58d53a49d1119600108741d37e": {
+        "file_name": "mint_proposal_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-mint_proposal_inner_v2",
+        "puzzle_hash": "bb1379bc24f0a02ca27de58e2200ae4cd1fc1e58d53a49d1119600108741d37e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6b4359e78e3c5cf0453a4f0ba6402d8687532361",
+                "path": "solslot_puzzles/mint_proposal_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "e399673edc9237f5ade3f6240992ed71d974cb125fd2609b2b7795e3bc691ef4": {
+        "file_name": "quorum_did_inner.clsp",
+        "name": "--solslot-solslot_puzzles-quorum_did_inner",
+        "puzzle_hash": "e399673edc9237f5ade3f6240992ed71d974cb125fd2609b2b7795e3bc691ef4",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "6b4359e78e3c5cf0453a4f0ba6402d8687532361",
+                "path": "solslot_puzzles/quorum_did_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "9842657d7ecb74760e5cce485d2ea4e22afb24b213e22279f272b932e28985d2": {
+        "file_name": "admin_authority_v2_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_v2_inner",
+        "puzzle_hash": "9842657d7ecb74760e5cce485d2ea4e22afb24b213e22279f272b932e28985d2",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "2d7787d3bb35b70ac6f092a8224ed961b2e36042",
+                "path": "solslot_puzzles/admin_authority_v2_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "83e8addd99cc14b19abcdb1c2eeba95ff54a847c9783813f4e9387ffe4cc1bd7": {
+        "file_name": "p2_deed_settlement.clsp",
+        "name": "--solslot-solslot_puzzles-p2_deed_settlement",
+        "puzzle_hash": "83e8addd99cc14b19abcdb1c2eeba95ff54a847c9783813f4e9387ffe4cc1bd7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "7a0e75a01ab863581bab1df9a5d80fb7154d841b",
+                "path": "solslot_puzzles/p2_deed_settlement.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "b9165548667a296c6ecf4921f4a0ba54bb98104810fd539abd7416417eb39b45": {
+        "file_name": "vault_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner",
+        "puzzle_hash": "b9165548667a296c6ecf4921f4a0ba54bb98104810fd539abd7416417eb39b45",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "71b8e8ade610369ec392371a8048cc8627a00edf",
+                "path": "solslot_puzzles/vault_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1a3041db26d9ae5c02f75efd710df789311711db66b880a97f751f169b499302": {
+        "file_name": "pool_singleton_inner_v3.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v3",
+        "puzzle_hash": "1a3041db26d9ae5c02f75efd710df789311711db66b880a97f751f169b499302",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "71b8e8ade610369ec392371a8048cc8627a00edf",
+                "path": "solslot_puzzles/pool_singleton_inner_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "66b8c1098f6953b20496a84a17653b3e0ab200b0c6049f3e383e0e3709bd190b": {
+        "file_name": "smart_deed_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-smart_deed_inner_v2",
+        "puzzle_hash": "66b8c1098f6953b20496a84a17653b3e0ab200b0c6049f3e383e0e3709bd190b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "eb74028e0c2d3fa8c3eaa4f05f57ecd3a9e4e0ee",
+                "path": "solslot_puzzles/smart_deed_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "449dab6d5ed9275e03d113108548e267a559c97ec28030b7bdf70bd9617e8b95": {
+        "file_name": "protocol_config_inner.clsp",
+        "name": "--solslot-solslot_puzzles-protocol_config_inner",
+        "puzzle_hash": "449dab6d5ed9275e03d113108548e267a559c97ec28030b7bdf70bd9617e8b95",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "b136f645ca98c8997dab210343be3536332788d5",
+                "path": "solslot_puzzles/protocol_config_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "4da782b97ac91bd620bf721bc6d04c291a8c35505ea2d7b86ef9a4b808dac09e": {
+        "file_name": "vault_version_registry_inner.clsp",
+        "name": "--solslot-solslot_puzzles-vault_version_registry_inner",
+        "puzzle_hash": "4da782b97ac91bd620bf721bc6d04c291a8c35505ea2d7b86ef9a4b808dac09e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "b136f645ca98c8997dab210343be3536332788d5",
+                "path": "solslot_puzzles/vault_version_registry_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f03566a8c4f210b9128b9e7b2d717444218a8dc7f6f09b5c163dbcde03adbf51": {
+        "file_name": "governance_singleton_inner.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner",
+        "puzzle_hash": "f03566a8c4f210b9128b9e7b2d717444218a8dc7f6f09b5c163dbcde03adbf51",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "bf13d45e7239c5fb8c0acf2d4c34f96a49aae377",
+                "path": "solslot_puzzles/governance_singleton_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "fcb83cc6661e18d958acbb1de9bc5cc25022a1d2db7a6d5698199549402a3fe3": {
+        "file_name": "payment_escrow_v1.clsp",
+        "name": "--solslot-solslot_puzzles-payment_escrow_v1",
+        "puzzle_hash": "fcb83cc6661e18d958acbb1de9bc5cc25022a1d2db7a6d5698199549402a3fe3",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "58706469ea85d5ad9b91e09190633956653731a6",
+                "path": "solslot_puzzles/payment_escrow_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f48655ef99f5b014ae19e040d0049214b83ae8e128df2cad912e99f9c92c6f86": {
+        "file_name": "voucher_nft_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_nft_inner_v1",
+        "puzzle_hash": "f48655ef99f5b014ae19e040d0049214b83ae8e128df2cad912e99f9c92c6f86",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "825bddda8162430266436161d371c610bce6a57a",
+                "path": "solslot_puzzles/voucher_nft_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "cf4a01e66544860781bad056aa8a45703afc5615677174a61b8093381670f3e1": {
+        "file_name": "voucher_presale_series_v1.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_presale_series_v1",
+        "puzzle_hash": "cf4a01e66544860781bad056aa8a45703afc5615677174a61b8093381670f3e1",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "825bddda8162430266436161d371c610bce6a57a",
+                "path": "solslot_puzzles/voucher_presale_series_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7092272c2c7ca2fd74d85c6aa3e5c11e792925ffc56a43ea8487a9d21b4ea0af": {
+        "file_name": "mint_offer_delegate_v2.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v2",
+        "puzzle_hash": "7092272c2c7ca2fd74d85c6aa3e5c11e792925ffc56a43ea8487a9d21b4ea0af",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "49127132de53322ce79580dee9454faf582760c3",
+                "path": "solslot_puzzles/mint_offer_delegate_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "94a85ab601cd57c5c1553fc47d9b2fd195b4766c1c7f69f7418f042f63cc088e": {
+        "file_name": "mint_offer_delegate_v3.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v3",
+        "puzzle_hash": "94a85ab601cd57c5c1553fc47d9b2fd195b4766c1c7f69f7418f042f63cc088e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/mint_offer_delegate_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3c5d3a6cd206d742fbb4ec1cca334580e646dff958b77953c722b6c5a9aa4598": {
+        "file_name": "mint_offer_delegate_v4.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v4",
+        "puzzle_hash": "3c5d3a6cd206d742fbb4ec1cca334580e646dff958b77953c722b6c5a9aa4598",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/mint_offer_delegate_v4.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "845405b5536bf5def384dcc07194287c8ae0cd37cbb8a1e726d508806c434942": {
+        "file_name": "voucher_base_result_authorization_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_base_result_authorization_v2",
+        "puzzle_hash": "845405b5536bf5def384dcc07194287c8ae0cd37cbb8a1e726d508806c434942",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_base_result_authorization_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "044ebff3ad6d351856fd37d38c599ad0e416aa8a22621d8c13c27e24561f7f77": {
+        "file_name": "voucher_burn_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_burn_v2",
+        "puzzle_hash": "044ebff3ad6d351856fd37d38c599ad0e416aa8a22621d8c13c27e24561f7f77",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_burn_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d6c6216928eeff14af9a32a9b9cfe0cf2b780dfd6b0c1cdc775abd460ec32905": {
+        "file_name": "voucher_external_escrow_receipt_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_external_escrow_receipt_v2",
+        "puzzle_hash": "d6c6216928eeff14af9a32a9b9cfe0cf2b780dfd6b0c1cdc775abd460ec32905",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_external_escrow_receipt_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3cf32fc6d24806af751c1606fe7e4a356df6179ccb4744a3c76cb85e51f03670": {
+        "file_name": "voucher_nft_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_nft_inner_v2",
+        "puzzle_hash": "3cf32fc6d24806af751c1606fe7e4a356df6179ccb4744a3c76cb85e51f03670",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_nft_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a8526fb172c7c233d8cd54084e6bea2eeeca0640ad45e775f1f6b5a92738f6d0": {
+        "file_name": "voucher_payment_escrow_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_payment_escrow_v2",
+        "puzzle_hash": "a8526fb172c7c233d8cd54084e6bea2eeeca0640ad45e775f1f6b5a92738f6d0",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_payment_escrow_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "73617d396b2fc0af0e37131e92626a5ae9effea0f5cd6ca6775a0f1917910be5": {
+        "file_name": "voucher_presale_series_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_presale_series_v2",
+        "puzzle_hash": "73617d396b2fc0af0e37131e92626a5ae9effea0f5cd6ca6775a0f1917910be5",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_presale_series_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ed9e8bac59006774ae640467e5daf7a33888cfb80a1990a8e58ae1decf571e9a": {
+        "file_name": "voucher_purchase_launcher_v2.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_purchase_launcher_v2",
+        "puzzle_hash": "ed9e8bac59006774ae640467e5daf7a33888cfb80a1990a8e58ae1decf571e9a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a413abd7b371b18bffa4d4b6f5213fa2f4cd489f",
+                "path": "solslot_puzzles/voucher_purchase_launcher_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1862f5f4301fe00a4f1801f412774b5514b03b6c528b3783b0ebc61cd451e11d": {
+        "file_name": "protocol_statutes_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-protocol_statutes_inner_v1",
+        "puzzle_hash": "1862f5f4301fe00a4f1801f412774b5514b03b6c528b3783b0ebc61cd451e11d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "dd621da88c15d79a02f648e4176e1e7f7014a838",
+                "path": "solslot_puzzles/protocol_statutes_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "78a759362ae12e73aee1986043fb6e8e0df21ed6e104ed0dc0bd2831c10816dc": {
+        "file_name": "p2_deed_redemption_v1.clsp",
+        "name": "--solslot-solslot_puzzles-p2_deed_redemption_v1",
+        "puzzle_hash": "78a759362ae12e73aee1986043fb6e8e0df21ed6e104ed0dc0bd2831c10816dc",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aa40c1f59c3b1ea7ab52fa4620d00896c1d1e96",
+                "path": "solslot_puzzles/p2_deed_redemption_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0d25b689b7c5abdb6e2d882abd70afbd4c025aad0f21ba178c0dddc210090377": {
+        "file_name": "redemption_treasury_v1.clsp",
+        "name": "--solslot-solslot_puzzles-redemption_treasury_v1",
+        "puzzle_hash": "0d25b689b7c5abdb6e2d882abd70afbd4c025aad0f21ba178c0dddc210090377",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "1aa40c1f59c3b1ea7ab52fa4620d00896c1d1e96",
+                "path": "solslot_puzzles/redemption_treasury_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a871d51b4a5b97dd34076fccb3123dc339c7fb60d317b8f04a2ce203760609c0": {
+        "file_name": "p2_pool_v2.clsp",
+        "name": "--solslot-solslot_puzzles-p2_pool_v2",
+        "puzzle_hash": "a871d51b4a5b97dd34076fccb3123dc339c7fb60d317b8f04a2ce203760609c0",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a78dd8a5b97bb032762f6072e588b89262ec057b",
+                "path": "solslot_puzzles/p2_pool_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a8f01fcd5869ce286d4504531d786e055ebca36fcb9ecd1b8aaf118564c286ae": {
+        "file_name": "admin_authority_v3_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_v3_inner",
+        "puzzle_hash": "a8f01fcd5869ce286d4504531d786e055ebca36fcb9ecd1b8aaf118564c286ae",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3e88cc4636d9c42203979bf3c2070587365f0fd",
+                "path": "solslot_puzzles/admin_authority_v3_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "e4115ef7c8bafff1490657637af6f9fb2df7cf7265dd5b8e9aab2557617e5a2f": {
+        "file_name": "admin_authority_action_v1.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_action_v1",
+        "puzzle_hash": "e4115ef7c8bafff1490657637af6f9fb2df7cf7265dd5b8e9aab2557617e5a2f",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3e88cc4636d9c42203979bf3c2070587365f0fd",
+                "path": "solslot_puzzles/admin_authority_action_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "37d216ee6ed5a4488e73fe3e8eb4294f19a1154faacb17c095220b40df972b94": {
+        "file_name": "admin_identity_action_v1.clsp",
+        "name": "--solslot-solslot_puzzles-admin_identity_action_v1",
+        "puzzle_hash": "37d216ee6ed5a4488e73fe3e8eb4294f19a1154faacb17c095220b40df972b94",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3e88cc4636d9c42203979bf3c2070587365f0fd",
+                "path": "solslot_puzzles/admin_identity_action_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1af3093179c445ddd6ce89c8e3b14b0c0f39044fa79b6aada79f7d5f920a9e65": {
+        "file_name": "admin_identity_prepare_announcement_v1.clsp",
+        "name": "--solslot-solslot_puzzles-admin_identity_prepare_announcement_v1",
+        "puzzle_hash": "1af3093179c445ddd6ce89c8e3b14b0c0f39044fa79b6aada79f7d5f920a9e65",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3e88cc4636d9c42203979bf3c2070587365f0fd",
+                "path": "solslot_puzzles/admin_identity_prepare_announcement_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ccb501bd5b482d0df0580d9fb5b50f9e6ae823977caa4e50ad454cb7dc3af11e": {
+        "file_name": "admin_identity_terminal_action_v1.clsp",
+        "name": "--solslot-solslot_puzzles-admin_identity_terminal_action_v1",
+        "puzzle_hash": "ccb501bd5b482d0df0580d9fb5b50f9e6ae823977caa4e50ad454cb7dc3af11e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a3e88cc4636d9c42203979bf3c2070587365f0fd",
+                "path": "solslot_puzzles/admin_identity_terminal_action_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "871110df60084f9ddb699ed481f26dd6cfe2882b92e7e4a3de5366f759d41b24": {
+        "file_name": "voucher_nft_inner_v3.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_nft_inner_v3",
+        "puzzle_hash": "871110df60084f9ddb699ed481f26dd6cfe2882b92e7e4a3de5366f759d41b24",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d21faed5e46d973b5c00849a3156c21dbfc4f2e6",
+                "path": "solslot_puzzles/voucher_nft_inner_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "fa0b83da26c7a05797e203ef7217b3cf03aad37a3aabd3f14d26e8e13616a7e3": {
+        "file_name": "voucher_stripe_receipt_v1.clsp",
+        "name": "--solslot-solslot_puzzles-voucher_stripe_receipt_v1",
+        "puzzle_hash": "fa0b83da26c7a05797e203ef7217b3cf03aad37a3aabd3f14d26e8e13616a7e3",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d21faed5e46d973b5c00849a3156c21dbfc4f2e6",
+                "path": "solslot_puzzles/voucher_stripe_receipt_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "397658ed0de137d97e850c5c7ef18ed95ed36d799c3b2a799f2f8f1f0554112d": {
+        "file_name": "sgt_free_inner.clsp",
+        "name": "--solslot-solslot_puzzles-sgt_free_inner",
+        "puzzle_hash": "397658ed0de137d97e850c5c7ef18ed95ed36d799c3b2a799f2f8f1f0554112d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/sgt_free_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "14380db3a00acd31031a2ff5137cacff975800301358499d90ebaa29c08bc193": {
+        "file_name": "governance_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-governance_singleton_inner_v2",
+        "puzzle_hash": "14380db3a00acd31031a2ff5137cacff975800301358499d90ebaa29c08bc193",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/governance_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c779d3786c8c2f898784f4031f873e81fb785442a5e8fd8dd6dfb9446328a972": {
+        "file_name": "mint_offer_delegate_v5.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v5",
+        "puzzle_hash": "c779d3786c8c2f898784f4031f873e81fb785442a5e8fd8dd6dfb9446328a972",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "2a34bbf46675da9d4742d8baac81e5a6e997a55a",
+                "path": "solslot_puzzles/mint_offer_delegate_v5.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3e4a9f59c0851d717bda68d52b75527659a9712b0f39de4851f09b01b00d8f2e": {
+        "file_name": "mint_offer_inventory_available_v1.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_inventory_available_v1",
+        "puzzle_hash": "3e4a9f59c0851d717bda68d52b75527659a9712b0f39de4851f09b01b00d8f2e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "2a34bbf46675da9d4742d8baac81e5a6e997a55a",
+                "path": "solslot_puzzles/mint_offer_inventory_available_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f8a8e54b751adb4a569431d9f70b78f9ffa990696faba1fc8525f5917dee7898": {
+        "file_name": "stripe_settlement_receipt_v1.clsp",
+        "name": "--solslot-solslot_puzzles-stripe_settlement_receipt_v1",
+        "puzzle_hash": "f8a8e54b751adb4a569431d9f70b78f9ffa990696faba1fc8525f5917dee7898",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/stripe_settlement_receipt_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3d1cbeffba6456c70d2732da94d2c5d9b149a5776095897fe97e40aaa2c47acf": {
+        "file_name": "sgt_sale_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-sgt_sale_inner_v1",
+        "puzzle_hash": "3d1cbeffba6456c70d2732da94d2c5d9b149a5776095897fe97e40aaa2c47acf",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/sgt_sale_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "16ffd80e85712a55e8064adf19df1f6a9e1f85ed4f5336a8eff151e2d141e4c9": {
+        "file_name": "purchase_batch_settlement_receipt_v1.clsp",
+        "name": "--solslot-solslot_puzzles-purchase_batch_settlement_receipt_v1",
+        "puzzle_hash": "16ffd80e85712a55e8064adf19df1f6a9e1f85ed4f5336a8eff151e2d141e4c9",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "f6e3d885d803def2ac089bd063493365dd9d1ec6",
+                "path": "solslot_puzzles/purchase_batch_settlement_receipt_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "99c0d9313f1e6f3f7f938a45bc14b1d04127a2b468cbfe915242e12755f0f830": {
+        "file_name": "sgt_reserve_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-sgt_reserve_inner_v1",
+        "puzzle_hash": "99c0d9313f1e6f3f7f938a45bc14b1d04127a2b468cbfe915242e12755f0f830",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "5c54f89614bb1dd8e30b297c131fa11741625b1e",
+                "path": "solslot_puzzles/sgt_reserve_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "bbb8d654c79d65e931135c7f7e576dd6b2c3b1f6cc93b9bcf5bf1bd924285500": {
+        "file_name": "vault_sols_inner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-vault_sols_inner_v1",
+        "puzzle_hash": "bbb8d654c79d65e931135c7f7e576dd6b2c3b1f6cc93b9bcf5bf1bd924285500",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "5c54f89614bb1dd8e30b297c131fa11741625b1e",
+                "path": "solslot_puzzles/vault_sols_inner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "37ee69d130159cf716199c06e455f42d5afeb553029b5aa7e2bde7e1908de898": {
+        "file_name": "admin_recovery_authority_member_v1.clsp",
+        "name": "--solslot-solslot_puzzles-admin_recovery_authority_member_v1",
+        "puzzle_hash": "37ee69d130159cf716199c06e455f42d5afeb553029b5aa7e2bde7e1908de898",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "49e8472e2b3eb3e07f62a1ffd074e7552260d413",
+                "path": "solslot_puzzles/admin_recovery_authority_member_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "137867495c47434d2293368b4a1fe265967bde49e0a34aaf45a6a84a4bb3d515": {
+        "file_name": "mint_offer_inventory_available_v2.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_inventory_available_v2",
+        "puzzle_hash": "137867495c47434d2293368b4a1fe265967bde49e0a34aaf45a6a84a4bb3d515",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "cbdee8112bdf5480768218510642eb648b206145",
+                "path": "solslot_puzzles/mint_offer_inventory_available_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "2c8b1ddeb939570bbd9cd2e79ffe3787eb42ab28a3d661fae95354ec8a5eee38": {
+        "file_name": "zkpassport_bridge_permit_v1.clsp",
+        "name": "--solslot-solslot_puzzles-zkpassport_bridge_permit_v1",
+        "puzzle_hash": "2c8b1ddeb939570bbd9cd2e79ffe3787eb42ab28a3d661fae95354ec8a5eee38",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "cbdee8112bdf5480768218510642eb648b206145",
+                "path": "solslot_puzzles/zkpassport_bridge_permit_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8d3f524a4837d943d9734df0f01add9d81808b0c72ee017a4e01c5d91699f807": {
+        "file_name": "p2_vault.clsp",
+        "name": "--solslot-release-manifests-alpha-draft46-predecessor-p2_vault",
+        "puzzle_hash": "8d3f524a4837d943d9734df0f01add9d81808b0c72ee017a4e01c5d91699f807",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "14ad71265dbc868f5f059936365694c05023e708",
+                "path": "release-manifests/alpha-draft46-predecessor/p2_vault.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a78dd8a5b97bb032762f6072e588b89262ec057b",
+                "path": "solslot_puzzles/p2_vault.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "5c4a02ae4fe1021d5d30cd0332ee3abdd3a83b6fdc110a526c44eff6325c2d08": {
+        "file_name": "p2_vault.clsp",
+        "name": "--solslot-solslot_puzzles-p2_vault",
+        "puzzle_hash": "5c4a02ae4fe1021d5d30cd0332ee3abdd3a83b6fdc110a526c44eff6325c2d08",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "14ad71265dbc868f5f059936365694c05023e708",
+                "path": "solslot_puzzles/p2_vault.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "1d4be5fec4d196e6920d8e04f7680e813e310040348ce153b49191e633650768": {
+        "file_name": "pool_singleton_inner_v4.clsp",
+        "name": "--solslot-release-manifests-alpha-draft46-predecessor-pool_singleton_inner_v4",
+        "puzzle_hash": "1d4be5fec4d196e6920d8e04f7680e813e310040348ce153b49191e633650768",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "14ad71265dbc868f5f059936365694c05023e708",
+                "path": "release-manifests/alpha-draft46-predecessor/pool_singleton_inner_v4.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a78dd8a5b97bb032762f6072e588b89262ec057b",
+                "path": "solslot_puzzles/pool_singleton_inner_v4.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "e01e8cb71b9612ba01ac9678e45e6cae6915cebffff6795f6809c081d973e27d": {
+        "file_name": "pool_singleton_inner_v4.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v4",
+        "puzzle_hash": "e01e8cb71b9612ba01ac9678e45e6cae6915cebffff6795f6809c081d973e27d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "14ad71265dbc868f5f059936365694c05023e708",
+                "path": "solslot_puzzles/pool_singleton_inner_v4.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "34a8ecbe7aa044ca809c04438ad084c439fbfba1714dabaec0e52d206640eb1e": {
+        "file_name": "vault_singleton_inner_v2.clsp",
+        "name": "--solslot-release-manifests-alpha-draft46-predecessor-vault_singleton_inner_v2",
+        "puzzle_hash": "34a8ecbe7aa044ca809c04438ad084c439fbfba1714dabaec0e52d206640eb1e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "14ad71265dbc868f5f059936365694c05023e708",
+                "path": "release-manifests/alpha-draft46-predecessor/vault_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            },
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "aac4236373e4669dbef0b8fabf5ae42179429d3c",
+                "path": "solslot_puzzles/vault_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "104a7d0356d628b9073bf39f550a3b41163008381e2db3b8d2327ffe20216903": {
+        "file_name": "vault_singleton_inner_v2.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_v2",
+        "puzzle_hash": "104a7d0356d628b9073bf39f550a3b41163008381e2db3b8d2327ffe20216903",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "14ad71265dbc868f5f059936365694c05023e708",
+                "path": "solslot_puzzles/vault_singleton_inner_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "6abf69f8793c4ff34f3c9fc6975760f0fba7d372e60d6f45bd8639ace1c08b31": {
+        "file_name": "pool_singleton_inner_v5.clsp",
+        "name": "--solslot-solslot_puzzles-pool_singleton_inner_v5",
+        "puzzle_hash": "6abf69f8793c4ff34f3c9fc6975760f0fba7d372e60d6f45bd8639ace1c08b31",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "38c5bd2276932cbc3aa2c6baafa7e00bba3be0bd",
+                "path": "solslot_puzzles/pool_singleton_inner_v5.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0e22dc5f2b60ee0081d37ac836c2520729727e2e45ecbef752a02f9c0e776774": {
+        "file_name": "mint_offer_delegate_v6.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_delegate_v6",
+        "puzzle_hash": "0e22dc5f2b60ee0081d37ac836c2520729727e2e45ecbef752a02f9c0e776774",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "86cf648f27678884d00dcc7aab55d5c1790c2069",
+                "path": "solslot_puzzles/mint_offer_delegate_v6.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "49630bc2068d26bf2cc37f5ae69b29349b49a56707d6fd4f93a7ea44c4a0492c": {
+        "file_name": "mint_offer_inventory_available_v3.clsp",
+        "name": "--solslot-solslot_puzzles-mint_offer_inventory_available_v3",
+        "puzzle_hash": "49630bc2068d26bf2cc37f5ae69b29349b49a56707d6fd4f93a7ea44c4a0492c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "86cf648f27678884d00dcc7aab55d5c1790c2069",
+                "path": "solslot_puzzles/mint_offer_inventory_available_v3.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "84e403582322e3f05df52bde4e179ab6b9968413647a3e0667ec2c365b09aaa1": {
+        "file_name": "admin_authority_v4_inner.clsp",
+        "name": "--solslot-solslot_puzzles-admin_authority_v4_inner",
+        "puzzle_hash": "84e403582322e3f05df52bde4e179ab6b9968413647a3e0667ec2c365b09aaa1",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "c7d4bb47787b4ccd3b645500bc3f6b71aa467791",
+                "path": "solslot_puzzles/admin_authority_v4_inner.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ece0bc9183193a0d17fd62ef41c68a900e6481c13a5dff5b708b17b3a7e0923b": {
+        "file_name": "generation_admin_action_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_admin_action_v1",
+        "puzzle_hash": "ece0bc9183193a0d17fd62ef41c68a900e6481c13a5dff5b708b17b3a7e0923b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_admin_action_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f1aba30809cf49355f4cba861792029f44454f8fe48180f9ce4fce1ffb866ca3": {
+        "file_name": "generation_batch_payout_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_batch_payout_v1",
+        "puzzle_hash": "f1aba30809cf49355f4cba861792029f44454f8fe48180f9ce4fce1ffb866ca3",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_batch_payout_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0d340ec504244cbacb28218a81f144009cc2b66f14c2a6fe64320c44749b7f82": {
+        "file_name": "generation_component_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_component_v1",
+        "puzzle_hash": "0d340ec504244cbacb28218a81f144009cc2b66f14c2a6fe64320c44749b7f82",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_component_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "96404180ccdf522ce8d915a524b8e0c2c72c135057752d1d231b153b39b48379": {
+        "file_name": "generation_delay_ticket_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_delay_ticket_v1",
+        "puzzle_hash": "96404180ccdf522ce8d915a524b8e0c2c72c135057752d1d231b153b39b48379",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_delay_ticket_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7f6b034da88342eb111684fb03144b3cf4637edde44e522dd0d4caf2d4a69d58": {
+        "file_name": "generation_extension_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_extension_v1",
+        "puzzle_hash": "7f6b034da88342eb111684fb03144b3cf4637edde44e522dd0d4caf2d4a69d58",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_extension_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "13800cce50435ae930c73138489094f3f3f48074e26819a9e3aa59457a5c0b7d": {
+        "file_name": "generation_extension_v2.clsp",
+        "name": "--solslot-solslot_puzzles-generation_extension_v2",
+        "puzzle_hash": "13800cce50435ae930c73138489094f3f3f48074e26819a9e3aa59457a5c0b7d",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_extension_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "8eea33ddbad8e7a92aa7132052d8bfee14b3aa51feb19f2164d58833e293b9e7": {
+        "file_name": "generation_governance_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_governance_v1",
+        "puzzle_hash": "8eea33ddbad8e7a92aa7132052d8bfee14b3aa51feb19f2164d58833e293b9e7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_governance_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "b5cae8cf3352ee2b5a02b2a23e6d63509c984b0d133831ee9505d466e006be31": {
+        "file_name": "generation_holdings_ledger_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_holdings_ledger_v1",
+        "puzzle_hash": "b5cae8cf3352ee2b5a02b2a23e6d63509c984b0d133831ee9505d466e006be31",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_holdings_ledger_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "91a809cda212fbeeb683cc820d5ac1eaacddf8a09df2f60e49e837600a65f6ff": {
+        "file_name": "generation_mint_logic_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_mint_logic_v1",
+        "puzzle_hash": "91a809cda212fbeeb683cc820d5ac1eaacddf8a09df2f60e49e837600a65f6ff",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_mint_logic_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d2dabffe6ba6accfe8641f66af1d480cb79bf758463675faa90773326a29d1c6": {
+        "file_name": "generation_mint_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_mint_v1",
+        "puzzle_hash": "d2dabffe6ba6accfe8641f66af1d480cb79bf758463675faa90773326a29d1c6",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_mint_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "514e2bdab07186a72615f50c36ff773fbf0377019322ed84e61896ff8222098c": {
+        "file_name": "generation_parameter_logic_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_parameter_logic_v1",
+        "puzzle_hash": "514e2bdab07186a72615f50c36ff773fbf0377019322ed84e61896ff8222098c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_parameter_logic_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f6b0cd7a5e742a838eea100e9d38c4832153b615c72fbaf46ebcd873bcd67864": {
+        "file_name": "generation_parameters_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_parameters_v1",
+        "puzzle_hash": "f6b0cd7a5e742a838eea100e9d38c4832153b615c72fbaf46ebcd873bcd67864",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_parameters_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "54a2ef0758fab4713aed30be1f95e6c0373c6f6a6600a6d121d5a8e1082100fb": {
+        "file_name": "generation_pool_logic_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_pool_logic_v1",
+        "puzzle_hash": "54a2ef0758fab4713aed30be1f95e6c0373c6f6a6600a6d121d5a8e1082100fb",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_pool_logic_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "725ad03bc8ee4ab5de6f85d1cde62b4e13702d01e0e14355384d41e18791d52b": {
+        "file_name": "generation_pool_logic_v2.clsp",
+        "name": "--solslot-solslot_puzzles-generation_pool_logic_v2",
+        "puzzle_hash": "725ad03bc8ee4ab5de6f85d1cde62b4e13702d01e0e14355384d41e18791d52b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_pool_logic_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "626ae2f065d98b4520b8a17e1ba889eca9ef2d53c42d3605897727702f4129ba": {
+        "file_name": "generation_pool_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_pool_v1",
+        "puzzle_hash": "626ae2f065d98b4520b8a17e1ba889eca9ef2d53c42d3605897727702f4129ba",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_pool_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "305d4f84e3fa2b816e3d2a7e1064286ca84790d33644e0f2915866d116e1084c": {
+        "file_name": "generation_primary_inventory_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_primary_inventory_v1",
+        "puzzle_hash": "305d4f84e3fa2b816e3d2a7e1064286ca84790d33644e0f2915866d116e1084c",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_primary_inventory_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "f7a3acd861a492c043344f9316284fd5ed45c99ca49684593fe0ff6630714c4e": {
+        "file_name": "generation_primary_payment_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_primary_payment_v1",
+        "puzzle_hash": "f7a3acd861a492c043344f9316284fd5ed45c99ca49684593fe0ff6630714c4e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_primary_payment_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "df97cfa290aa092f6b2d725ff5fb4c883e9d2b5201043a25af925d9bd4d723a9": {
+        "file_name": "generation_redemption_treasury_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_redemption_treasury_v1",
+        "puzzle_hash": "df97cfa290aa092f6b2d725ff5fb4c883e9d2b5201043a25af925d9bd4d723a9",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_redemption_treasury_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "cf7b559d0b3f3e177c6c53d5124515b589de5824bf59a561a2661c427933e97a": {
+        "file_name": "generation_registry_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_registry_v1",
+        "puzzle_hash": "cf7b559d0b3f3e177c6c53d5124515b589de5824bf59a561a2661c427933e97a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_registry_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "fef1b4d1f34778903c84a03447d6b8c2d5e1691bd4c7b81001942fa66c947174": {
+        "file_name": "generation_reward_custody_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_reward_custody_v1",
+        "puzzle_hash": "fef1b4d1f34778903c84a03447d6b8c2d5e1691bd4c7b81001942fa66c947174",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_reward_custody_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "dec2998e1c4f2f3ccd5b5fdbd110f3eb62c176d91d8e3fec667bc61370245e6b": {
+        "file_name": "generation_reward_epoch_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_reward_epoch_v1",
+        "puzzle_hash": "dec2998e1c4f2f3ccd5b5fdbd110f3eb62c176d91d8e3fec667bc61370245e6b",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_reward_epoch_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "9fad23942a69acc637618629c22da692cb95d759f545a54c2c0ed47e9901f468": {
+        "file_name": "generation_reward_leaf_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_reward_leaf_v1",
+        "puzzle_hash": "9fad23942a69acc637618629c22da692cb95d759f545a54c2c0ed47e9901f468",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_reward_leaf_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0537018f04af79a19f31767276b671291038e17e26a265be9df2411bb9b342af": {
+        "file_name": "generation_reward_resume_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_reward_resume_v1",
+        "puzzle_hash": "0537018f04af79a19f31767276b671291038e17e26a265be9df2411bb9b342af",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_reward_resume_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "a5be3ebb8efad8c257cf57f5bd7270fdfb5588f15c93619c7a56858d36f30068": {
+        "file_name": "generation_sgt_coin_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sgt_coin_v1",
+        "puzzle_hash": "a5be3ebb8efad8c257cf57f5bd7270fdfb5588f15c93619c7a56858d36f30068",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sgt_coin_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c19a35ce609ffc691a4352a26322cbb0f8acb2fee76b46b7f33bbd562002220e": {
+        "file_name": "generation_sgt_eve_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sgt_eve_v1",
+        "puzzle_hash": "c19a35ce609ffc691a4352a26322cbb0f8acb2fee76b46b7f33bbd562002220e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sgt_eve_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d4c6d122a846213d90434a8682c8bbfaa064d87635196318fae829f2dd8eb6ce": {
+        "file_name": "generation_sgt_tail_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sgt_tail_v1",
+        "puzzle_hash": "d4c6d122a846213d90434a8682c8bbfaa064d87635196318fae829f2dd8eb6ce",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sgt_tail_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "b4581c25ba000f6531d65ef5ec66814bdcf89f163776b03a45314f68bbe0edc7": {
+        "file_name": "generation_sgt_vault_owner_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sgt_vault_owner_v1",
+        "puzzle_hash": "b4581c25ba000f6531d65ef5ec66814bdcf89f163776b03a45314f68bbe0edc7",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sgt_vault_owner_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ab84a5a8a5550620ae526a5557721ce08a9b3fb975b8ac4a54e6f8c9b63d5696": {
+        "file_name": "generation_sols_eve_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sols_eve_v1",
+        "puzzle_hash": "ab84a5a8a5550620ae526a5557721ce08a9b3fb975b8ac4a54e6f8c9b63d5696",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sols_eve_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "9267562d8a4de635aa476562005822c17f8a71003b331bc4aaf3b195c48449ca": {
+        "file_name": "generation_sols_reserve_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sols_reserve_v1",
+        "puzzle_hash": "9267562d8a4de635aa476562005822c17f8a71003b331bc4aaf3b195c48449ca",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sols_reserve_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d371a2cb9b7b8c33199e16e5592dabc0c4622f42b7f546f8cb195d64f1ad66d3": {
+        "file_name": "generation_sols_tail_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_sols_tail_v1",
+        "puzzle_hash": "d371a2cb9b7b8c33199e16e5592dabc0c4622f42b7f546f8cb195d64f1ad66d3",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_sols_tail_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "d3b98f623627775f2a1e359553bb70dcc372106589e8abc90ed6d9a8db81c6d9": {
+        "file_name": "generation_statutes_logic_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_statutes_logic_v1",
+        "puzzle_hash": "d3b98f623627775f2a1e359553bb70dcc372106589e8abc90ed6d9a8db81c6d9",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_statutes_logic_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "cb45745fbb12777187b239a200abbb8420c38ed168021ac5cbe266c15c04448e": {
+        "file_name": "generation_statutes_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_statutes_v1",
+        "puzzle_hash": "cb45745fbb12777187b239a200abbb8420c38ed168021ac5cbe266c15c04448e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_statutes_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "e0f8994c20153f4916a2e01d6f52550e3b3c477507e442fcb29782af673bd149": {
+        "file_name": "generation_vote_clock_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_vote_clock_v1",
+        "puzzle_hash": "e0f8994c20153f4916a2e01d6f52550e3b3c477507e442fcb29782af673bd149",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/generation_vote_clock_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "c55e91c53fe81e4838b2c89426a19f44ea8105703e80bd12a67a555f4cd44bc5": {
+        "file_name": "vault_singleton_inner_generation_v1.clsp",
+        "name": "--solslot-solslot_puzzles-vault_singleton_inner_generation_v1",
+        "puzzle_hash": "c55e91c53fe81e4838b2c89426a19f44ea8105703e80bd12a67a555f4cd44bc5",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/vault_singleton_inner_generation_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "423c540a1dd3111e8371e55b5f44a157d44de58b9b4abba5a493b3d1e9a177d9": {
+        "file_name": "vault_sols_generation_v1.clsp",
+        "name": "--solslot-solslot_puzzles-vault_sols_generation_v1",
+        "puzzle_hash": "423c540a1dd3111e8371e55b5f44a157d44de58b9b4abba5a493b3d1e9a177d9",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "d0435155b7f58c2c6716d234316f6e5eaba91c08",
+                "path": "solslot_puzzles/vault_sols_generation_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "ae7c406cee3433e51683e2a8e15d22ba79f87f2c4464c62b75288c0c25def3b3": {
+        "file_name": "generation_backing_custody_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_backing_custody_v1",
+        "puzzle_hash": "ae7c406cee3433e51683e2a8e15d22ba79f87f2c4464c62b75288c0c25def3b3",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a9ec23c8974fd6da08f69a6a45020c368c22de9a",
+                "path": "solslot_puzzles/generation_backing_custody_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "bfccee31bf0a4bf0ffa9522707a06c9f510f4f445ce18a9f8121bd1d37853a96": {
+        "file_name": "generation_pool_v2.clsp",
+        "name": "--solslot-solslot_puzzles-generation_pool_v2",
+        "puzzle_hash": "bfccee31bf0a4bf0ffa9522707a06c9f510f4f445ce18a9f8121bd1d37853a96",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a9ec23c8974fd6da08f69a6a45020c368c22de9a",
+                "path": "solslot_puzzles/generation_pool_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "3304dfc9d4facd533a678bb4846c3b797f32c7461688b2de2c77780826b50d0a": {
+        "file_name": "generation_primary_fee_split_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_primary_fee_split_v1",
+        "puzzle_hash": "3304dfc9d4facd533a678bb4846c3b797f32c7461688b2de2c77780826b50d0a",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a9ec23c8974fd6da08f69a6a45020c368c22de9a",
+                "path": "solslot_puzzles/generation_primary_fee_split_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "697551584dfafa24be600dfe0b32edf9688a3e1c4e5e969d0cf41880109dbd5e": {
+        "file_name": "generation_primary_inventory_v2.clsp",
+        "name": "--solslot-solslot_puzzles-generation_primary_inventory_v2",
+        "puzzle_hash": "697551584dfafa24be600dfe0b32edf9688a3e1c4e5e969d0cf41880109dbd5e",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a9ec23c8974fd6da08f69a6a45020c368c22de9a",
+                "path": "solslot_puzzles/generation_primary_inventory_v2.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "eb6cc05207d8b242317d48049dfd653cae159e960a5af8850bcc751c4b74c5b4": {
+        "file_name": "generation_revenue_action_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_revenue_action_v1",
+        "puzzle_hash": "eb6cc05207d8b242317d48049dfd653cae159e960a5af8850bcc751c4b74c5b4",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a9ec23c8974fd6da08f69a6a45020c368c22de9a",
+                "path": "solslot_puzzles/generation_revenue_action_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "0e903f37c7761a8959a24e2f76506cf2e197e10b0b38b31ea75aae1f53211c52": {
+        "file_name": "generation_revenue_custody_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_revenue_custody_v1",
+        "puzzle_hash": "0e903f37c7761a8959a24e2f76506cf2e197e10b0b38b31ea75aae1f53211c52",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "a9ec23c8974fd6da08f69a6a45020c368c22de9a",
+                "path": "solslot_puzzles/generation_revenue_custody_v1.clsp",
+                "language": "chialisp"
+            }
+        ]
+    },
+    "7cccf5398699c981864c35f2eab93e6a437b84d5343b4effcd6b776d312e32e1": {
+        "file_name": "generation_primary_proceeds_v1.clsp",
+        "name": "--solslot-solslot_puzzles-generation_primary_proceeds_v1",
+        "puzzle_hash": "7cccf5398699c981864c35f2eab93e6a437b84d5343b4effcd6b776d312e32e1",
+        "sources": [
+            {
+                "project": "solslot",
+                "repo": "https://github.com/MattHintz/solslot-protocol.git",
+                "commit": "0b7dc594f5f6d8144340faa5e910d904fcad916c",
+                "path": "solslot_puzzles/generation_primary_proceeds_v1.clsp",
+                "language": "chialisp"
             }
         ]
     }

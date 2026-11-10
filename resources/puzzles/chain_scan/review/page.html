@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chain puzzle names</title>
+<style>
+/* layout: sticky bar (tabs, search, export/import), then the rows of the tab grouped by family > puzzle type */
+:root {
+  --bg: #f4f6f2; --surface: #fff; --ink: #1c2420; --muted: #5b6961; --line: #dce2db;
+  --accent: #2b6b47; --accent-soft: #e3efe7; --set: #1f5fa8; --set-soft: #e2ecf8;
+  --ok: #2f7a3a; --ok-soft: #e4f2e5; --research: #8a6a00; --research-soft: #f6eecf; --skip: #6b6f74; --skip-soft: #eceeef;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #111513; --surface: #181d1a; --ink: #e2e9e4; --muted: #92a097; --line: #29312c;
+  --accent: #74c095; --accent-soft: #1d2b23; --set: #7fb0ea; --set-soft: #1a2433;
+  --ok: #7cc485; --ok-soft: #1b2b1d; --research: #d8b84e; --research-soft: #2e2915; --skip: #9aa0a6; --skip-soft: #23272a;
+  color-scheme: dark } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 var(--sans); }
+header { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 20px 0; }
+h1 { font-size: 18px; margin: 0 0 2px; }
+.sub { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.bar input[type=search] { flex: 1 1 260px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+button, .btn { font: inherit; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+.status { color: var(--muted); font-size: 12px; }
+.tabs { display: flex; gap: 2px; }
+.tab { border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0; padding: 6px 14px; background: transparent; }
+.tab[aria-selected=true] { background: var(--surface); border-color: var(--accent); font-weight: 600; }
+.tab .n { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.tabhelp { color: var(--muted); font-size: 12px; padding: 8px 20px 0; }
+main { padding: 4px 20px 60px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 6px; }
+h2 .n { font-weight: 400; text-transform: none; }
+.row { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; }
+.row[data-status=ok] { border-left-color: var(--ok); }
+.row[data-status=research] { border-left-color: var(--research); }
+.row[data-status=skip] { border-left-color: var(--skip); opacity: .7; }
+.top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.layers { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+.meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.fields { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 6px 10px; margin: 8px 0; }
+.field { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); }
+.field select, .field input { font: 13px var(--sans); padding: 3px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+.field.set select, .field.set input { border-color: var(--set); background: var(--set-soft); }
+.field .from { font-size: 11px; }
+.namebar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.namebar .name { flex: 2 1 280px; }
+.namebar .note { flex: 1 1 160px; }
+.namebar input { font: 13px var(--sans); padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+.name.guessed { font-style: italic; color: var(--muted); }
+.v[aria-pressed=true][data-v=ok] { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.v[aria-pressed=true][data-v=research] { background: var(--research-soft); border-color: var(--research); color: var(--research); }
+.v[aria-pressed=true][data-v=skip] { background: var(--skip-soft); border-color: var(--skip); color: var(--skip); }
+.more { border: none; background: none; color: var(--accent); padding: 4px; }
+.beh { font-size: 12px; color: var(--muted); margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.beh b { color: var(--ink); font-weight: 600; }
+.beh .shape { font-family: var(--mono); font-size: 11px; flex-basis: 100%; }
+.beh .suggest { color: var(--set); }
+.beh .warn { color: var(--research); font-weight: 600; }
+.details { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.details div { margin: 2px 0; word-break: break-all; }
+.empty { color: var(--muted); padding: 30px 0; }
+.menu { position: relative; }
+.menu .pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 3; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px; min-width: 200px; box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.menu .pop button { display: block; width: 100%; text-align: left; border: none; border-radius: 4px; }
+.menu .pop button[aria-checked=true] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.subtabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 0; border-top: 1px solid var(--accent); }
+.subtab { font-size: 12px; padding: 3px 9px; border-radius: 12px; }
+.subtab[aria-selected=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.subtab .n { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.subtab.done .n { color: var(--ok); }
+dialog { max-width: 820px; width: calc(100% - 40px); max-height: calc(100vh - 60px); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 0; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog .dhead { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; background: var(--surface); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+dialog .dhead h2 { margin: 0; color: var(--ink); font-size: 15px; text-transform: none; letter-spacing: 0; }
+dialog .dbody { padding: 4px 16px 16px; }
+dialog h3 { font-size: 14px; margin: 16px 0 2px; }
+dialog p { margin: 2px 0 6px; color: var(--muted); }
+dialog dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 4px 0; font-size: 13px; }
+dialog dt { font-family: var(--mono); font-size: 12px; }
+dialog dd { margin: 0; }
+dialog.code { max-width: 1100px; }
+.codelayer { border-top: 1px solid var(--line); margin-top: 12px; }
+.codelayer .where { font-size: 12px; color: var(--muted); word-break: break-all; }
+.codelayer .where a { color: var(--accent); }
+.chain { font-family: var(--mono); font-size: 12px; margin: 8px 0 0; }
+.chain a { color: var(--accent); }
+pre.src { font: 12px/1.45 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow: auto; max-height: 60vh; white-space: pre; tab-size: 2; }
+@media (max-width: 760px) { .fields { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chain puzzle names</h1>
+  <p class="sub">One row per variant group seen on chain. Each field shows the value the layers give (where it comes from is under it); a blue field is set by hand. The name is "what it does" (no project tag for now). The behaviour line under the fields is a hint from running spends of the group (behaviour.py): it sets nothing. Verdicts stay in this browser: Export them to a file in the repo.</p>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Search layers, names, notes, fields">
+    <button type="button" id="legendBtn" title="What family, puzzle type, custody and project mean">Fields?</button>
+    <div class="menu"><button type="button" id="groupBtn" aria-haspopup="true" aria-expanded="false"></button><div class="pop" id="groupPop" role="menu" hidden></div></div>
+    <label class="status"><input type="checkbox" id="hideDone"> hide done</label>
+    <button type="button" id="export" title="Download the verdicts as a JSON file (save it in resources/puzzles/chain_scan/review/verdicts/)">Export</button>
+    <label class="btn" title="Load a verdicts file exported from this page">Import<input type="file" id="import" accept=".json,application/json" hidden></label>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="subtabs" role="tablist" id="subtabs"></div>
+</header>
+<dialog id="legend"><div class="dhead"><h2>The fields of a row</h2><button type="button" id="legendClose">Close</button></div><div class="dbody" id="legendBody"></div></dialog>
+<dialog id="code" class="code"><div class="dhead"><h2 id="codeTitle">Code</h2><button type="button" id="codeClose">Close</button></div><div class="dbody" id="codeBody"></div></dialog>
+<p class="tabhelp" id="tabhelp"></p>
+<main id="list"></main>
+<script type="application/json" id="data">/*DATA*/null</script>
+<script>
+const DATA = JSON.parse(document.getElementById('data').textContent);
+const ITEMS = DATA.items, VOCAB = DATA.vocab, CODE = DATA.code || {};
+const FIELDS = ['family', 'puzzle_type', 'custody', 'project'];
+const LABEL = { family: 'family', puzzle_type: 'puzzle type', custody: 'custody', project: 'project' };
+const TABS = [
+  ['confirm', 'Confirm', 'The layers give the puzzle type and the custody: check the fields and the name, then OK.'],
+  ['fill', 'Fill in', 'Some fields are known: set the missing ones you can tell, write what it does, then OK.'],
+  ['unknown', 'Unknown', 'No project known from the layers: Research (with a note) or Skip; OK if you can name it.'],
+];
+const STORE_KEY = 'chain-names-review-v2';
+let state = {};
+try { state = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch { state = {}; }
+const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
+const get = id => state[id] || {};
+function put(id, patch) {
+  const s = { ...get(id), ...patch };
+  for (const k of Object.keys(s)) if (s[k] === '' || s[k] == null) delete s[k];
+  if (Object.keys(s).length) state[id] = s; else delete state[id];
+  save(); counts();
+}
+let tab = 'confirm';
+try { tab = localStorage.getItem(STORE_KEY + '-tab') || 'confirm'; } catch {}
+
+const fmt = n => n.toLocaleString('en-US');
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+// the name shown: the one written here, else the proposal
+const nameOf = it => get(it.id).name ?? it.name;
+const value = (it, f) => get(it.id)[f] || it.fields[f];
+// a project has an id (kept in the verdicts and the catalog) and a label (shown)
+// every field has ids (kept in the verdicts and the catalog) and labels (shown)
+const lab = (f, v) => v ? v.split(' + ').map(x => VOCAB.labels[f][x] || x).join(' + ') : v;
+const plabel = p => lab('project', p);
+const pid = label => Object.keys(VOCAB.labels.project).find(p => VOCAB.labels.project[p] === label) || label;
+const shown = (it, f) => lab(f, value(it, f));
+const help = (f, v) => (VOCAB.desc[f] || {})[v] || '';
+
+function fieldEl(it, f) {
+  const s = get(it.id), wrap = el('label', 'field' + (s[f] ? ' set' : ''));
+  wrap.append(LABEL[f]);
+  const derived = lab(f, it.fields[f]) || '—';
+  let input;
+  if (f === 'project') {
+    // free text: a new project can be typed, the known ones are suggested
+    const dlabel = plabel(it.fields[f]) || '—';
+    input = el('input'); input.setAttribute('list', 'projects'); input.value = plabel(s[f]) || '';
+    input.placeholder = dlabel; input.title = 'empty = from the layers (' + dlabel + ')';
+    input.addEventListener('change', () => {
+      const id = input.value.trim() ? pid(input.value.trim()) : '';
+      put(it.id, { [f]: id === it.fields[f] ? '' : id }); wrap.classList.toggle('set', !!get(it.id)[f]);
+    });
+  } else {
+    input = el('select');
+    const o = el('option', null, derived); o.value = ''; input.append(o);
+    for (const v of VOCAB[f]) if (v !== it.fields[f]) { const x = el('option', null, lab(f, v)); x.value = v; x.title = help(f, v); input.append(x); }
+    input.value = s[f] || '';
+    input.title = help(f, value(it, f));
+    input.addEventListener('change', () => { put(it.id, { [f]: input.value }); wrap.classList.toggle('set', !!input.value); input.title = help(f, value(it, f)); });
+  }
+  wrap.append(input, el('span', 'from', s[f] ? 'set here' : 'from: ' + (it.origins[f] || '')));
+  // the projects the lead builds on: derived from the layers, not edited here
+  if (f === 'project' && it.project_dependencies.length)
+    wrap.append(el('span', 'from', 'depends on: ' + it.project_dependencies.map(plabel).join(', ')));
+  return wrap;
+}
+
+function rowEl(it) {
+  const s = get(it.id), row = el('div', 'row'); row.dataset.status = s.status || '';
+  const top = el('div', 'top');
+  top.append(el('span', 'layers', it.layers.join('  ›  ')),
+    el('span', 'meta', `${fmt(it.seen)} spends · heights ${fmt(it.first)}–${fmt(it.last)}` + (it.layered_puzzle_fingerprints.length > 1 ? ` · ${it.layered_puzzle_fingerprints.length} fingerprints` : '')));
+  const fields = el('div', 'fields'); for (const f of FIELDS) fields.append(fieldEl(it, f));
+  const beh = behEl(it);
+  const bar = el('div', 'namebar');
+  const name = el('input', 'name'); name.value = nameOf(it); name.placeholder = 'what it does';
+  name.classList.toggle('guessed', it.guessed && s.name == null);
+  name.title = it.guessed && s.name == null ? 'guessed from the layers' : '';
+  name.addEventListener('input', () => { put(it.id, { name: name.value === it.name ? null : name.value }); name.classList.remove('guessed'); });
+  const note = el('input', 'note'); note.value = s.note || ''; note.placeholder = 'note';
+  note.addEventListener('input', () => put(it.id, { note: note.value }));
+  bar.append(name, note);
+  for (const [v, label] of [['ok', 'OK'], ['research', 'Research'], ['skip', 'Skip']]) {
+    const b = el('button', 'v', label); b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-pressed', s.status === v);
+    b.addEventListener('click', () => {
+      const now = get(it.id).status === v ? '' : v;
+      put(it.id, { status: now }); row.dataset.status = now;
+      bar.querySelectorAll('.v').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === now));
+    });
+    bar.append(b);
+  }
+  const more = el('button', 'more', 'details'); more.type = 'button';
+  const det = el('div', 'details'); det.hidden = true;
+  more.addEventListener('click', () => {
+    if (!det.childElementCount) for (const k of it.layered_puzzle_fingerprints)
+      det.append(el('div', null, `${fmt(k.seen)} spends · coin ${k.coin} · ${k.layers.join(' > ')}`), el('div', null, 'layered puzzle fingerprint ' + k.layered_puzzle_fingerprint));
+    det.hidden = !det.hidden;
+  });
+  const codeBtn = el('button', 'more', 'code'); codeBtn.type = 'button'; codeBtn.title = 'The source of each layer, from the catalog';
+  codeBtn.addEventListener('click', () => showCode(it));
+  bar.append(more, codeBtn);
+  row.append(top, fields, ...(beh ? [beh] : []), bar, det);
+  return row;
+}
+
+// the behaviour hint: what the group's spends output once run (chain_scan/behaviour.py)
+const HINTS = {
+  'signed': 'signed: its spends need a signature (an AGG_SIG)',
+  'by message': 'by message: another coin, usually a singleton, sends it a message (RECEIVE_MESSAGE)',
+  'sends messages': 'sends messages: it commands other coins (SEND_MESSAGE), like a vault',
+  'by announcement': 'by announcement: it asserts another coin’s announcement, usually a singleton’s',
+  'open': 'open: no signature, nothing asserted: offer settlements, anyone can spend',
+  'mixed': 'mixed: no class has 80% of the spends',
+};
+const pct = x => Math.round(x * 100) + '%';
+function behEl(it) {
+  const b = it.behaviour;
+  if (!b) return null;
+  const line = el('div', 'beh');
+  const h = el('span'); h.append('behaviour (' + fmt(b.runs) + (b.runs === 1 ? ' spend' : ' spends') + ' run): ', el('b', null, b.hint));
+  h.title = HINTS[b.hint] + '\n' + Object.entries(b.classes).map(([k, v]) => `${k} ${pct(v)}`).join(', ');
+  line.append(h);
+  if (b.suggest.length) line.append(el('span', 'suggest', 'custody hint: ' + b.suggest.map(c => lab('custody', c)).join(' or ')));
+  if (b.like.length) {
+    const l = el('span', null, 'like: ' + b.like.map(([label, s]) => `${label} ${pct(s)}`).join(', '));
+    l.title = 'the known puzzles whose spends output the most alike (weighted Jaccard of the condition kinds and the children)';
+    line.append(l);
+  }
+  if (b.template.same) line.append(el('span', null, `same template: ${fmt(b.template.same)} other puzzle${b.template.same === 1 ? '' : 's'}`));
+  // the template: one line per mode, the core always output, [the optional kinds with their share]
+  const rng = (lo, hi) => hi === 1 ? '' : lo === hi ? ` x${lo}` : ` x${lo}-${hi}`;
+  const stampText = Object.keys(b.stamp).length ? ': ' + Object.keys(b.stamp).join(', ') : ' (none measured for this layer)';
+  for (const m of b.template.modes) {
+    const core = m.mode === 'nothing' ? 'outputs no condition' : (m.core.map(([k, lo, hi]) => k + rng(lo, hi)).join(' + ') || '(no core)');
+    const opt = m.optional.map(([k, sh, lo, hi]) => `[${k}${rng(lo, hi)} ${pct(sh)}]`).join(' ');
+    const o = el('span', 'shape', `${m.mode} ${pct(m.share)}: ${core}${opt ? ' ' + opt : ''}`);
+    o.title = `a mode: ${fmt(m.runs)} spends. The core is output by 95% of them, [optional] by fewer. The outer layer’s own conditions are removed first` + stampText;
+    line.append(o);
+  }
+  if (b.template.rare) line.append(el('span', 'shape', `rare: ${b.template.rare < 0.005 ? '<1%' : pct(b.template.rare)}`));
+  if (b.disagrees) line.append(el('span', 'warn', 'disagrees with the catalog: ' + b.disagrees));
+  return line;
+}
+
+// the code overlay: the layers of a row, outer to inner, each with its source from the catalog
+const codeDlg = document.getElementById('code'), codeBody = document.getElementById('codeBody');
+const NO_CODE = { '*': 'an unknown layer that differs from fingerprint to fingerprint (seen once each)', '(curried again)': 'the layer before, curried a second time: same code' };
+function showCode(it) {
+  document.getElementById('codeTitle').textContent = 'Code: ' + it.layers.join('  ›  ');
+  codeBody.replaceChildren();
+  const chain = el('p', 'chain');
+  it.code_layers.forEach((l, i) => {
+    if (i) chain.append('  ›  ');
+    if (CODE[l]) { const a = el('a', null, it.layers[i]); a.href = '#code-' + i; chain.append(a); } else chain.append(it.layers[i]);
+  });
+  codeBody.append(chain);
+  it.code_layers.forEach((l, i) => {
+    const c = CODE[l], box = el('div', 'codelayer'); box.id = 'code-' + i;
+    box.append(el('h3', null, `layer ${i + 1}: ${it.layers[i]}`));
+    if (!c) {
+      box.append(el('p', null, NO_CODE[l] || (l.startsWith('?') ? `not in the catalog (mod hash ${l.slice(1)}…): no source` : 'no source in the catalog')));
+    } else {
+      const where = el('p', 'where');
+      if (c.repo && c.path) {
+        const base = c.repo.replace(/\.git$/, ''), a = el('a', null, `${base.replace(/^https?:\/\//, '')}/${c.path}`);
+        a.href = c.commit ? `${base}/blob/${c.commit}/${c.path}` : base; a.target = '_blank'; a.rel = 'noopener';
+        where.append(a, c.commit ? ` @ ${c.commit.slice(0, 8)}` : '');
+      } else where.append(c.file || l);
+      where.append(` · mod hash ${(c.hash || '').slice(0, 16)}…` + (c.disassembled ? ' · no source: the disassembled bytecode' : ''));
+      box.append(where, el('pre', 'src', c.text));
+    }
+    codeBody.append(box);
+  });
+  codeDlg.showModal(); codeBody.parentElement.scrollTop = 0;
+}
+document.getElementById('codeClose').addEventListener('click', () => codeDlg.close());
+codeDlg.addEventListener('click', e => { if (e.target === codeDlg) codeDlg.close(); });
+
+function matches(it, q) {
+  if (!q) return true;
+  const s = get(it.id);
+  const b = it.behaviour || {};
+  return [it.layers.join(' '), nameOf(it), s.note || '', b.hint || '', (b.like || []).map(l => l[0]).join(' '), b.disagrees ? 'disagrees' : '', ...FIELDS.map(f => (shown(it, f) || '') + ' ' + (value(it, f) || '')), it.id].join(' ').toLowerCase().includes(q);
+}
+
+// how rows are grouped: the values the layers give (a row does not move when a field is edited)
+const GROUPINGS = [
+  ['family_type', 'family › puzzle type', it => (lab('family', it.fields.family) || '—') + '  ›  ' + (lab('puzzle_type', it.fields.puzzle_type) || 'no puzzle type')],
+  ['family', 'family', it => lab('family', it.fields.family) || '—'],
+  ['puzzle_type', 'puzzle type', it => lab('puzzle_type', it.fields.puzzle_type) || 'no puzzle type'],
+  ['custody', 'custody', it => lab('custody', it.fields.custody) || '—'],
+  ['project', 'project', it => plabel(it.fields.project) || 'unknown'],
+  ['behaviour', 'behaviour hint', it => it.behaviour ? it.behaviour.hint : 'not run'],
+  ['none', 'no grouping', () => 'all rows'],
+];
+let grouping = 'family_type', sub = '';  // sub: the group shown, '' = all
+try { grouping = localStorage.getItem(STORE_KEY + '-grouping') || grouping; } catch {}
+if (!GROUPINGS.some(g => g[0] === grouping)) grouping = 'family_type';
+const groupOf = it => GROUPINGS.find(g => g[0] === grouping)[2](it);
+const spends = its => its.reduce((n, i) => n + i.seen, 0);
+
+// the groups of the tab (search applied, hide done not: a group stays while its rows get done)
+function tabGroups() {
+  const q = document.getElementById('q').value.trim().toLowerCase(), groups = new Map();
+  for (const it of ITEMS) {
+    if (it.tab !== tab || !matches(it, q)) continue;
+    const g = groupOf(it);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(it);
+  }
+  return [...groups].sort((a, b) => spends(b[1]) - spends(a[1]));
+}
+
+function renderSubtabs(groups) {
+  const bar = document.getElementById('subtabs');
+  bar.replaceChildren();
+  bar.hidden = grouping === 'none';
+  const all = groups.flatMap(g => g[1]);
+  for (const [g, its] of [['', all], ...groups]) {
+    const done = its.filter(i => get(i.id).status).length;
+    const b = el('button', 'subtab' + (its.length && done === its.length ? ' done' : ''), g || 'All');
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', g === sub);
+    b.append(el('span', 'n', `${done}/${its.length}`));
+    b.addEventListener('click', () => { sub = g; render(); window.scrollTo(0, 0); });
+    bar.append(b);
+  }
+}
+
+function render() {
+  const list = document.getElementById('list'), hide = document.getElementById('hideDone').checked;
+  document.getElementById('tabhelp').textContent = TABS.find(t => t[0] === tab)[2];
+  const groups = tabGroups();
+  if (sub && !groups.some(g => g[0] === sub)) sub = '';
+  renderSubtabs(groups);
+  list.replaceChildren();
+  let shown = 0;
+  for (const [g, its] of groups) {
+    if (sub && g !== sub) continue;
+    const rows = its.filter(it => !(hide && get(it.id).status));
+    if (!rows.length) continue;
+    if (grouping !== 'none') { const h = el('h2', null, g); h.append(el('span', 'n', `  ${rows.length}`)); list.append(h); }
+    for (const it of rows) list.append(rowEl(it));
+    shown += rows.length;
+  }
+  if (!shown) list.append(el('p', 'empty', 'No rows.'));
+}
+
+function counts() {
+  for (const b of document.querySelectorAll('.tab')) {
+    const its = ITEMS.filter(i => i.tab === b.dataset.tab), done = its.filter(i => get(i.id).status).length;
+    b.querySelector('.n').textContent = `${done}/${its.length}`;
+  }
+  renderSubtabs(tabGroups());
+}
+
+const tabs = document.getElementById('tabs');
+for (const [id, label] of TABS) {
+  const b = el('button', 'tab', label); b.type = 'button'; b.dataset.tab = id; b.setAttribute('role', 'tab');
+  b.setAttribute('aria-selected', id === tab); b.append(el('span', 'n'));
+  b.addEventListener('click', () => {
+    tab = id; sub = ''; try { localStorage.setItem(STORE_KEY + '-tab', id); } catch {}
+    tabs.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === id)); render(); window.scrollTo(0, 0);
+  });
+  tabs.append(b);
+}
+const dl = el('datalist'); dl.id = 'projects';
+for (const p of VOCAB.project) { const o = el('option'); o.value = plabel(p); dl.append(o); }
+document.body.append(dl);
+
+// group by: a button with a menu
+const groupBtn = document.getElementById('groupBtn'), groupPop = document.getElementById('groupPop');
+function groupLabel() { groupBtn.textContent = 'Group by: ' + GROUPINGS.find(g => g[0] === grouping)[1] + ' ▾'; }
+function openGroups(open) { groupPop.hidden = !open; groupBtn.setAttribute('aria-expanded', open); }
+for (const [id, label] of GROUPINGS) {
+  const b = el('button', null, label); b.type = 'button'; b.setAttribute('role', 'menuitemradio'); b.dataset.g = id;
+  b.addEventListener('click', () => {
+    grouping = id; sub = ''; try { localStorage.setItem(STORE_KEY + '-grouping', id); } catch {}
+    groupPop.querySelectorAll('button').forEach(x => x.setAttribute('aria-checked', x.dataset.g === id));
+    groupLabel(); openGroups(false); render(); window.scrollTo(0, 0);
+  });
+  b.setAttribute('aria-checked', id === grouping);
+  groupPop.append(b);
+}
+groupLabel();
+groupBtn.addEventListener('click', e => { e.stopPropagation(); openGroups(groupPop.hidden); });
+document.addEventListener('click', e => { if (!groupPop.hidden && !groupPop.contains(e.target)) openGroups(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !groupPop.hidden) { openGroups(false); groupBtn.focus(); } });
+
+// the fields overlay: what each field means, its values, where a value comes from
+const LEGEND = [
+  ['family', 'How the coin lives, from its outer layer: every child of a CAT is the same CAT, a singleton is one coin that goes on with its lineage checked. Usually a wrapper layer gives it (CAT, singleton top layer); a contract that checks its own lineage gives it too. A known outer layer with neither = a plain XCH coin.', VOCAB.desc.family],
+  ['puzzle_type', 'What the coin is: the outermost purpose layer inside the family layer (an NFT state layer, a pool, a pair…); with none, the asset held (XCH or CAT).', VOCAB.desc.puzzle_type],
+  ['custody', 'Who can spend it: found by walking the innermost puzzle of an example spend.', VOCAB.desc.custody],
+  ['project', 'Who leads the puzzle: of the projects of its layers (their source folders in the catalog), the one with the strongest role: an app before a framework, a framework before the base (chia). The others, without the base, show under the field as "depends on". Change a label in puzzle_types.json to rename a value (of any field).', null],
+];
+const ORIGINS = {
+  'layer N': 'the value of the Nth layer in the catalog', 'layer 1, own lineage': 'the outer layer is a contract that checks its own lineage (not a wrapper)', 'walk': 'found in an example spend', 'held': 'no purpose layer: the asset held',
+  'guessed': 'no example to walk: a guess', 'app contract': 'the layers are an app’s own contract, no puzzle type', 'set': 'set by hand in layered_puzzles.json',
+  'not known': 'no layer gives it', 'unknown layer': 'a layer is not in the catalog', 'unknown outer layer': 'the outer layer is not in the catalog',
+};
+const legendBody = document.getElementById('legendBody');
+for (const [f, text, values] of LEGEND) {
+  legendBody.append(el('h3', null, LABEL[f]), el('p', null, text));
+  const dlist = el('dl');
+  if (values) for (const [k, v] of Object.entries(values)) dlist.append(el('dt', null, lab(f, k)), el('dd', null, v));
+  else for (const [k, v] of Object.entries(VOCAB.projects)) dlist.append(el('dt', null, v.label || k), el('dd', null, (v.role ? v.role + ' · ' : '') + 'sources: ' + (v.sources || [k]).join(', ')));
+  legendBody.append(dlist);
+}
+legendBody.append(el('h3', null, 'behaviour'), el('p', null, 'A hint, never saved: spends of the group were run with their on-chain solution (chain_scan/behaviour.py). The outer layer’s own conditions are removed first (the CAT ring, the singleton’s lineage checks: measured on the chain), then each spend gets a class. The group gets the class of 80% of its spends, else mixed. Most unknown puzzles were spent once or twice ever: look at the number of spends run.'));
+const hdl = el('dl'); for (const [k, v] of Object.entries(HINTS)) hdl.append(el('dt', null, k), el('dd', null, v));
+hdl.append(el('dt', null, 'custody hint'), el('dd', null, 'the custodies the class fits, when the layers give none (or unknown, hidden)'));
+hdl.append(el('dt', null, 'template'), el('dd', null, 'what the spends output, one line per mode (the class of the spend; "nothing": no condition once the outer layer’s are removed). The core is output by 95% of the mode’s spends (what it always does), [optional] by fewer, with their share (what the user chose: change, fee, offer); x1-33 = how many. Modes under 1% are only counted as rare. Same template: the other puzzles with the same core in their modes of 10% or more.'));
+hdl.append(el('dt', null, 'like'), el('dd', null, 'the known puzzles whose spends output the most alike: their custody is often the same, their puzzle type not (an XCH offer and a CAT offer output alike)'));
+hdl.append(el('dt', null, 'disagrees'), el('dd', null, 'the class does not fit the custody the catalog gives (checked for key, keys, singleton, offer, anyone)'));
+legendBody.append(hdl);
+legendBody.append(el('h3', null, 'project roles'), el('p', null, 'Set per project in puzzle_types.json (none = app):'));
+const rdl = el('dl'); for (const [k, v] of Object.entries(VOCAB.project_roles || {})) rdl.append(el('dt', null, k), el('dd', null, v)); legendBody.append(rdl);
+legendBody.append(el('h3', null, 'from: …'), el('p', null, 'Under each field, where its value comes from:'));
+const odl = el('dl'); for (const [k, v] of Object.entries(ORIGINS)) odl.append(el('dt', null, k), el('dd', null, v)); legendBody.append(odl);
+const legend = document.getElementById('legend');
+document.getElementById('legendBtn').addEventListener('click', () => legend.showModal());
+document.getElementById('legendClose').addEventListener('click', () => legend.close());
+legend.addEventListener('click', e => { if (e.target === legend) legend.close(); });
+
+let timer;
+document.getElementById('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 150); });
+document.getElementById('hideDone').addEventListener('change', render);
+const status = t => { document.getElementById('status').textContent = t; };
+
+// export: every verdict (to import again) and the OK rows as names for apply_review.py
+document.getElementById('export').addEventListener('click', () => {
+  const byId = new Map(ITEMS.map(i => [i.id, i]));
+  const names = [];
+  for (const [id, s] of Object.entries(state)) {
+    const it = byId.get(id);
+    if (!it || s.status !== 'ok') continue;
+    const n = { id, name: nameOf(it).trim() };
+    for (const f of FIELDS) if (s[f] && s[f] !== it.fields[f]) n[f] = s[f];
+    names.push(n);
+  }
+  const out = { format: 'chain-names-review/1', exportedAt: new Date().toISOString(), names, verdicts: state };
+  const a = el('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+  a.download = `verdicts-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(a.href);
+  status(`Exported ${Object.keys(state).length} rows, ${names.length} OK.`);
+});
+document.getElementById('import').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (d.format !== 'chain-names-review/1' || typeof d.verdicts !== 'object') throw new Error('not a verdicts file of this page');
+    const n = Object.keys(d.verdicts).length;
+    if (!confirm(`Replace the ${Object.keys(state).length} verdicts in this browser with the ${n} of ${f.name}?`)) return;
+    state = d.verdicts; save(); render(); counts(); status(`Imported ${n} rows from ${f.name}.`);
+  } catch (err) { status('Could not import: ' + err.message); }
+});
+render(); counts();
+</script>
+</body>
+</html>
