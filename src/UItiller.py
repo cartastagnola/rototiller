@@ -454,6 +454,9 @@ def interFace(stdscr):
                     now = int(time.time())
                     n_points = now % 4
                     loading_text = f"{names_text} - loading{'.' * n_points}{' ' * (3 - n_points)}"
+                    # with many threads it is longer than the window: keep its end
+                    if len(loading_text) > width - 3:
+                        loading_text = '…' + loading_text[-(width - 4):]
                     loading_len = len(loading_text) + 3
 
                     y, x = 0, width - loading_len

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import curses
+import src.CONFtiller as CONF
 import src.TYPEStiller as TYPE
 
 

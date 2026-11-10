@@ -1,7 +1,9 @@
 from __future__ import annotations
+import contextlib
 import json
 import os
 import re  # clvm formatter
+import threading
 
 #from clvm_tools.binutils import disassemble as bu_disassemble
 #from chia.wallet.util.debug_spend_bundle import disassemble
@@ -17,6 +19,7 @@ from chia.wallet.util.debug_spend_bundle import uncurry_dump
 
 from chia_rs import Program as RsProgram
 from chia_rs import G1Element, G2Element
+from chia_rs import is_canonical_serialization, serialized_length, tree_hash
 from chia_rs.sized_bytes import bytes32
 from chia.wallet.cat_wallet.cat_utils import CAT_MOD_HASH
 from chia.wallet.nft_wallet.nft_puzzles import NFT_OWNERSHIP_LAYER_HASH, NFT_STATE_LAYER_MOD_HASH
@@ -72,7 +75,7 @@ def get_puzzle_reveals_and_solutions(spend_bundle: str):
     return reveals, solutions
 
 
-# In a key, a known puzzle curried in two steps: the program curried once is not a layer of
+# In a layered puzzle fingerprint, a known puzzle curried in two steps: the program curried once is not a layer of
 # its own (its hash changes with the data curried in it), it is marked with CURRIED_AGAIN and
 # the known puzzle follows it. Eg: every Forge pool is
 # singleton_top_layer_v1_1|action|+|forge_multi_reserve_finalizer|forge_reserve_amount
@@ -82,7 +85,7 @@ CURRIED_AGAIN_NAME = '(curried again)'
 
 def known_base_of(program: PyProgram):
     """The hash of the known puzzle that a curried program is made of, uncurrying it as many
-    times as needed, or None. Only the shared catalog counts (the key is the same everywhere)."""
+    times as needed, or None. Only the shared catalog counts (the fingerprint is the same everywhere)."""
     for _ in range(8):
         base, _ = program.uncurry()
         if base == program:
@@ -94,9 +97,9 @@ def known_base_of(program: PyProgram):
     return None
 
 
-# keys of the puzzles that are not curried and not in the catalog (SCAN.classify_puzzle)
-QUOTED_CONDITIONS_KEY = 'quoted_conditions'  # a puzzle that only returns its conditions: (q . conditions)
-SHAPE_KEY_PREFIX = 'shape_'  # code not curried, grouped by shape
+# fingerprints of the puzzles that are not curried and not in the catalog (SCAN.classify_puzzle)
+QUOTED_CONDITIONS_FINGERPRINT = 'quoted_conditions'  # a puzzle that only returns its conditions: (q . conditions)
+SHAPE_FINGERPRINT_PREFIX = 'shape_'  # code not curried, grouped by shape
 
 
 # --- Classification of a layer combination ------------------------------------------
@@ -109,7 +112,7 @@ SHAPE_KEY_PREFIX = 'shape_'  # code not curried, grouped by shape
 HELD_CUSTODIES = ('KEY', 'KEYS', 'OFFER', 'SINGLETON', 'ANYONE')  # someone holds the coin
 FAMILY_ASSET = {'XCH': 'XCH', 'CAT': 'CAT', 'SINGLETON': 'SINGLETON'}  # the type of a held coin
 CHIA_PROJECT = 'chia'
-_custody_cache = {}  # puzzle key -> (custody, origin): puzzles.json is read once, at start
+_custody_cache = {}  # layered puzzle fingerprint -> (custody, origin): puzzles.json is read once, at start
 
 
 def uncurry_fully(program: PyProgram):
@@ -126,6 +129,87 @@ def uncurry_fully(program: PyProgram):
             return mod_hash, [arg for level in reversed(levels) for arg in level]
         program = mod
     return None, None
+
+
+_depth_cache = {}  # layered puzzle fingerprint -> depth
+
+
+def puzzle_depth(puzzle_reveal: bytes) -> int:
+    """How many puzzles deep a puzzle is: its layer, plus the deepest of the curried programs it
+    holds as arguments (the inner puzzle, a transfer program...). The same nodes as the layers of
+    unroll_puzzle_to_names: a puzzle of the catalog is 1 and ends the walk; a puzzle curried in
+    two steps (CURRIED_AGAIN) is one level, the args of both curries are its children; args that
+    are not curried are not layers. Programs side by side do not add up: the deepest counts.
+    0 when the puzzle is not curried.
+
+    It works on the serialized puzzle, a node is its offset in the bytes: the hashes are
+    chia_rs.tree_hash of the bytes of the node and only the curry wrappers are read, 7x faster
+    than uncurry and get_tree_hash, which serialize every program again (0.5 s for 1,227
+    puzzles)."""
+    blob = bytes(puzzle_reveal)
+    if not is_canonical_serialization(blob):  # back references (0xfe): written again without
+        blob = bytes(PyProgram.from_bytes(blob))
+    mv = memoryview(blob)
+    PAIR, NIL = 0xff, 0x80
+
+    def length(s):
+        return serialized_length(mv[s:])
+
+    def rest(s):  # s is a pair: where its second element starts
+        return s + 1 + length(s + 1)
+
+    def is_known(s):
+        return tree_hash(mv[s:s + length(s)]).hex() in CONF.KNOWN_PUZZLES
+
+    def uncurry(s):
+        """(mod, [args]) of (a (q . mod) (c (q . arg) (c ... 1))), offsets; (None, None)
+        when it is not curried. The small atoms (a=2, q=1, c=4) are one byte"""
+        # (2 . ((1 . mod) . (args . ())))
+        if mv[s] != PAIR or mv[s + 1] != 0x02 or mv[s + 2] != PAIR:
+            return None, None
+        quoted = s + 3
+        if mv[quoted] != PAIR or mv[quoted + 1] != 0x01:
+            return None, None
+        mod = quoted + 2
+        tail = rest(s + 2)
+        if mv[tail] != PAIR or mv[rest(tail)] != NIL:
+            return None, None
+        node, args = tail + 1, []
+        # (4 . ((1 . arg) . (next . ())))
+        while mv[node] == PAIR:
+            if mv[node + 1] != 0x04 or mv[node + 2] != PAIR:
+                return None, None
+            quoted = node + 3
+            if mv[quoted] != PAIR or mv[quoted + 1] != 0x01:
+                return None, None
+            args.append(quoted + 2)
+            tail = rest(node + 2)
+            if mv[tail] != PAIR or mv[rest(tail)] != NIL:
+                return None, None
+            node = tail + 1
+        if mv[node] != 0x01:
+            return None, None
+        return mod, args
+
+    def depth(s, level):
+        if level > 30 or is_known(s):
+            return 1
+        args, curried, program = [], False, s
+        for _ in range(8):  # the curries of this layer, down to its mod
+            mod, curried_args = uncurry(program)
+            if mod is None:
+                break
+            curried = True
+            args += curried_args
+            if is_known(mod):
+                break
+            program = mod
+        if not curried:
+            return 0
+        children = [depth(a, level + 1) for a in args if mv[a] == PAIR and uncurry(a)[0] is not None]
+        return 1 + max(children, default=0)
+
+    return depth(0, 0)
 
 
 def walk_custody(puzzle: PyProgram):
@@ -162,17 +246,17 @@ def walk_custody(puzzle: PyProgram):
 
 
 def source_projects(puzzle_hash: str) -> set:
-    """The projects of a base puzzle: its project field, else the projects of its sources"""
+    """The project ids of a base puzzle: its project field, else the projects of its sources"""
     entry = CONF.KNOWN_PUZZLES.get(puzzle_hash, {})
     if entry.get('project'):
         return {entry['project']}
-    project_of = {source: project for project, sources in CONF.PUZZLE_TYPES.get('projects', {}).items()
-                  for source in sources}
+    project_of = {source: project for project, p in CONF.PUZZLE_TYPES.get('projects', {}).items()
+                  for source in p.get('sources', [])}
     return {project_of.get(source.get('project'), source.get('project')) for source in entry.get('sources', [])}
 
 
 def known_projects() -> list:
-    """Every project of the catalog: the projects list of puzzle_types.json and the projects of
+    """Every project id of the catalog: the projects of puzzle_types.json and the projects of
     the sources and of the project fields of catalog/puzzles.json"""
     projects = set(CONF.PUZZLE_TYPES.get('projects', {}))
     for puzzle_hash in CONF.KNOWN_PUZZLES:
@@ -181,53 +265,218 @@ def known_projects() -> list:
     return sorted(projects)
 
 
-def layer_hashes(puzzle_key: str) -> list:
-    """The layers of a key, without the CURRIED_AGAIN markers"""
-    return [h for h in puzzle_key.split('|') if h != CURRIED_AGAIN]
+# every list of puzzle_types.json (families, types, custodies, projects) maps an id to a label:
+# the code and the json files keep the id, the screens show the label, so a value is renamed by
+# changing its label only. Only a power user reading the json sees the ids.
+FIELD_LISTS = {'family': 'families', 'puzzle_type': 'types', 'custody': 'custodies', 'project': 'projects'}
 
 
-def all_layers_known(puzzle_key: str) -> bool:
-    if puzzle_key == QUOTED_CONDITIONS_KEY:
+def field_entries(field: str) -> dict:
+    return CONF.PUZZLE_TYPES.get(FIELD_LISTS[field], {})
+
+
+def field_values(field: str) -> list:
+    """The ids of a list; for the project, also the projects of the catalog's sources"""
+    return known_projects() if field == 'project' else list(field_entries(field))
+
+
+def value_label(field: str, value) -> str:
+    """The label of an id; 'a + b' (an undecided project) gives each label"""
+    if not value:
+        return value
+    entries = field_entries(field)
+    return ' + '.join((entries.get(v) or {}).get('label', v) for v in value.split(' + '))
+
+
+def value_id(field: str, label: str) -> str:
+    """The id of a label; a label that is not in the list is a new id"""
+    return next((v for v, e in field_entries(field).items() if e.get('label', v) == label), label)
+
+
+def value_description(field: str, value: str) -> str:
+    return (field_entries(field).get(value) or {}).get('description', '')
+
+
+def project_label(project) -> str:
+    return value_label('project', project)
+
+
+def project_id(label: str) -> str:
+    return value_id('project', label)
+
+
+# --- editing the lists of puzzle_types.json (the lists view) --------------------------------
+
+# the ids the code decides from: they can be renamed (label) but not deleted
+CODE_VALUES = {'family': {'XCH', 'CAT', 'SINGLETON', 'UNKNOWN'},
+               'puzzle_type': set(FAMILY_ASSET.values()),
+               'custody': set(HELD_CUSTODIES) | {'CONTRACT', 'HIDDEN', 'UNKNOWN'},
+               'project': {CHIA_PROJECT, 'unknown'}}
+PROJECT_ROLES = ('app', 'framework', 'base')
+
+
+def new_value_id(field: str, label: str) -> str:
+    """An id for a new value, made from its label (projects lowercase, the others uppercase),
+    not used yet in its list"""
+    base = re.sub(r'[^0-9A-Za-z]+', '_', label).strip('_') or 'VALUE'
+    base = base.lower() if field == 'project' else base.upper()
+    value, n = base, 2
+    while value in field_entries(field):
+        value, n = f"{base}_{n}", n + 1
+    return value
+
+
+def value_uses(field: str, value: str) -> int:
+    """How many entries of the catalog files name the value: the hand fields of
+    catalog/puzzles.json (for a project, also the sources it groups), the overrides of
+    catalog/layered_puzzles.json"""
+    n = sum(1 for e in CONF.KNOWN_LAYERED_PUZZLES.values() if e.get(field) == value)
+    for e in CONF.KNOWN_PUZZLES.values():
+        if e.get(field) == value:
+            n += 1
+        elif field == 'project' and not e.get('project') and value in source_projects(e.get('puzzle_hash', '')):
+            n += 1
+    return n
+
+
+def dump_puzzle_types(data: dict) -> str:
+    """puzzle_types.json with one value per line, as it is written by hand"""
+    parts = []
+    for name, values in data.items():
+        if isinstance(values, dict):
+            body = ',\n'.join(f'        {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}' for k, v in values.items())
+            parts.append(f'    {json.dumps(name)}: {{\n{body}\n    }}')
+        else:
+            parts.append(f'    {json.dumps(name)}: {json.dumps(values, ensure_ascii=False)}')
+    return '{\n' + ',\n'.join(parts) + '\n}\n'
+
+
+def edit_puzzle_types(change):
+    """Read catalog/puzzle_types.json from disk, apply change(data) and write it back (one value
+    per line), then update the lists in memory. Raise ValueError if the file is not valid json
+    (it is never overwritten)."""
+    path = CONF.PUZZLE_TYPES_PATH
+    with CONF.LAYERED_PUZZLES_LOCK:
+        with open(path, 'r') as f:
+            data = json.loads(f.read())
+        if change(data) is False:
+            return
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, 'w') as f:
+            f.write(dump_puzzle_types(data))
+        os.replace(tmp_path, path)
+        _catalog_file_stamps[path] = _file_stamp(path)
+        _replace_in_place(CONF.PUZZLE_TYPES, data)
+    bump_catalog_generation()
+
+
+def save_list_value(field: str, value: str, label: str, description: str, role: str = None,
+                    sources: list = None) -> str:
+    """Add (value None: a new id from the label) or change a value of a list. Return its id."""
+    label = label.strip()
+    if not label:
+        raise ValueError('the label is empty')
+    if any(e.get('label', v) == label for v, e in field_entries(field).items() if v != value):
+        raise ValueError(f'"{label}" is already a label of this list')
+    value = value or new_value_id(field, label)
+
+    def change(data):
+        entries = data.setdefault(FIELD_LISTS[field], {})
+        entry = dict(entries.get(value, {}))
+        entry['label'] = label
+        if field == 'project':
+            entry.pop('description', None)
+            if description.strip():
+                entry['description'] = description.strip()
+            if role and role != 'app':
+                entry['role'] = role
+            else:
+                entry.pop('role', None)
+            if sources:
+                entry['sources'] = sources
+            else:
+                entry.pop('sources', None)
+        else:
+            entry['description'] = description.strip()
+        entries[value] = entry
+    edit_puzzle_types(change)
+    return value
+
+
+def delete_list_value(field: str, value: str):
+    """Delete a value no catalog entry and no code uses (ValueError otherwise)"""
+    if value in CODE_VALUES.get(field, ()):
+        raise ValueError('the code uses this value: it can be renamed, not deleted')
+    uses = value_uses(field, value)
+    if uses:
+        raise ValueError(f'{uses} catalog entries use this value')
+    edit_puzzle_types(lambda data: data.get(FIELD_LISTS[field], {}).pop(value, None) is not None or False)
+
+
+# the role of a project (project_roles in puzzle_types.json) decides which project of the
+# layers leads a puzzle: an app before a framework, a framework before the base (chia)
+PROJECT_ROLE_RANK = {'base': 0, 'framework': 1, 'app': 2}
+
+
+def project_role(project: str) -> str:
+    return CONF.PUZZLE_TYPES.get('projects', {}).get(project, {}).get('role', 'app')
+
+
+def layer_hashes(layered_puzzle_fingerprint: str) -> list:
+    """The layers of a layered puzzle fingerprint, without the CURRIED_AGAIN markers"""
+    return [h for h in layered_puzzle_fingerprint.split('|') if h != CURRIED_AGAIN]
+
+
+def all_layers_known(layered_puzzle_fingerprint: str) -> bool:
+    if layered_puzzle_fingerprint == QUOTED_CONDITIONS_FINGERPRINT:
         return True
-    return all(h in CONF.KNOWN_PUZZLES for h in layer_hashes(puzzle_key))
+    return all(h in CONF.KNOWN_PUZZLES for h in layer_hashes(layered_puzzle_fingerprint))
 
 
-def classify_key(puzzle_key: str, puzzle: PyProgram = None, overrides: bool = True) -> dict:
+def classify_fingerprint(layered_puzzle_fingerprint: str, puzzle: PyProgram = None, overrides: bool = True) -> dict:
     """name, family, puzzle_type, custody, project of a layer combination, each value with
     its origin: 'set' (layered_puzzles.json), 'layer N', 'walk', 'guessed', 'held', ...
-    puzzle: a puzzle reveal with this key, for the custody (cached per key).
+    puzzle: a puzzle reveal with this fingerprint, for the custody (cached per fingerprint).
     overrides=False: what the layers give, without the entry's overrides."""
-    entry = (CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key) or {}) if overrides else {}
+    entry = (CONF.KNOWN_LAYERED_PUZZLES.get(layered_puzzle_fingerprint) or {}) if overrides else {}
     out = {'name': entry.get('name')}
-    if puzzle_key == QUOTED_CONDITIONS_KEY:
+    if layered_puzzle_fingerprint == QUOTED_CONDITIONS_FINGERPRINT:
         out.update(family=('XCH', 'quoted conditions'), custody=('ANYONE', 'quoted conditions'),
-                   puzzle_type=('XCH', 'held'), project=(CHIA_PROJECT, 'quoted conditions'))
+                   puzzle_type=('XCH', 'held'), project=(CHIA_PROJECT, 'quoted conditions'),
+                   project_dependencies=([], 'quoted conditions'))
         return out
-    if puzzle_key.startswith(SHAPE_KEY_PREFIX):
-        out.update(family=(None, 'unknown code'), custody=('UNKNOWN', 'unknown code'),
-                   puzzle_type=(None, 'unknown code'), project=('unknown', 'unknown code'))
+    if layered_puzzle_fingerprint.startswith(SHAPE_FINGERPRINT_PREFIX):
+        out.update(family=('UNKNOWN', 'unknown code'), custody=('UNKNOWN', 'unknown code'),
+                   puzzle_type=(None, 'unknown code'), project=('unknown', 'unknown code'),
+                   project_dependencies=([], 'unknown code'))
         return out
-    layers = layer_hashes(puzzle_key)
+    layers = layer_hashes(layered_puzzle_fingerprint)
     fields = [CONF.KNOWN_PUZZLES.get(h, {}) for h in layers]
 
-    # family: the outer layer
-    family_layer = bool(fields) and 'family' in fields[0]
+    # family: the outer layer. A layer with a family is a wrapper (skipped for the puzzle type
+    # and the label) when it also wraps an inner puzzle (inner_arg); without one it is a contract
+    # that keeps its own lineage (e.g. circuit's announcer), its family is its behavior
+    family_layer = bool(fields) and 'family' in fields[0] and 'inner_arg' in fields[0]
     if 'family' in entry:
         out['family'] = (entry['family'], 'set')
     elif family_layer:
         out['family'] = (fields[0]['family'], 'layer 1')
+    elif fields and 'family' in fields[0]:
+        out['family'] = (fields[0]['family'], 'layer 1, own lineage')
     elif layers and layers[0] in CONF.KNOWN_PUZZLES:
         out['family'] = ('XCH', 'no family layer')
     else:
-        out['family'] = ('XCH', 'unknown outer layer')
+        # not XCH: an unknown outer layer may wrap the coin (a CAT or singleton build not in
+        # the catalog)
+        out['family'] = ('UNKNOWN', 'unknown outer layer')
 
     # custody: the innermost puzzle
     if 'custody' in entry:
         out['custody'] = (entry['custody'], 'set')
-    elif puzzle_key in _custody_cache:
-        out['custody'] = _custody_cache[puzzle_key]
+    elif layered_puzzle_fingerprint in _custody_cache:
+        out['custody'] = _custody_cache[layered_puzzle_fingerprint]
     elif puzzle is not None:
-        out['custody'] = _custody_cache[puzzle_key] = walk_custody(puzzle)
+        out['custody'] = _custody_cache[layered_puzzle_fingerprint] = walk_custody(puzzle)
     elif len(layers) == 1 and layers[0] in CONF.KNOWN_PUZZLES:
         out['custody'] = (fields[0].get('custody', 'CONTRACT'), 'layer 1')
     else:
@@ -247,39 +496,46 @@ def classify_key(puzzle_key: str, puzzle: PyProgram = None, overrides: bool = Tr
         else:
             out['puzzle_type'] = (None, 'app contract' if out['custody'][0] == 'CONTRACT' else 'not known')
 
-    # project: the projects of the layers, without chia's own
+    # project: the lead, the projects of the layers with the strongest role (app > framework >
+    # base); the other ones, without the base, are its dependencies
+    projects = set()
+    for h in layers:
+        projects |= source_projects(h)
+    projects.discard(None)
     if 'project' in entry:
         out['project'] = (entry['project'], 'set')
     else:
-        projects = set()
-        for h in layers:
-            projects |= source_projects(h)
-        projects.discard(CHIA_PROJECT)
-        if len(projects) == 1:
-            out['project'] = (projects.pop(), 'layers')
-        elif projects:
-            out['project'] = (' + '.join(sorted(projects)), 'undecided')
-        elif any(h not in CONF.KNOWN_PUZZLES for h in layers):
+        rank = max((PROJECT_ROLE_RANK.get(project_role(p), 2) for p in projects), default=0)
+        lead = {p for p in projects if PROJECT_ROLE_RANK.get(project_role(p), 2) == rank}
+        if rank == 0 and any(h not in CONF.KNOWN_PUZZLES for h in layers):
+            # only the base is known: the unknown layer may be an app's
             out['project'] = ('unknown', 'unknown layer')
+        elif len(lead) == 1:
+            out['project'] = (lead.pop(), 'layers')
+        elif lead:
+            out['project'] = (' + '.join(sorted(lead)), 'undecided')
         else:
             out['project'] = (CHIA_PROJECT, 'layers')
+    leads = set((out['project'][0] or '').split(' + '))
+    out['project_dependencies'] = (sorted(p for p in projects if p not in leads and project_role(p) != 'base'),
+                                   'layers')
     return out
 
 
-def classification_label(c: dict, puzzle_key: str) -> str:
+def classification_label(c: dict, layered_puzzle_fingerprint: str) -> str:
     """The name of a combination, or a label made from its classification"""
     if c.get('name'):
         return c['name']
-    puzzle_type, custody = c['puzzle_type'][0], c['custody'][0]
+    puzzle_type, custody = value_label('puzzle_type', c['puzzle_type'][0]), value_label('custody', c['custody'][0])
     if puzzle_type:
         return f"{puzzle_type} ({custody})" if custody else puzzle_type
-    inside = layer_hashes(puzzle_key)[1 if c['family'][1] == 'layer 1' else 0:]
+    inside = layer_hashes(layered_puzzle_fingerprint)[1 if c['family'][1] == 'layer 1' else 0:]
     core = next((CONF.KNOWN_PUZZLES[h]['name'].lstrip('-').split('-')[-1] for h in inside
                  if h in CONF.KNOWN_PUZZLES), None)
     if core:
-        return f"{c['project'][0]}: {core}"
+        return f"{project_label(c['project'][0])}: {core}"
     # nothing known inside: the name it has in puzzle_harvesting/, if any
-    return CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, {}).get('name')
+    return CONF.UNKNOWN_LAYERED_PUZZLES.get(layered_puzzle_fingerprint, {}).get('name')
 
 
 def compare_to_known_puzzles(puzzle_hash):
@@ -374,36 +630,87 @@ def update_catalog_file(path, target: dict, change):
     _replace_in_place(target, data)
 
 
-def save_layered_puzzle(puzzle_key: str, sub_hashes: list, sub_names: list):
+# --- harvesting in batches: a backfill adds hundreds of entries, each write rewrites a whole
+# (several MB) json file. Inside harvest_batch() the files are written once, at the end.
+_harvest_batch_depth = 0
+_harvest_dirty = set()  # paths to write when the batch ends
+_harvest_batch_lock = threading.Lock()
+
+
+def _write_harvest_file(path, data: dict):
+    with _harvest_batch_lock:
+        if _harvest_batch_depth:
+            _harvest_dirty.add(path)
+            return
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
+@contextlib.contextmanager
+def harvest_batch():
+    global _harvest_batch_depth
+    with _harvest_batch_lock:
+        _harvest_batch_depth += 1
+    try:
+        yield
+    finally:
+        with _harvest_batch_lock:
+            _harvest_batch_depth -= 1
+            paths = set(_harvest_dirty) if _harvest_batch_depth == 0 else set()
+            if paths:
+                _harvest_dirty.clear()
+        for path in paths:
+            if path == CONF.UNKNOWN_PUZZLES_PATH:
+                with CONF.UNKNOWN_PUZZLES_LOCK:
+                    _write_harvest_file(path, CONF.UNKNOWN_PUZZLES)
+            else:
+                with CONF.UNKNOWN_LAYERED_PUZZLES_LOCK:
+                    _write_harvest_file(path, CONF.UNKNOWN_LAYERED_PUZZLES)
+
+
+# the generation of the catalog files: incremented when they change (reload, a name saved, a
+# list edited), so the classifications cached by the screens are computed again
+_catalog_generation = 0
+
+
+def catalog_generation() -> int:
+    return _catalog_generation
+
+
+def bump_catalog_generation():
+    global _catalog_generation
+    _catalog_generation += 1
+
+
+def save_layered_puzzle(layered_puzzle_fingerprint: str, sub_hashes: list, sub_names: list):
     """Save a layer combination with an unknown layer in puzzle_harvesting/layered_puzzles.json,
     named unknown_layered_NN, and return its name. A combination whose layers are all known is
-    not saved: its classification comes from its layers (classify_key).
+    not saved: its classification comes from its layers (classify_fingerprint).
     The catalog (catalog/layered_puzzles.json) is written only when the user saves a name."""
     with CONF.UNKNOWN_LAYERED_PUZZLES_LOCK:
         target = CONF.UNKNOWN_LAYERED_PUZZLES
-        if puzzle_key in target:
-            return target[puzzle_key]['name']
+        if layered_puzzle_fingerprint in target:
+            return target[layered_puzzle_fingerprint]['name']
         numbers = [int(e['name'].rsplit('_', 1)[-1]) for e in target.values()
                    if e.get('name', '').startswith('unknown_layered_') and e['name'].rsplit('_', 1)[-1].isdigit()]
         name = f"unknown_layered_{max(numbers, default=0) + 1:02d}"
-        target[puzzle_key] = {'name': name, 'sub_puzzle_hashes': sub_hashes, 'sub_puzzle_names': sub_names}
+        target[layered_puzzle_fingerprint] = {'name': name, 'sub_puzzle_hashes': sub_hashes, 'sub_puzzle_names': sub_names}
         # local file, only roto writes it
-        with open(CONF.UNKNOWN_LAYERED_PUZZLES_PATH, 'w') as f:
-            json.dump(target, f, indent=4)
+        _write_harvest_file(CONF.UNKNOWN_LAYERED_PUZZLES_PATH, target)
         return name
 
 
-def harvest_unknown(puzzle_key: str, sub_puzzle_hashes: list, puzzle: PyProgram):
+def harvest_unknown(layered_puzzle_fingerprint: str, sub_puzzle_hashes: list, puzzle: PyProgram):
     """Put a combination with an unknown layer in puzzle_harvesting/: the combination in
     layered_puzzles.json (unknown_layered_NN) and its unknown puzzles in puzzles.json
-    (unknown_puzz_NN, by unroll_puzzle_to_nodes). Called by the scanners for the keys they
+    (unknown_puzz_NN, by unroll_puzzle_to_nodes). Called by the scanners for the fingerprints they
     see first; a known or named combination, or one already harvested, is skipped.
     Return True if something was added."""
-    if (puzzle_key in CONF.KNOWN_LAYERED_PUZZLES or puzzle_key in CONF.UNKNOWN_LAYERED_PUZZLES
-            or puzzle_key.startswith((QUOTED_CONDITIONS_KEY, SHAPE_KEY_PREFIX)) or all_layers_known(puzzle_key)):
+    if (layered_puzzle_fingerprint in CONF.KNOWN_LAYERED_PUZZLES or layered_puzzle_fingerprint in CONF.UNKNOWN_LAYERED_PUZZLES
+            or layered_puzzle_fingerprint.startswith((QUOTED_CONDITIONS_FINGERPRINT, SHAPE_FINGERPRINT_PREFIX)) or all_layers_known(layered_puzzle_fingerprint)):
         return False
     unroll_puzzle_to_nodes(puzzle)  # saves the unknown puzzles
-    save_layered_puzzle(puzzle_key, sub_puzzle_hashes, [compare_to_known_puzzles(h) for h in sub_puzzle_hashes])
+    save_layered_puzzle(layered_puzzle_fingerprint, sub_puzzle_hashes, [compare_to_known_puzzles(h) for h in sub_puzzle_hashes])
     return True
 
 
@@ -412,15 +719,15 @@ def compare_unrolled_puzzle_to_known_layered_puzzles(sub_puzzle_hashes: list, pu
     its name, or a label made from its classification. A combination with an unknown layer that
     is not in the catalog is saved in puzzle_harvesting/layered_puzzles.json.
     puzzle: the puzzle reveal, for the custody."""
-    puzzle_key = '|'.join(sub_puzzle_hashes)
-    named = puzzle_key in CONF.KNOWN_LAYERED_PUZZLES and CONF.KNOWN_LAYERED_PUZZLES[puzzle_key].get('name')
-    if not named and not all_layers_known(puzzle_key):
-        harvest_name = CONF.UNKNOWN_LAYERED_PUZZLES.get(puzzle_key, {}).get('name') or save_layered_puzzle(
-            puzzle_key, sub_puzzle_hashes, [compare_to_known_puzzles(h) for h in sub_puzzle_hashes])
-        c = classify_key(puzzle_key, puzzle)
-        return c['puzzle_type'][0] or '-', harvest_name
-    c = classify_key(puzzle_key, puzzle)
-    return c['puzzle_type'][0] or '-', classification_label(c, puzzle_key)
+    layered_puzzle_fingerprint = '|'.join(sub_puzzle_hashes)
+    named = layered_puzzle_fingerprint in CONF.KNOWN_LAYERED_PUZZLES and CONF.KNOWN_LAYERED_PUZZLES[layered_puzzle_fingerprint].get('name')
+    if not named and not all_layers_known(layered_puzzle_fingerprint):
+        harvest_name = CONF.UNKNOWN_LAYERED_PUZZLES.get(layered_puzzle_fingerprint, {}).get('name') or save_layered_puzzle(
+            layered_puzzle_fingerprint, sub_puzzle_hashes, [compare_to_known_puzzles(h) for h in sub_puzzle_hashes])
+        c = classify_fingerprint(layered_puzzle_fingerprint, puzzle)
+        return value_label('puzzle_type', c['puzzle_type'][0]) or '-', harvest_name
+    c = classify_fingerprint(layered_puzzle_fingerprint, puzzle)
+    return value_label('puzzle_type', c['puzzle_type'][0]) or '-', classification_label(c, layered_puzzle_fingerprint)
 
 
 def print_tree_path(path: list, level):
@@ -465,9 +772,7 @@ def save_unknown_puzzle(puzzle_hash: str, puzzle: PyProgram, example: str = None
             entry["example_curried_instance"] = example
 
         CONF.UNKNOWN_PUZZLES[puzzle_hash] = entry
-
-        with open(CONF.UNKNOWN_PUZZLES_PATH, 'w') as f:
-            json.dump(CONF.UNKNOWN_PUZZLES, f, indent=4)
+        _write_harvest_file(CONF.UNKNOWN_PUZZLES_PATH, CONF.UNKNOWN_PUZZLES)
 
 
 G1_INFINITY = bytes(G1Element())  # c0 followed by 47 zero bytes
@@ -745,7 +1050,7 @@ def unroll_puzzle_to_names(puzzle: PyProgram, level: int = 0, array: list = None
     puzzle_hash = puzzle.get_tree_hash().hex()
     puzzle_name = compare_to_known_puzzles(puzzle_hash)
     # the walk depends only on the shared catalog (catalog/puzzles.json), not on the local
-    # puzzle_harvesting/puzzles.json, or the same puzzle would get a different key on every machine
+    # puzzle_harvesting/puzzles.json, or the same puzzle would get a different fingerprint on every machine
     puzzle_is_known = puzzle_hash in CONF.KNOWN_PUZZLES
 
     mod, curried_args = puzzle.uncurry()
@@ -908,11 +1213,14 @@ def get_type_unspent_coin(coin_record: TYPES.CoinRecordRoto):
             return None
 
 
-def layered_puzzle_status(puzzle_key: str) -> TYPES.PuzzleStatus:
-    """KNOWN if every layer is in catalog/puzzles.json (the classification comes from the
-    layers) or the combination is in catalog/layered_puzzles.json"""
-    if puzzle_key in CONF.KNOWN_LAYERED_PUZZLES or all_layers_known(puzzle_key):
-        return TYPES.PuzzleStatus.KNOWN
+def layered_puzzle_status(layered_puzzle_fingerprint: str) -> TYPES.PuzzleStatus:
+    """VERIFIED if a person saved the combination in catalog/layered_puzzles.json, RECOGNIZED
+    if every layer is in catalog/puzzles.json (the classification comes from the layers),
+    UNKNOWN otherwise"""
+    if layered_puzzle_fingerprint in CONF.KNOWN_LAYERED_PUZZLES:
+        return TYPES.PuzzleStatus.VERIFIED
+    if all_layers_known(layered_puzzle_fingerprint):
+        return TYPES.PuzzleStatus.RECOGNIZED
     return TYPES.PuzzleStatus.UNKNOWN
 
 

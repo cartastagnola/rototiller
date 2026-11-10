@@ -47,7 +47,7 @@ from src.TYPEStiller import (
 from src.CONFtiller import (
     debug_logger, logging, DEBUGGING, DB_BLOCKCHAIN_RO, DB_WDB, DB_SB, DB_BLOCKCHAIN_RO, SQL_TIMEOUT, XCH_FAKETAIL,
     BTC_FAKETAIL, XCH_CUR, USD_CUR, XCH_MOJO, CAT_MOJO, full_node_port, full_node_rpc_port,
-    FIGLET, DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST, SMALL_FONT, FUTURE_FONT)
+    DOOM_FONT, FUTURE_FONT, BLOCK_MAX_COST, SMALL_FONT, FUTURE_FONT)
 import src.CONFtiller as CONF
 
 import src.DEBUGtiller as DEBUGtiller
@@ -133,7 +133,8 @@ def menu_select_figlet(stdscr, menu, select, point, color_pairs, color_pairs_sel
 
 
 def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
-                    align_h=0, align_v=0, prefix=False):
+                    align_h=0, align_v=0, prefix=False, title=None, P_title=None):
+    """title: where the menu is (e.g. "puzzles › lists"), above its top left corner, in P_title"""
 
     if "idxFirst" not in scope.data:
         scope.data["idxFirst"] = 0
@@ -148,8 +149,11 @@ def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
     width = win_size[1]
 
     if prefix:
+        # the numbers right aligned (" 9 - …", "10 - …"): a space is as wide as a digit, also in
+        # the figlet font
+        digits = len(str(len(menu) - 1))
         for i, m in enumerate(menu):
-            menu[i] = f"{i} - {menu[i]}"
+            menu[i] = f"{i:>{digits}} - {menu[i]}"
 
     # precalc for the bounding box
     yDimMenu = len(menu)
@@ -164,21 +168,24 @@ def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
 
     xDimMenu_fig, a = TEXT.sizeText(longestLine, FUTURE_FONT)
     figlet = False
-    n_rows = height // FUTURE_FONT.height - 2
+    # the title's rows (an item and an empty line) are kept free, so it is always in the size
+    # of the items; the rows of the ▲ ▼ marks are the empty line under the title and a margin
+    title_rows = FUTURE_FONT.height + 1 if title else 0
+    n_rows = (height - title_rows) // FUTURE_FONT.height - 2
     bbox = UIgraph.Point(0,0)
 
     # using figlet or not
-    if width > xDimMenu_fig * 2 and FIGLET and n_rows > 3 and width > 100:
+    if width > xDimMenu_fig * 2 and CONF.FIGLET and n_rows > 3 and width > 100:
         bbox.x = xDimMenu_fig
         figlet = True
     else:
-        n_rows = height - 2
+        n_rows = height - 2 - (2 if title else 0) - 2
         bbox.x = xDimMenu
 
     margin = UIgraph.Point(6,3)
     n_menu, n_selection = ELEMENTS.normalize_menu(menu, scope, n_rows)
 
-    # recalculate bbox on Y
+    # recalculate bbox on Y: only the items are centered
     if figlet:
         bbox.y = len(n_menu) * FUTURE_FONT.height
     else:
@@ -187,8 +194,39 @@ def menu_select_def(stdscr, scope, menu, color_pairs, color_pairs_sel,
     base_point = ELEMENTS.align_bounding_box(stdscr, bbox, margin, align_h, align_v)
     point = [base_point.y, base_point.x]
 
+    # items out of view: ▲ above the first one, ▼ under the last one, with how many
+    if len(n_menu) < len(menu):
+        first = scope.data.get('first_idx', 0)
+        above, below = first, len(menu) - first - len(n_menu)
+        if above and base_point.y >= 1:
+            put_text(stdscr, UIgraph.Point(base_point.x, base_point.y - 1), f"▲ {above} more", P_title or color_pairs,
+                     bold=True)
+        if below and base_point.y + bbox.y < height - 1:
+            put_text(stdscr, UIgraph.Point(base_point.x, base_point.y + bbox.y), f"▼ {below} more",
+                     P_title or color_pairs, bold=True)
+
+    if title:
+        # above the items, in their size (the figlet font has no ›: /), 9 columns to their left;
+        # the small font when the big one does not fit above or on the right, none without room
+        x = max(0, base_point.x - 9)
+        candidates = ([TEXT.renderFont(title.replace('›', '/'), FUTURE_FONT)] if figlet else []) + [[title]]
+        for lines in candidates:
+            y = base_point.y - len(lines) - 1
+            if y >= 0 and x + max(len(line) for line in lines) < width - 1:
+                for n, line in enumerate(lines):
+                    put_text(stdscr, UIgraph.Point(x, y + n), line, P_title, bold=True)
+                break
+
     menu_select_figlet(stdscr, n_menu, n_selection, point, color_pairs, color_pairs_sel,
                        figlet=figlet)
+
+    # when the visible items move, ncurses sees the same lines on other rows and scrolls the
+    # terminal, which flashes a band in the selection color: redrawln makes it send the lines
+    # again instead (docs/ui-rules.md, rule 13)
+    first = scope.data.get('first_idx', 0)
+    if scope.data.get('drawn_first_idx', first) != first:
+        stdscr.redrawln(0, height)
+    scope.data['drawn_first_idx'] = first
 
 
 def screen_main_menu(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState,
@@ -209,6 +247,7 @@ def screen_main_menu(stdscr, keyboardState: KeyboardState, screenState: ScreenSt
             ('full node', screen_full_node, ScopeActions.activate_scope, None),
             ('cacheDB', screen_cache_db, ScopeActions.activate_scope, None),
             ('puzzles', screen_puzzles, ScopeActions.activate_scope, None),
+            ('menu test', screen_menu_test, ScopeActions.activate_scope, None),  # TEST: remove (PLAN)
         ]
         print("indiddiie")
         if DEBUGGING:
@@ -1642,10 +1681,20 @@ def factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState: 
         activeScope.update(visibility_filter=False)
     screenState.selection = activeScope.cursor
 
+    # where we are: the name of this menu with its number in the parent menu, as the item is
+    # written there ("2 - lists"), in a mid gray; none on the main menu
+    title = ''
+    if activeScope.name not in ('main_menu', 'intro'):
+        siblings = list(activeScope.parent_scope.sub_scopes) if activeScope.parent_scope is not None else []
+        title = (f"{siblings.index(activeScope.name)} - {activeScope.name}" if activeScope.name in siblings
+                 else activeScope.name)
+    C_mid_gray = UIgraph.addCustomColor((140, 141, 137), screenState.cursesColors)  # between gray and dark_gray
+    P_title = UIgraph.addCustomColorTuple((C_mid_gray, screenState.colors['background']), screenState.cursesColors)
+
     # new menu
     menu_select_def(test_win, activeScope, list(activeScope.sub_scopes.keys()),
                     screenState.colorPairs['body'], screenState.colorPairs["body_sel"],
-                    align_h=1, align_v=1, prefix=True)
+                    align_h=1, align_v=1, prefix=True, title=title, P_title=P_title)
 
 
 def screen_sb_watch_later(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
@@ -1902,6 +1951,11 @@ class AddressLoaders():
         self.layered_puzzle_type = 'No data'
         self.layered_puzzle_name = 'No data'
         self.cache_progress = None  # (coins done, total coins or None) while the cache is building
+        # coins hinted to the address, by the puzzle hash they use (load_hinted_groups)
+        self.hinted_groups = None  # list of WDB.FetchMaker.get_hinted_groups dicts, None while loading
+        self.hinted_types = {}  # puzzle_hash -> (puzzle_type, metadata, layered_name, verified)
+        self.hinted_progress = None  # (classified, to classify) while the types are classified
+        self.hinted_show_spent = False  # also the puzzle hashes with no unspent coin
 
 
 ### WHERE should i go?
@@ -2042,7 +2096,10 @@ def load_the_loaders(address_loaders: AddressLoaders):
 ###################### CACHE MODE #######################################
 ###################### CACHE MODE #######################################
 def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: AddressLoaders, inbound: bool = True,
-                                outbound: bool = True, uncurry_puzzle: bool = True, update_cache: bool = False):
+                                outbound: bool = True, uncurry_puzzle: bool = True, update_cache: bool = False,
+                                follow: bool = True):
+    """follow: with update_cache, the cache updater follows the address after its build. False for
+    a puzzle hash opened from a hinted row: it is built again (it is small) each time it is opened"""
     # TODO: make a class from the address_loaders
     logging(debug_logger, "DEBUG", "LOAD the loader init")
     table_name = 'coin_record'
@@ -2135,7 +2192,8 @@ def load_the_loaders_cache_mode(screenState: ScreenState, address_loaders: Addre
                 finally:
                     with address_loaders.lock:
                         address_loaders.cache_progress = None
-                cache_updater.follow(puzzle_hash, built_height)
+                if follow:
+                    cache_updater.follow(puzzle_hash, built_height)
                 logging(debug_logger, "DEBUG", f"DB LOAD ENDED cache fetcher")
 
                 # the loaders were built while the cache was still updating, rebuild them on the fresh cache
@@ -2391,6 +2449,94 @@ def scopeAction_address_loader(scope: Scope, screenState: ScreenState, search_va
     new_scope.data['address_loaders'] = address_loaders
     screenState.activeScope = new_scope
 
+    return new_scope
+
+
+HINTED_TAB_TYPES = {'CAT': ('CAT', 'REVOCABLE_CAT'), 'NFT': ('NFT',)}  # the rest goes in OTHER
+
+
+def load_hinted_groups(address_loaders: AddressLoaders):
+    """The puzzle hashes of the coins hinted to the address, then the type of the ones not
+    classified yet, one RPC call each (WDB.classify_hinted_group), saved in the cache DB.
+    Run it in a thread; a second call while one classifies only reloads the groups"""
+    with address_loaders.lock:
+        hint = address_loaders.puzzle_hash
+    try:
+        groups = WDB.FetchMaker.get_hinted_groups(DB_BLOCKCHAIN_RO, hint)
+    except Exception:
+        UTILS.logging_traceback("HINTED GROUPS")
+        return
+    cache_conn = WDB.get_connection(CONF.DB_CACHED_BLOCKCHAIN)
+    try:
+        known = WDB.load_hinted_puzzle_types(cache_conn)
+        types = {g['puzzle_hash']: known[g['puzzle_hash']] for g in groups if g['puzzle_hash'] in known}
+        todo = [g for g in groups if g['puzzle_hash'] not in types]
+        with address_loaders.lock:
+            address_loaders.hinted_groups = groups
+            address_loaders.hinted_types = types
+            if not todo or address_loaders.hinted_progress is not None:
+                return  # nothing to classify, or another thread is classifying
+            address_loaders.hinted_progress = (0, len(todo))
+        try:
+            for n, g in enumerate(todo):
+                try:
+                    result = WDB.classify_hinted_group(hint, g)
+                except Exception:
+                    # not saved: tried again the next time the address is opened
+                    UTILS.logging_traceback("HINTED CLASSIFY")
+                else:
+                    WDB.save_hinted_puzzle_type(cache_conn, g['puzzle_hash'], *result)
+                    with address_loaders.lock:
+                        address_loaders.hinted_types[g['puzzle_hash']] = result
+                with address_loaders.lock:
+                    address_loaders.hinted_progress = (n + 1, len(todo))
+        finally:
+            with address_loaders.lock:
+                address_loaders.hinted_progress = None
+    finally:
+        cache_conn.close()
+
+
+def start_hinted_groups_load(screenState: ScreenState, address_loaders: AddressLoaders):
+    thread = threading.Thread(target=load_hinted_groups, args=(address_loaders,), daemon=True)
+    thread.start()
+    thread.setName("hinted groups")
+    with screenState.lock:
+        screenState.running_threads.append(thread)
+
+
+def short_hex(value: bytes, side: int = 6) -> str:
+    h = bytes(value).hex()
+    return h if len(h) <= 2 * side + 1 else f"{h[:side]}…{h[-4:]}"
+
+
+def scopeAction_hinted_address(scope: Scope, screenState: ScreenState, key):
+    """enter on a hinted row: the address viewer of its puzzle hash, with a banner that says to
+    which address it is hinted. Its cache is built but not followed (WDB.CacheUpdater)"""
+    if key is None:
+        return scope
+    row = scope.main_scope.data.get('hinted_rows', {}).get(key)
+
+    new_scope = Scope(f"{scope.parent_scope.name}_{key}", screen_address_viewer, screenState)
+    new_scope.parent_scope = scope
+    new_scope.exec = None
+    address_loaders = AddressLoaders()
+    address_loaders.puzzle_hash = UTILS.string_to_bytes32(key)
+    new_scope.data['address_loaders'] = address_loaders
+    new_scope.data['hinted_from'] = row
+    if row is not None and row['puzzle_type'] is not None:
+        # its PUZZLE tab knows the puzzle only from a spent coin: an NFT held now has none
+        with address_loaders.lock:
+            address_loaders.layered_puzzle_type = PUZ.value_label('puzzle_type', row['puzzle_type'])
+
+    thread = threading.Thread(target=load_the_loaders, args=(screenState, address_loaders),
+                              kwargs={'update_cache': True, 'follow': False}, daemon=True)
+    thread.start()
+    thread.setName("loading hinted address")
+    with screenState.lock:
+        screenState.running_threads.append(thread)
+
+    screenState.activeScope = new_scope
     return new_scope
 
 
@@ -2686,6 +2832,96 @@ def start_cache_job(screenState: ScreenState, data: dict, job: str, done_message
         screenState.running_threads.append(job_thread)
 
 
+def hinted_tab_of(puzzle_type) -> str:
+    """The hinted tab of a catalog type id: CAT, NFT, else OTHER (also not classified yet)"""
+    return next((tab for tab, types in HINTED_TAB_TYPES.items() if puzzle_type in types), 'OTHER')
+
+
+def hinted_rows_by_tab(address_loaders: AddressLoaders) -> dict:
+    """{'CAT': [...], 'NFT': [...], 'OTHER': [...]}: a dict per hinted puzzle hash, with what the
+    tables and the redirect banner show. Without hinted_show_spent, only the ones with unspent
+    coins (what the address holds now)"""
+    with address_loaders.lock:
+        groups = address_loaders.hinted_groups or []
+        types = dict(address_loaders.hinted_types)
+        show_spent = address_loaders.hinted_show_spent
+    rows = {'CAT': [], 'NFT': [], 'OTHER': []}
+    for g in groups:
+        if not show_spent and g['unspent'] == 0:
+            continue
+        classified = g['puzzle_hash'] in types
+        puzzle_type, metadata, layered_name, verified = types.get(g['puzzle_hash'], (None, None, None, False))
+        tab = hinted_tab_of(puzzle_type)
+        if tab == 'OTHER':
+            label = PUZ.value_label('puzzle_type', puzzle_type) if puzzle_type else (layered_name or '?')
+        else:
+            label = f"{PUZ.value_label('puzzle_type', puzzle_type)} {short_hex(metadata) if metadata else '?'}"
+        rows[tab].append(dict(g, puzzle_type=puzzle_type, metadata=metadata, classified=classified,
+                              layered_name=layered_name, verified=verified, label=label))
+    return rows
+
+
+def hinted_table(win, screenState: ScreenState, keyboardState: KeyboardState, main_scope: Scope,
+                 address_loaders: AddressLoaders, address: str, name, tab: str,
+                 pos: UIgraph.Point, size: UIgraph.Point):
+    """A hinted tab of the address viewer: CAT (one row per tail), NFT (one row per NFT), OTHER.
+    Enter opens the address viewer of the row's puzzle hash (scopeAction_hinted_address)"""
+    with address_loaders.lock:
+        loading = address_loaders.hinted_groups is None
+    if loading:
+        put_text(win, pos + UIgraph.Point(1, 1), "reading the hinted coins...", screenState.colorPairs["body"], True)
+        return
+
+    rows = hinted_rows_by_tab(address_loaders)[tab]
+    # what the redirect needs, by the row key
+    main_scope.data['hinted_rows'] = {
+        r['puzzle_hash'].hex(): {'address': address, 'name': name, 'puzzle_type': r['puzzle_type'],
+                                 'label': r['label']}
+        for tab_rows in hinted_rows_by_tab(address_loaders).values() for r in tab_rows}
+
+    def last(r):
+        return f"{r['last_height']:,}"
+
+    match tab:
+        case 'CAT':
+            # 1 CAT = 1000 mojos
+            legend = ['asset', 'coins', 'unspent', 'amount', 'hint', 'last height']
+            table = [[short_hex(r['metadata']) if r['metadata'] else '?', f"{r['coins']:,}", f"{r['unspent']:,}",
+                      f"{r['unspent_amount'] / 1000:,.3f}", 'checked' if r['verified'] else 'not checked', last(r)]
+                     for r in rows]
+            column_widths = [15, None, None, None, None, None]
+        case 'NFT':
+            legend = ['launcher', 'held', 'coins', 'last height']
+            table = [[short_hex(r['metadata']) if r['metadata'] else '?', 'yes' if r['unspent'] else 'no',
+                      f"{r['coins']:,}", last(r)] for r in rows]
+            column_widths = [15, None, None, None]
+        case _:
+            legend = ['puzzle type', 'coins', 'unspent', 'mojos', 'last height']
+            table = [[r['label'] if r['classified'] else '?', f"{r['coins']:,}", f"{r['unspent']:,}",
+                      f"{r['unspent_amount']:,}", last(r)] for r in rows]
+            column_widths = [25, None, None, None, None]
+    keys = [r['puzzle_hash'].hex() for r in rows]
+
+    # a CAT whose hint was not checked (or not true) in gray: anyone can hint a coin to any address
+    colors = fresh_table_colors(table)
+    for i, r in enumerate(rows):
+        if tab == 'CAT' and not r['verified']:
+            colors[i] = [screenState.colors["gray"]] * len(legend)
+
+    tab_name = f"hinted_{tab.lower()}"
+    full_name = f"{main_scope.id}_{tab_name}"
+    if full_name in screenState.scopes:
+        # the columns are sized on the rows: again when they change
+        tab_scope = screenState.scopes[full_name]
+        shape = (len(table), tuple(tuple(row) for row in table))
+        if tab_scope.data.get('rows_shape') != shape:
+            tab_scope.data['rows_shape'] = shape
+            tab_scope.data['column_sizes'] = tab_scope.data['cached_data_table'] = None
+    ELEMENTS.create_tab(win, screenState, main_scope, tab_name, table, keys, colors, False, pos, size,
+                        keyboardState, scopeAction_hinted_address, False, False, legend, column_widths,
+                        no_cache=True)
+
+
 def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: ScreenState, fullNodeState: FullNodeState, figlet=False):
 
     height = screenState.screen_size.y
@@ -2698,8 +2934,8 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
     main_scope.update()
 
 
-    # tab: inbound, outbound, puzzle
-    tab_selected = main_scope.cursor_x % 3
+    # tab: inbound, outbound, puzzle, then the coins hinted to the address: CAT, NFT, other
+    tab_selected = main_scope.cursor_x % 6
 
     # sub win
     add_viewer = createFullSubWin(stdscr, screenState, height, width)
@@ -2727,9 +2963,19 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
     # after the cache updater wrote the new blocks, so the reload sees them
     screenState.cache_updater.after_sync[f'update_loaders_{address_loaders.puzzle_hash}'] = update_address_loaders
 
+    # the hinted puzzle hashes: read from the node DB when the screen opens, then on every new block
+    if 'hinted_loaded' not in main_scope.data:
+        main_scope.data['hinted_loaded'] = True
+        start_hinted_groups_load(screenState, address_loaders)
+    screenState.cache_updater.after_sync[f'update_hinted_{address_loaders.puzzle_hash}'] = \
+        lambda: start_hinted_groups_load(screenState, address_loaders)
+
     # footer
     screenState.footer_text += "| save_to_watchlist=w "
-    screenState.footer_text += f"| remove_spent_coins=s ({str(address_loaders.remove_spent_coins).upper()}), remove_self_txs=t ({str(address_loaders.remove_self_transactions).upper()})"
+    if tab_selected >= 3:
+        screenState.footer_text += f"| show spent=s ({str(address_loaders.hinted_show_spent).upper()}) "
+    else:
+        screenState.footer_text += f"| remove_spent_coins=s ({str(address_loaders.remove_spent_coins).upper()}), remove_self_txs=t ({str(address_loaders.remove_self_transactions).upper()})"
     if tab_selected == 1:
         screenState.footer_text += f" | show_sibling_coins ({str(address_loaders.show_phantom_coin_outputs).upper()})"
 
@@ -2742,6 +2988,13 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
     def toggle_coin_visibility(address_loaders: AddressLoaders, tab_sel: bool):
         def custom_keyboard_execution(screenState: TYPES.ScreenState, keyboardState: TYPES.KeyboardState,
                                       active_scope: TYPES.Scope):
+
+            if tab_sel >= 3:
+                # the hinted tabs: s shows also the puzzle hashes with no unspent coin
+                if 's' in keyboardState.keys:
+                    with address_loaders.lock:
+                        address_loaders.hinted_show_spent = not address_loaders.hinted_show_spent
+                return
 
             inbound_first = True
             if tab_sel== 1:
@@ -2800,75 +3053,71 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
 
     main_win_size = add_viewer.getmaxyx()
     main_win_size = UIgraph.Point(main_win_size[1], main_win_size[0])
-    pos = UIgraph.Point(1,0)
-    pos_orig = pos
-    max_y = main_win_size.y - pos.y - 3
+    pos_orig = UIgraph.Point(1, 1)
+    max_x = main_win_size.x - 2
 
     address = encode_puzzle_hash(address_loaders.puzzle_hash, CONF.ADD_PREFIX)
-    text = f" address: {address} "
-
-    ELEMENTS.create_text_double_space(add_viewer, screenState, pos, text, P_title_selected, C_background,
-                                      3, True, inv_color=False)
-
+    name = None
     path = CONF.USER_ADDX_WATCHLIST
     if path.exists():
-        addx_list = WDB.load_csv_no_comments(path)
-        only_addx = [[] for _ in range(3)]
-        for entry in addx_list:
-            if len(entry) > 1:
-                #logging(debug_logger, "DEBUG", f"entry {entry[0]} add {str(address_loaders.puzzle_hash)} and xch {address}")
-                if str(address_loaders.puzzle_hash) == entry[0] or address == entry[0]:
-                    pos_tr = pos + UIgraph.Point(len(text) + 4, 0)
-                    name = entry[1]
+        for entry in WDB.load_csv_no_comments(path):
+            if len(entry) > 1 and (str(address_loaders.puzzle_hash) == entry[0] or address == entry[0]):
+                name = entry[1]
+                break
 
-                    lenght_name = len(name) + 4
-                    if pos.x + len(text) + 3 + lenght_name < main_win_size.x:
-                        pos_tr = pos + UIgraph.Point(len(text) + 4, 0)
-                    else:
-                        pos_tr = pos + UIgraph.Point(0, pos.y + 3)
-                        pos = pos + UIgraph.Point(0, pos.y + 3)
-                    ELEMENTS.create_text_double_space(add_viewer, screenState, pos_tr, name, P_title_selected, C_background,
-                                                      3, True, inv_color=False)
+    ##### title (rule 1): the watchlist name or "address", the address on its row when it fits
+    title = name or "address"
+    ELEMENTS.create_text_double_space(add_viewer, screenState, pos_orig, title, P_title_selected, C_background,
+                                      3, True)
+    pos = pos_orig + UIgraph.Point(0, 3)
+    address_x = pos_orig.x + len(title) + 4 + 2
+    if address_x + len(address) <= max_x:
+        put_text(add_viewer, UIgraph.Point(address_x, pos_orig.y + 1), address, P_text, True)
+    else:
+        put_text(add_viewer, pos, address, P_text, True)
+        pos += UIgraph.Point(0, 1)
 
-    pos += UIgraph.Point(0,4)
+    ##### status lines: the counts, the puzzle hash, to which address it is hinted
+    def count(value):
+        return '...' if value is None or value < 0 else f"{value:,}"
+    hinted_from = main_scope.data.get('hinted_from')
+    if address_loaders.balance < 0:
+        balance = '...'
+    elif hinted_from is not None and hinted_tab_of(hinted_from['puzzle_type']) == 'CAT':
+        balance = f"{address_loaders.balance / 1000:,.3f} CAT"  # 1 CAT = 1000 mojos
+    else:
+        balance = f"{address_loaders.balance / XCH_MOJO:,.4f} XCH"
+    # the hinted counts from the hinted groups, so they match the tabs (the cached ones are
+    # from the cache build, and count also the coins the address hints to itself)
+    with address_loaders.lock:
+        groups = address_loaders.hinted_groups
+    hinted_unspent = None if groups is None else sum(g['unspent'] for g in groups)
+    hinted_total = None if groups is None else sum(g['coins'] for g in groups)
+    status = (f"balance {balance} | coins {count(address_loaders.unspent_coin_count)} unspent / "
+              f"{count(address_loaders.total_coin_count)} | hinted {count(hinted_unspent)} "
+              f"unspent / {count(hinted_total)}")
+    put_text(add_viewer, pos, status, P_text, True)
+    pos += UIgraph.Point(0, 1)
+    put_text(add_viewer, pos, f"puzzle hash 0x{bytes(address_loaders.puzzle_hash).hex()}", P_text)
+    pos += UIgraph.Point(0, 1)
 
-    data_table_legend = ["puzzle hash", "total balance"]
-    data_table_legend = ["total balance", "unspent", "coins", "unspent hinted", "hinted", "puzzle hash", "address"]  # hinted, unspent hinted,
-    # total coin | total unspent coin
-    data_table = [[f"{address_loaders.balance / XCH_MOJO:.4f}",
-                   address_loaders.unspent_coin_count,
-                   address_loaders.total_coin_count,
-                   address_loaders.unspent_hinted_coin_count,
-                   address_loaders.total_hinted_coin_count,
-                   address_loaders.puzzle_hash,
-                   address]]
+    if hinted_from is not None:
+        to = hinted_from['address']
+        to = f"{hinted_from['name']} ({to[:10]}…{to[-5:]})" if hinted_from['name'] else to
+        text = f" hinted to {to} · {hinted_from['label']} "
+        put_text(add_viewer, pos, text, screenState.colorPairs["header"], True)
+        pos += UIgraph.Point(0, 1)
 
-    tab_size = UIgraph.Point(150, 7)
+    # copy the address while no element is entered (the tables copy their cell with y)
+    if screenState.activeScope is main_scope:
+        screenState.footer_text += "| copy address=y "
+        if keyboardState.yank:
+            PLAT.write_clipboard(address)
+            screenState.roto_clipboard.appendleft(address)
 
-
-    column_widths = [None, None, None, None, None, 15, 15]
-    #formatters = [None, None, None, UTILS.human_amount, None, None, None]
-    ELEMENTS.create_tab_large(add_viewer,        # scr
-                              screenState,       # screen_state
-                              main_scope,        # parent_scope
-                              "add_data",        # tab_name
-                              data_table,        # list data
-                              None,              # data_keys
-                              None,              # data_colors
-                              False,             # transpose
-                              pos,               # pos
-                              tab_size,          # size
-                              keyboardState,     # keyboardState
-                              ScopeActions.exit_scope,              # activation func
-                              2,                 # row_height
-                              False,             # active
-                              False,             # multiple selection
-                              data_table_legend, # data_legend
-                              column_widths=column_widths)
-
-    pos += UIgraph.Point(0, tab_size.y)
+    pos += UIgraph.Point(0, 1)
     pos_tab_title = pos
-    pos += UIgraph.Point(0,2)
+    pos += UIgraph.Point(0, 2)
     max_y = main_win_size.y - pos.y - 2
 
     def coin_record_key_parser(dataTable):
@@ -3052,6 +3301,11 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
                                     False,
                                     tab_legend)
 
+        ### the coins hinted to the address: one row per puzzle hash they use ###
+        case 3 | 4 | 5:
+            hinted_table(add_viewer, screenState, keyboardState, main_scope, address_loaders, address, name,
+                         ('CAT', 'NFT', 'OTHER')[tab_selected - 3], pos, UIgraph.Point(main_win_size.x - 2, max_y))
+
     # run copy/paste action or other pending stuffs
     if len(screenState.pending_action) > 0:
         for i, fn in screenState.pending_action:
@@ -3059,32 +3313,32 @@ def screen_address_viewer(stdscr, keyboardState: KeyboardState, screenState: Scr
         screenState.pending_action = []
 
 
-    def blend_selector(selected: bool, pos: UIgraph.Point):
-        pos_t = pos + UIgraph.Point(0,2)
-        if selected:
-            ELEMENTS.create_text(add_viewer, pos_t, u'\u2580' * (len(text) + 2), P_tab_soft, True)
-        else:
-            ELEMENTS.create_text(add_viewer, pos_t, ' ' * (len(text) + 2), P_used, True)
-
-
     pos = pos_tab_title
     with address_loaders.lock:
         layered_puzzle_type = address_loaders.layered_puzzle_type
-
-    title_list = [" INBOUND coins ", " OUTBOUND coins ", f" PUZZLE [{layered_puzzle_type}]"]
-    for n, text in enumerate(title_list):
-        P_used, blend = (P_title_selected, True) if tab_selected == n else (P_title, False)
-        ELEMENTS.create_text_double_space(add_viewer, screenState, pos, text, P_used, C_background, 3, True)
-        blend_selector(blend, pos)
-        pos += UIgraph.Point(len(text) + 2,0)
-
-    # cache build progress, next to the tabs
-    with address_loaders.lock:
         cache_progress = address_loaders.cache_progress
+        hinted_progress = address_loaders.hinted_progress
+        hinted_loading = address_loaders.hinted_groups is None
+    hinted_rows = hinted_rows_by_tab(address_loaders)
+
+    def hinted_count(tab):
+        return '...' if hinted_loading else f"{len(hinted_rows[tab]):,}"
+
+    title_list = [" INBOUND coins ", " OUTBOUND coins ", f" PUZZLE [{layered_puzzle_type}] ",
+                  f" CAT ({hinted_count('CAT')}) ", f" NFT ({hinted_count('NFT')}) ",
+                  f" OTHER ({hinted_count('OTHER')}) "]
+    x_end = ELEMENTS.create_tab_titles(add_viewer, screenState, main_scope, pos, title_list, tab_selected,
+                                       max_x - pos.x)
+
+    # what is still loading, next to the tabs
+    texts = []
     if cache_progress is not None:
         done, total = cache_progress
-        text = "building cache..." if total is None else f"building cache... {done:,} / {total:,} coins"
-        ELEMENTS.create_text(add_viewer, pos + UIgraph.Point(2, 1), text, P_text, True)
+        texts.append("building cache..." if total is None else f"building cache... {done:,} / {total:,} coins")
+    if hinted_progress is not None:
+        texts.append(f"classifying {hinted_progress[0]:,} of {hinted_progress[1]:,}")
+    if texts:
+        put_text(add_viewer, UIgraph.Point(x_end + 2, pos.y + 1), ' | '.join(texts), P_text, True)
 
     pos = UIgraph.Point(pos_orig.x, pos.y + 2)
 
@@ -5305,7 +5559,7 @@ def mempool_tx_row(tx, now: float) -> list:
     """Row of a mempool transaction (SCAN.MempoolTx), with the columns of MEMPOOL_TX_LEGEND"""
     return [
         f"0x{tx.tx_id[:16]}...",
-        SCAN.tx_type(SCAN.CATALOG, tx.puzzle_keys),
+        SCAN.tx_type(SCAN.CATALOG, tx.layered_puzzle_fingerprints),
         f"{tx.cost:,}",
         f"{tx.fee / XCH_MOJO:.6f}",
         f"{tx.fee_per_cost:.2f}",
@@ -5353,22 +5607,857 @@ def next_transaction_block_text(main_scope: Scope, screenState: ScreenState, ful
 
 
 # the two lists of the puzzles screen: status -> label, tab switches between them
-PUZZLE_VIEWS = {TYPES.PuzzleStatus.UNKNOWN: 'unknown', TYPES.PuzzleStatus.KNOWN: 'known'}
-
-
-def scopeAction_open_puzzle(scope: Scope, screenState: ScreenState, puzzle_key: str = None):
-    if puzzle_key is None:
+def scopeAction_open_puzzle(scope: Scope, screenState: ScreenState, layered_puzzle_fingerprint: str = None):
+    if layered_puzzle_fingerprint is None:
         return scope
 
-    new_scope = Scope(f"puzzle_{puzzle_key}", screen_puzzle_detail, screenState)
+    new_scope = Scope(f"puzzle_{layered_puzzle_fingerprint}", screen_puzzle_detail, screenState)
     new_scope.parent_scope = scope
-    new_scope.data['puzzle_key'] = puzzle_key
+    new_scope.data['layered_puzzle_fingerprint'] = layered_puzzle_fingerprint
     new_scope.exec = None
     screenState.activeScope = new_scope
     return new_scope
 
 
+def puzzle_submenu(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, items: list):
+    """A menu of puzzle views, like the main menu: items is a list of (name, screen)"""
+    activeScope: Scope = screenState.activeScope
+    screenState.scope_exec_args = [screenState]
+    menu_items = []
+    if len(activeScope.sub_scopes) == 0:
+        menu_items = [(name, handler, ScopeActions.activate_scope, None) for name, handler in items]
+        for name, handler, exec_fun, exec_key in menu_items:
+            new_scope: Scope = Scope(name, handler, screenState)
+            new_scope.exec = exec_fun
+            new_scope.parent_scope = activeScope
+            activeScope.sub_scopes[name] = new_scope
+    factory_menu(menu_items, stdscr, keyboardState, screenState, fullNodeState, figlet=False)
+
+
+def screen_menu_test(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """TEST ONLY (remove, see PLAN): a menu with 20 items, to see a long menu scroll"""
+    puzzle_submenu(stdscr, keyboardState, screenState, fullNodeState,
+                   [(f"sub menu {i}", screen_puzzles) for i in range(20)])
+
+
 def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """The puzzles menu: the scanner, all the puzzles seen, the lists that classify them"""
+    puzzle_submenu(stdscr, keyboardState, screenState, fullNodeState,
+                   [('puzzle scanner', screen_puzzle_scanner), ('all puzzles', screen_puzzles_all),
+                    ('lists', screen_puzzle_lists)])
+
+
+def puzzle_screen_win(stdscr, screenState: ScreenState, title: str):
+    """The window of a puzzle view with its title; returns (win, main_win_size, pos under the title)"""
+    win = createFullSubWin(stdscr, screenState, screenState.screen_size.y, screenState.screen_size.x)
+    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
+    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
+    pos = UIgraph.Point(1, 1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, title, screenState.colorPairs["xch"],
+                                      screenState.colors["background"], 3, True, inv_color=False)
+    return win, main_win_size, pos + UIgraph.Point(0, 3)
+
+
+def format_duration(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    return f"{minutes // 60}h {minutes % 60:02d}m" if minutes >= 60 else f"{minutes} min"
+
+
+def screen_puzzle_scanner(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """The scans of the puzzles: how much of the chain is counted, the full scan (start, stop,
+    resume), the live and mempool scanners"""
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update_2d()
+    data = main_scope.data
+
+    win, main_win_size, pos = puzzle_screen_win(stdscr, screenState, 'puzzle scanner')
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error"]
+
+    # coverage and full scan state: DB queries, in a thread every few seconds
+    if not data.get('coverage_loading') and time.time() - data.get('coverage_time', 0) > 5:
+        data['coverage_loading'] = True
+
+        def load_coverage():
+            try:
+                tip = SCAN.CHAIN_SCANNER.tip
+                if tip is None:
+                    node_conn = SCAN.node_connection()
+                    try:
+                        tip = SCAN.chain_tip(node_conn)
+                    finally:
+                        node_conn.close()
+                data['coverage'] = SCAN.coverage(SCAN.CATALOG, tip)
+                data['coverage_error'] = None
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"PUZZLE SCANNER coverage error: {e}")
+                UTILS.logging_traceback('PUZZLE SCANNER')
+                data['coverage_error'] = f"coverage not read: {e}"
+            finally:
+                data['coverage_time'] = time.time()
+                data['coverage_loading'] = False
+
+        coverage_thread = threading.Thread(target=load_coverage, daemon=True, name='puzzle coverage')
+        coverage_thread.start()
+        with screenState.lock:
+            screenState.running_threads.append(coverage_thread)
+
+    cov = data.get('coverage')
+    if data.get('coverage_error'):
+        put_text(win, pos, data['coverage_error'], P_error, bold=True)
+        pos += UIgraph.Point(0, 2)
+    if cov is None:
+        put_text(win, pos, "loading the coverage...", P_text, bold=True)
+        return
+
+    tip, full = cov['tip'], cov['full']
+    heights = tip + 1
+    put_text(win, pos, f"coverage: {cov['covered']:,} of {heights:,} heights ({cov['covered'] / heights:.2%}) | "
+                       f"spends counted: {cov['spends']:,} | puzzles: {cov['puzzles']:,}", P_text, bold=True)
+    pos += UIgraph.Point(0, 1)
+    gaps = cov['gaps']
+    gap_text = ', '.join(f"{s:,}-{e - 1:,}" for s, e in gaps[:3]) + (f" and {len(gaps) - 3} more" if len(gaps) > 3 else '')
+    put_text(win, pos, f"not scanned: {gap_text or 'none'}", P_text)
+    pos += UIgraph.Point(0, 2)
+
+    if full['end'] is None:
+        full_text = "full scan: never run"
+    else:
+        info = full['info']
+        state = 'running' if full['running'] else ('done' if full['chunks_done'] >= full['chunks_total'] else 'stopped')
+        full_text = (f"full scan: {state} | chunks {full['chunks_done']}/{full['chunks_total']} | heights 0-{full['end'] - 1:,} | "
+                     f"{info.get('workers', '?')} workers | started {UTILS.timestamp_to_date(info.get('started_at', 0))}")
+        if full['eta'] is not None:
+            full_text += f" | time left ~{format_duration(full['eta'])}"
+        elif state == 'done' and full['last_done']:
+            full_text += f" | finished {UTILS.timestamp_to_date(full['last_done'])}"
+    put_text(win, pos, full_text, P_text)
+    pos += UIgraph.Point(0, 1)
+    live = cov['live'] or {}
+    put_text(win, pos, f"live scan: {SCAN.CHAIN_SCANNER.status}"
+                       + (f" | from height {live['start_height']:,}" if live.get('start_height') is not None else ''), P_text)
+    pos += UIgraph.Point(0, 1)
+    put_text(win, pos, f"mempool scan: {SCAN.MEMPOOL_SCANNER.status} | transactions {len(SCAN.MEMPOOL_SCANNER.txs):,}", P_text)
+    pos += UIgraph.Point(0, 2)
+
+    # the buttons: not drawn while their job runs (it can not start twice)
+    if data.get('scan_job'):
+        put_text(win, pos + UIgraph.Point(0, 1), f"{data['scan_job']}...", P_text, bold=True)
+    elif full['running']:
+        stop_button = ELEMENTS.create_button(win, screenState, main_scope, 'stop full scan', pos,
+                                             custom_scope_function=ScopeActions.press_enter, button_type='execution')
+        if stop_button.data.get('pressed_enter'):
+            stop_button.data['pressed_enter'] = False
+            start_puzzle_scan_job(screenState, data, 'stopping the full scan', SCAN.FULL_SCAN.stop, SCAN.CATALOG)
+    else:
+        scan_button = ELEMENTS.create_button(win, screenState, main_scope, 'scan everything', pos,
+                                             custom_scope_function=ScopeActions.press_enter, button_type='execution')
+        if scan_button.data.get('pressed_enter'):
+            scan_button.data['pressed_enter'] = False
+            banner_scope = ELEMENTS.confirm_banner_scope(screenState, main_scope, 'scan_everything_banner')
+            banner_scope.cursor_x = 1  # cancel is selected when the banner opens
+            screenState.activeScope = banner_scope
+        if full['end'] is not None and full['chunks_done'] < full['chunks_total']:
+            resume_button = ELEMENTS.create_button(win, screenState, main_scope, 'resume full scan',
+                                                   pos + UIgraph.Point(len('scan everything') + 12, 0),
+                                                   custom_scope_function=ScopeActions.press_enter,
+                                                   button_type='execution')
+            if resume_button.data.get('pressed_enter'):
+                resume_button.data['pressed_enter'] = False
+                start_puzzle_scan_job(screenState, data, 'starting the full scan', SCAN.FULL_SCAN.start,
+                                      SCAN.CATALOG, False, CONF.PUZZLE_SCAN_WORKERS)
+    message = data.get('scan_job_message') or SCAN.FULL_SCAN.message
+    if message:
+        put_text(win, pos + UIgraph.Point(0, 3), message, P_text)
+
+    lines = ["Scan the whole chain again?",
+             f"The counts of {cov['puzzles']:,} puzzles ({cov['spends']:,} spends) are deleted and counted again from "
+             f"height 0 to {tip:,}, with {CONF.PUZZLE_SCAN_WORKERS} worker processes: it takes one or two hours.",
+             "The names and the catalog files are kept; the live scan goes on from the tip meanwhile."]
+    if ELEMENTS.create_confirm_banner(win, screenState, main_scope, 'scan_everything_banner', lines, 'scan everything'):
+        start_puzzle_scan_job(screenState, data, 'starting the full scan', SCAN.FULL_SCAN.start,
+                              SCAN.CATALOG, True, CONF.PUZZLE_SCAN_WORKERS)
+
+
+def start_puzzle_scan_job(screenState: ScreenState, data: dict, job: str, fn, *args):
+    """Run fn (start or stop the full scan) in a thread; the scanner view shows the job while it runs"""
+    data['scan_job'] = job
+    data['scan_job_message'] = None
+
+    def run():
+        try:
+            fn(*args)
+        except Exception as e:
+            logging(debug_logger, "DEBUG", f"PUZZLE SCAN job ERROR {job}: {e}")
+            UTILS.logging_traceback("PUZZLE SCAN JOB")
+            data['scan_job_message'] = f"{job} error: {e}"
+        finally:
+            data['coverage_time'] = 0  # read the coverage again
+            data['scan_job'] = None
+
+    job_thread = threading.Thread(target=run, daemon=True, name=job)
+    job_thread.start()
+    with screenState.lock:
+        screenState.running_threads.append(job_thread)
+
+
+# the filters of the all puzzles view: (field, label). A list field keeps an id; a text field
+# keeps the text searched (lowercase)
+PUZZLE_FILTER_FIELDS = [('family', 'family'), ('puzzle_type', 'puzzle type'), ('custody', 'custody'),
+                        ('project', 'project'), ('status', 'status'), ('behaviour', 'behaviour'),
+                        ('name', 'name contains'),
+                        ('layers', 'layers contain'), ('fingerprint', 'fingerprint contains')]
+PUZZLE_TEXT_FILTERS = ('name', 'layers', 'fingerprint')
+PUZZLE_STATUSES = [s.value for s in TYPES.PuzzleStatus]
+
+
+def puzzle_filter_values(field: str) -> list:
+    """(id, label) of the values a list field can be filtered on"""
+    if field == 'status':
+        return [(v, v) for v in PUZZLE_STATUSES]
+    if field == 'behaviour':
+        return [(v, v) for v in SCAN.BEHAVIOUR_CLASSES + [SCAN.BEHAVIOUR_NOT_RUN]]
+    return [(v, PUZ.value_label(field, v)) for v in PUZ.field_values(field)]
+
+
+def puzzle_filter_text(field: str, value: str) -> str:
+    label = dict(PUZZLE_FILTER_FIELDS)[field]
+    if field in PUZZLE_TEXT_FILTERS:
+        return f"{label} '{value}'"
+    return f"{label} = {value if field in ('status', 'behaviour') else PUZ.value_label(field, value)}"
+
+
+def behaviour_cell(layered_puzzle_fingerprint: str) -> str:
+    """The behaviour column of the all puzzles view: the class, the spends run after it (9k:
+    it fits 19 columns)"""
+    h = SCAN.BEHAVIOUR_HINTS.get(layered_puzzle_fingerprint)
+    if h is None:
+        return '-'
+    runs = h['runs']
+    return f"{h['custody_hint']} {runs if runs < 1000 else f'{runs // 1000}k'}"
+
+
+BEHAVIOUR_TEMPLATE_ROWS = 3  # the modes of the template shown on the puzzle detail screen
+
+
+def behaviour_rows(layered_puzzle_fingerprint: str, custody: str, outputs: bool = True) -> list:
+    """The behaviour hint of the puzzle detail view (docs/classification.md, step 4): what the
+    spends of the fingerprint output once run. A hint, never saved. [field, value] rows"""
+    h = SCAN.BEHAVIOUR_HINTS.get(layered_puzzle_fingerprint)
+    if h is None:
+        return [['behaviour', SCAN.BEHAVIOUR_NOT_RUN]]
+    rows = [['behaviour', f"{h['custody_hint']} ({h['runs']:,} {'spend' if h['runs'] == 1 else 'spends'} run)"]]
+    suggest = SCAN.behaviour_custody_hint(layered_puzzle_fingerprint, custody)
+    if suggest:
+        rows.append(['custody hint', ' or '.join(PUZ.value_label('custody', v) or v for v in suggest)])
+    if h['behaves_like']:
+        rows.append(['like', ', '.join(f"{label} {s:.0%}" for label, s, _ in h['behaves_like'])])
+    if h['disagrees']:
+        rows.append(['disagrees', f"with the catalog: {h['disagrees']}"])
+    t = h['template']
+    if t['same']:
+        rows.append(['same template', f"{t['same']:,} other {'puzzle' if t['same'] == 1 else 'puzzles'}"])
+    if outputs:
+        # the template (behaviour.py, step 6): a row per mode, its core then [the optional kinds]
+        modes = t['modes'][:BEHAVIOUR_TEMPLATE_ROWS]
+        rows += [['template' if i == 0 else '', SCAN.template_mode_text(m)] for i, m in enumerate(modes)]
+        more = len(t['modes']) - len(modes)
+        if more or t['rare']:
+            rows.append(['', ' | '.join(([f"{more} more {'mode' if more == 1 else 'modes'}"] if more else [])
+                                        + ([f"rare: {'<1%' if t['rare'] < 0.005 else format(t['rare'], '.0%')}"] if t['rare'] else []))])
+    return rows
+
+
+def puzzle_matches(entry, c: dict, layers: str, filters: list) -> bool:
+    """The filters of the same field are alternatives (any), the fields must all match"""
+    by_field = {}
+    for field, value in filters:
+        by_field.setdefault(field, []).append(value)
+    for field, values in by_field.items():
+        if field == 'status':
+            ok = c['status'] in values
+        elif field == 'behaviour':
+            ok = SCAN.behaviour_class(entry.layered_puzzle_fingerprint) in values
+        elif field == 'project':
+            projects = set((c['project'][0] or '').split(' + ')) | set(c['project_dependencies'][0])
+            ok = any(v in projects for v in values)
+        elif field == 'name':
+            ok = any(v in (c['label'] or '').lower() for v in values)
+        elif field == 'layers':
+            ok = any(v in layers for v in values)
+        elif field == 'fingerprint':
+            ok = any(v in entry.layered_puzzle_fingerprint for v in values)
+        else:
+            ok = c[field][0] in values
+        if not ok:
+            return False
+    return True
+
+
+def screen_puzzles_all(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """Every puzzle seen, with the spends in a time window, filtered by its fields"""
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update_2d()
+    data = main_scope.data
+    filters = data.setdefault('filters', [])
+    # c clears the filters, but not while typing a filter value
+    if filters and screenState.activeScope.mode != TYPES.ScopeMode.INSERT:
+        if keyboardState.key == 'c':
+            filters.clear()
+        else:
+            screenState.footer_text += "| clear filters=c "
+
+    title = 'all puzzles'
+    win, main_win_size, pos = puzzle_screen_win(stdscr, screenState, title)
+    P_text = screenState.colorPairs["body"]
+    # the counts go next to the title, on its text row
+    status_pos = UIgraph.Point(1 + len(title) + 2 + 3, 2)
+
+    entries, version = SCAN.CATALOG.snapshot()
+    windows = list(SCAN.TIME_WINDOWS)
+
+    # controls: the time window, under it the filters button with the filters in use; with the
+    # filters on, a panel under them with the buttons to add one
+    menus = []  # drawn last: an open list goes over the rest
+    draw_window = lambda only_init, pos=pos: ELEMENTS.create_button_menu(win, screenState, main_scope, 'time window',
+                                                                         windows, pos, only_init, value_width=3)
+    window_scope = draw_window(True)
+    menus.append(draw_window)
+    window = windows[window_scope.cursor]
+    pos += UIgraph.Point(0, 3)
+    filters_button = ELEMENTS.create_button(win, screenState, main_scope, 'filters', pos,
+                                            custom_scope_function=ScopeActions.press_enter, button_type='boolean')
+    if filters_button.data.get('pressed_enter'):
+        filters_button.data['pressed_enter'] = False
+        data['show_filters'] = not data.get('show_filters')
+    filters_button.bool = bool(data.get('show_filters'))
+    # the filters in use: a strip in the color of the button, after a gap, as long as its text
+    # and one column (before it)
+    filters_text = ' · '.join(puzzle_filter_text(f, v) for f, v in filters)
+    strip_x = pos.x + len('filters') + 4 + 3 + 3
+    P_strip = UIgraph.addCustomColorTuple((screenState.colors["chia_green"], screenState.colors["dark_green"]),
+                                          screenState.cursesColors)
+    put_text(win, UIgraph.Point(strip_x, pos.y + 1), f" {filters_text or 'no filters'}", P_strip, bold=True)
+    pos += UIgraph.Point(0, 3)
+
+    if data.get('show_filters'):
+        # the panel: one background under all its buttons, the color of a boolean button that is
+        # on (the filters button), as high as the buttons
+        C_panel = screenState.colors["dark_green"]
+        P_panel = UIgraph.addCustomColorTuple((screenState.colors["chia_green"], C_panel), screenState.cursesColors)
+        if not filters_button.selected():
+            # the button goes on into the panel: its lower row in the panel color (when it is
+            # selected, its selection line stays there)
+            button_width = len('filters') + 2 * 2 + 3 + 1
+            put_text(win, pos + UIgraph.Point(0, -1), ' ' * button_width, P_panel)
+        P_panel_field = UIgraph.addCustomColorTuple((screenState.colors["chia_green"], screenState.colors["background"]),
+                                                    screenState.cursesColors)
+        panel_width = main_win_size.x - 2
+        for i in range(3):
+            put_text(win, pos + UIgraph.Point(0, i), ' ' * panel_width, P_panel)
+        panel_buttons = dict(C_background=C_panel, C_button=screenState.colors["chia_green"],
+                             C_text=screenState.colors["white"], C_selection=screenState.colors["gray"])
+        row = pos + UIgraph.Point(2, 0)
+        field_labels = [label for _, label in PUZZLE_FILTER_FIELDS]
+        field_width = max(len(label) for label in field_labels)
+        draw_field = lambda only_init, row=row: ELEMENTS.create_button_menu(win, screenState, main_scope, 'filter',
+                                                                            field_labels, row, only_init,
+                                                                            value_width=field_width,
+                                                                            C_background=C_panel)
+        field_scope = draw_field(True)
+        menus.append(draw_field)
+        field = PUZZLE_FILTER_FIELDS[field_scope.cursor][0]
+        x = row.x + len('filter') + 2 + field_width + 7 + 2
+        if field in PUZZLE_TEXT_FILTERS:
+            text_scope = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'filter_text',
+                                                UIgraph.Point(x, row.y + 1), "text: ", 30, P_panel, True, False,
+                                                custom_scope_function=ScopeActions.press_enter,
+                                                P_text_field=P_panel_field)
+            add_value = text_scope.data.get('prompt', '').strip().lower()
+            add_pressed = text_scope.data.pop('pressed_enter', False)
+            x += len("text: ") + 30 + 4
+        else:
+            values = puzzle_filter_values(field)
+            value_labels = [label for _, label in values] or ['-']
+            value_width = max(len(label) for label in value_labels)
+            draw_value = lambda only_init, value_labels=value_labels, point=UIgraph.Point(x, row.y), \
+                value_width=value_width: ELEMENTS.create_button_menu(win, screenState, main_scope, 'value',
+                                                                     value_labels, point, only_init,
+                                                                     value_width=value_width,
+                                                                     C_background=C_panel)
+            value_scope = draw_value(True)
+            menus.append(draw_value)
+            add_value = values[value_scope.cursor % len(values)][0] if values else ''
+            add_pressed = False
+            x += len('value') + 2 + value_width + 7 + 2
+        add_button = ELEMENTS.create_button(win, screenState, main_scope, 'add', UIgraph.Point(x, row.y),
+                                            custom_scope_function=ScopeActions.press_enter, button_type='execution',
+                                            **panel_buttons)
+        if add_button.data.pop('pressed_enter', False) or add_pressed:
+            if add_value and (field, add_value) not in filters:
+                filters.append((field, add_value))
+        x += len('add') + 4 + 3 + 4
+        for name, action in (('remove last', lambda: filters.pop() if filters else None), ('clear', filters.clear)):
+            button = ELEMENTS.create_button(win, screenState, main_scope, name, UIgraph.Point(x, row.y),
+                                            custom_scope_function=ScopeActions.press_enter, button_type='execution',
+                                            **panel_buttons)
+            if button.data.pop('pressed_enter', False):
+                action()
+            x += len(name) + 4 + 3 + 4
+        pos += UIgraph.Point(0, 3)
+    pos += UIgraph.Point(0, 1)
+
+    # the rows: cached until the catalog, the window, the filters or the counts change
+    counts = SCAN.WINDOW_COUNTS.get(window) if window != 'all' else None
+    key = (version, PUZ.catalog_generation(), SCAN.BEHAVIOUR_GENERATION, window, tuple(filters), id(counts))
+    working = None  # what is being computed, at the top right; the table is empty meanwhile
+    classes = None
+    if data.get('rows_key') != key:
+        classes = SCAN.CATALOG.classifications_ready(entries, screenState.running_threads, screenState.lock)
+        if classes is None:
+            working = f"classifying the puzzles: {SCAN.CATALOG.classifications_progress():,} of {len(entries):,}"
+        elif window != 'all' and counts is None:
+            working = f"counting the spends in the last {window}..."
+    if data.get('rows_key') != key and working is None:
+        found = []
+        for e in entries:
+            c = classes[e.layered_puzzle_fingerprint]
+            layers = ' > '.join(e.sub_puzzle_names())
+            if filters and not puzzle_matches(e, c, layers.lower(), filters):
+                continue
+            n = e.seen_count if window == 'all' else counts.get(e.layered_puzzle_fingerprint, 0)
+            if window != 'all' and n == 0:
+                continue
+            found.append((n, e, c, layers))
+        found.sort(key=lambda r: -r[0])
+        rows = [[c['label'] or '-',
+                 PUZ.value_label('family', c['family'][0]) or '-',
+                 PUZ.value_label('puzzle_type', c['puzzle_type'][0]) or '-',
+                 PUZ.value_label('custody', c['custody'][0]) or '-',
+                 behaviour_cell(e.layered_puzzle_fingerprint),
+                 PUZ.project_label(c['project'][0]) or '-',
+                 layers, str(c['depth'] or '-'), f"{n:,}", UTILS.timestamp_to_date(e.last_seen) if e.last_seen else '-',
+                 c['status']]
+                for n, e, c, layers in found]
+        data['rows'], data['row_keys'], data['rows_key'] = rows, [r[1].layered_puzzle_fingerprint for r in found], key
+        data['rows_spends'] = sum(r[0] for r in found)
+    ready = data.get('rows_key') == key
+    rows, keys = (data.get('rows', []), data.get('row_keys', [])) if ready else ([], [])
+
+    window_text = 'all time' if window == 'all' else f"the last {window}"
+    if ready:
+        status = f"{len(rows):,} of {len(entries):,} puzzles | {data.get('rows_spends', 0):,} spends in {window_text}"
+    else:
+        status = f"{len(entries):,} puzzles"
+    put_text(win, status_pos, status, P_text, bold=True)
+    if working:
+        put_text(win, UIgraph.Point(max(status_pos.x + len(status) + 3, main_win_size.x - len(working) - 3),
+                                    status_pos.y), working, P_text, bold=True)
+
+    legend = ['name', 'family', 'puzzle type', 'custody', 'behaviour', 'project', 'layers', 'depth', f'spends {window}',
+              'last seen', 'status']
+    column_widths = [28, 9, 14, 9, 19, 16, 29, None, None, None, None]
+    if rows or (entries and not ready):
+        tab_scope = screenState.scopes.get(f"{main_scope.id}_all_puzzles")
+        if tab_scope is not None and tab_scope.data.get('rows_key') != data.get('rows_key'):
+            # new rows: create_tab compares only the first and the last row with its cache
+            tab_scope.data['cached_data_table'] = tab_scope.data['column_sizes'] = None
+            tab_scope.data['rows_key'] = data.get('rows_key')
+        tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2)
+        ELEMENTS.create_tab(win, screenState, main_scope, 'all_puzzles', rows, keys, fresh_table_colors(rows),
+                            False, pos, tab_size, keyboardState, scopeAction_open_puzzle, True, False,
+                            legend, column_widths)
+    else:
+        put_text(win, pos + UIgraph.Point(0, 1),
+                 "no puzzles: scan the chain in the puzzle scanner view" if not entries else "no puzzles match", P_text)
+
+    for draw in sorted(menus, key=lambda draw: draw(True) is screenState.activeScope):
+        draw(False)
+
+
+# the lists of puzzle_types.json: menu name -> field
+PUZZLE_LISTS = {'families': 'family', 'puzzle types': 'puzzle_type', 'custodies': 'custody', 'projects': 'project'}
+NEW_LIST_VALUE = '(new)'
+
+
+def screen_puzzle_lists(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """The lists that classify the puzzles, one view each"""
+    puzzle_submenu(stdscr, keyboardState, screenState, fullNodeState,
+                   [(name, lambda *args, field=field, **kwargs: screen_puzzle_list(field, *args, **kwargs))
+                    for name, field in PUZZLE_LISTS.items()])
+
+
+LIST_EDIT_ACTIONS = ('save', 'cancel')
+
+
+def press_list_row(scope: Scope, screenState: ScreenState, *args):
+    """enter on a row of a list table: the screen reads data['pressed'] (modify or delete it)"""
+    scope.data['pressed'] = True
+    return scope
+
+
+def list_value_lock(field: str, value: str, seen: int):
+    """Why the value can not be deleted, None if it can"""
+    if value == NEW_LIST_VALUE:
+        return "it is not saved yet"
+    if value in PUZ.CODE_VALUES.get(field, ()):
+        return "the code uses it"
+    uses = PUZ.value_uses(field, value)
+    if uses:
+        return f"{uses:,} catalog entries use it" if uses > 1 else "a catalog entry uses it"
+    if seen:
+        return f"{seen:,} puzzles seen are classified with it" if seen > 1 else "a puzzle seen is classified with it"
+    if value not in PUZ.field_entries(field):
+        return "it is a source of the catalog, not a value of the list"
+    return None
+
+
+def screen_puzzle_list(field: str, stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """A list of puzzle_types.json: the new value and delete buttons, the values in a table, a
+    strip under it (what happens, save / cancel of an edit). Enter on a row opens it in the
+    table (an empty line above and below it): ←→ choose a cell (a frame on it), enter edits it,
+    ↓ goes to save / cancel, esc cancels. delete goes into the table with a red selection: enter
+    on a row asks to delete it. A value used by the code, the catalog or the puzzles seen can
+    not be deleted (gray)"""
+    active_scope: Scope = screenState.activeScope
+    main_scope: Scope = active_scope.main_scope
+    screenState.scope_exec_args = [screenState]
+    main_scope.update_2d()
+    data = main_scope.data
+    title = next(name for name, f in PUZZLE_LISTS.items() if f == field)
+
+    win, main_win_size, pos = puzzle_screen_win(stdscr, screenState, title)
+
+    entries_by_id = PUZ.field_entries(field)
+    values = PUZ.field_values(field)  # projects: also the ones only named by the sources
+    entries, _ = SCAN.CATALOG.snapshot()
+    # the puzzles seen of each value (and so if it can be deleted): the table waits for them
+    classes = SCAN.CATALOG.classifications_ready(entries, screenState.running_threads, screenState.lock)
+    working = None if classes is not None else \
+        f"classifying the puzzles: {SCAN.CATALOG.classifications_progress():,} of {len(entries):,}"
+    if working:
+        put_text(win, UIgraph.Point(main_win_size.x - len(working) - 3, 2), working,
+                 screenState.colorPairs["body"], bold=True)
+        values = []
+        data['edit'] = None
+    seen = {}
+    for c in (classes or {}).values():
+        if field == 'project':
+            for p in set((c['project'][0] or '').split(' + ')):
+                seen[p] = seen.get(p, 0) + 1
+        else:
+            seen[c[field][0]] = seen.get(c[field][0], 0) + 1
+
+    cells = ['label', 'description'] + (['role', 'sources'] if field == 'project' else [])
+    legend = cells + ['catalog entries', 'puzzles seen', 'used by']
+    column_widths = [24, 60] + ([10, 40] if field == 'project' else []) + [None, None, None]
+
+    def cell_texts(v):
+        e = {} if v == NEW_LIST_VALUE else (entries_by_id.get(v) or {})
+        return {'label': e.get('label', '' if v == NEW_LIST_VALUE else v), 'description': e.get('description', ''),
+                'role': e.get('role', 'app'), 'sources': ', '.join(e.get('sources', []))}
+
+    # the scopes: the new value and delete buttons and the table, elements of the screen; the
+    # edit of a row, a child of the table: esc goes back to it
+    tab_name = f'list_{field}'
+    if f"{main_scope.id}_{tab_name}" not in screenState.scopes:
+        scope = Scope(f"{main_scope.id}_{tab_name}", main_scope.screen, screenState)
+        scope.parent_scope = scope.main_scope = main_scope
+        scope.exec = ScopeActions.activate_scope
+        scope.exec_own = press_list_row
+        scope.base_point = pos + UIgraph.Point(0, 3)
+        main_scope.sub_scopes[scope.name] = scope
+    tab_scope = screenState.scopes[f"{main_scope.id}_{tab_name}"]
+    edit_scope = ELEMENTS.action_strip_scope(screenState, tab_scope, 'edit')
+    # enter runs its own action, never a sub scope (the cell prompt is one)
+    edit_scope.sub_scope_selected = None
+    banner_scope = ELEMENTS.confirm_banner_scope(screenState, main_scope, 'delete_value_banner')
+    typing_scope = screenState.scopes.get(f"{edit_scope.id}_cell")
+
+    edit = data.get('edit')  # {'value': id or NEW_LIST_VALUE, 'draft': {cell: text}, 'typing': cell or None}
+    active = screenState.activeScope
+    if edit and active not in (edit_scope, typing_scope) and active.parent_scope is not typing_scope:
+        # esc out of the edit: nothing is saved
+        data['edit'] = edit = None
+    if data.get('delete_mode') and active is not tab_scope and banner_scope not in (active, active.parent_scope):
+        data['delete_mode'] = False  # esc out of the table, or the banner closed
+    delete_mode = data.get('delete_mode', False)
+
+    def message(text, error=False):
+        data['list_message'], data['list_error'] = text, error
+
+    def current_value():
+        if edit:
+            return edit['value']
+        n = len(values) + (1 if edit and edit['value'] == NEW_LIST_VALUE else 0)
+        if not n:
+            return None
+        return NEW_LIST_VALUE if tab_scope.cursor % n == len(values) else values[tab_scope.cursor % n]
+
+    # enter on a row: open it for an edit, or (delete mode) ask to delete it
+    current = current_value()
+    if tab_scope.data.pop('pressed', False) and current is not None and not edit:
+        message('')
+        if not delete_mode:
+            data['edit'] = edit = dict(value=current, draft=cell_texts(current), typing=None)
+            edit_scope.cursor, edit_scope.cursor_x = 0, 0
+            screenState.activeScope = edit_scope
+        elif (lock := list_value_lock(field, current, seen.get(current, 0))):
+            message(f"can not delete it: {lock}", True)
+        else:
+            data['delete_value'] = current
+            banner_scope.cursor_x = 1  # cancel is selected when the banner opens
+            screenState.activeScope = banner_scope
+
+    # the buttons above the table: new value (a new row at the end of the table, in edit),
+    # delete (into the table, enter deletes the row)
+    new_button = ELEMENTS.create_button(win, screenState, main_scope, 'new value', pos,
+                                        custom_scope_function=ScopeActions.press_enter, button_type='execution')
+    delete_button = ELEMENTS.create_button(win, screenState, main_scope, 'delete',
+                                           pos + UIgraph.Point(len('new value') + 9 + 2, 0),
+                                           custom_scope_function=ScopeActions.press_enter, button_type='execution')
+    pos += UIgraph.Point(0, 3)
+    if new_button.data.pop('pressed_enter', False) and not working:
+        message('')
+        data['edit'] = edit = dict(value=NEW_LIST_VALUE, draft=cell_texts(NEW_LIST_VALUE), typing='label')
+        edit_scope.cursor, edit_scope.cursor_x = 0, 0
+        screenState.activeScope = edit_scope
+    if delete_button.data.pop('pressed_enter', False) and not working:
+        message('')
+        data['delete_mode'] = delete_mode = True
+        main_scope.select_sub_scope_2d(tab_scope)  # the table is the selected element: its frame
+        main_scope.update_2d()
+        screenState.activeScope = tab_scope
+
+    # the edit: row 0 the cells of the row, row 1 save / cancel in the strip
+    if edit:
+        if typing_scope is not None and typing_scope.data.pop('pressed_enter', False):
+            edit['draft'][edit['typing']] = typing_scope.data['prompt']
+            edit['typing'] = edit['typing_open'] = None
+            if edit['value'] == NEW_LIST_VALUE:
+                # a new value is filled cell after cell: the next one (a role is not typed: the
+                # frame goes on it), after the last one save
+                if edit_scope.cursor_x + 1 < len(cells):
+                    edit_scope.cursor_x += 1
+                    if cells[edit_scope.cursor_x] != 'role':
+                        edit['typing'] = cells[edit_scope.cursor_x]
+                else:
+                    edit_scope.cursor = 1
+        elif edit['typing'] and edit.get('typing_open') and screenState.activeScope is edit_scope:
+            edit['typing'] = edit['typing_open'] = None  # esc in the cell: its new text is not kept
+        edit_scope.cursor %= 2
+        if edit.get('row') != edit_scope.cursor:
+            # the strip starts at save, the cells at the cell left there
+            edit['row'], edit['cell'] = edit_scope.cursor, edit_scope.cursor_x if edit_scope.cursor == 1 else edit.get('cell', 0)
+            edit_scope.cursor_x = 0 if edit_scope.cursor == 1 else edit['cell']
+        n = len(cells) if edit_scope.cursor == 0 else len(LIST_EDIT_ACTIONS)
+        edit_scope.cursor_x = max(0, min(edit_scope.cursor_x, n - 1))
+        if edit_scope.data.pop('pressed', False):
+            if edit_scope.cursor == 0:
+                cell = cells[edit_scope.cursor_x]
+                if cell == 'role':
+                    roles = list(PUZ.PROJECT_ROLES)
+                    edit['draft']['role'] = roles[(roles.index(edit['draft']['role']) + 1) % len(roles)]
+                else:
+                    edit['typing'] = cell
+            elif LIST_EDIT_ACTIONS[edit_scope.cursor_x] == 'cancel':
+                data['edit'] = edit = None
+                screenState.activeScope = tab_scope
+            else:
+                d = edit['draft']
+                sources = [x.strip() for x in d['sources'].split(',') if x.strip()] if field == 'project' else None
+                try:
+                    value = PUZ.save_list_value(field, None if edit['value'] == NEW_LIST_VALUE else edit['value'],
+                                                d['label'], d['description'],
+                                                d['role'] if field == 'project' else None, sources)
+                    message(f"saved in puzzle_types.json: {PUZ.value_label(field, value)}")
+                    data['edit'] = edit = None
+                    entries_by_id, values = PUZ.field_entries(field), PUZ.field_values(field)
+                    if value in values:
+                        data['edit_was_open'] = values.index(value)
+                    screenState.activeScope = tab_scope
+                except ValueError as e:
+                    message(f"not saved: {e}", True)
+
+    if not edit and 'edit_was_open' in data:
+        # the edit closed: the cursor back on the row (the empty line above it is gone)
+        tab_scope.cursor = data.pop('edit_was_open')
+
+    # a message is about the row it was given on
+    current = current_value()
+    if data.get('message_row') != current:
+        data['message_row'] = current
+        message('')
+
+    rows, keys = [], []
+    for v in values + ([NEW_LIST_VALUE] if edit and edit['value'] == NEW_LIST_VALUE else []):
+        texts = dict(cell_texts(v), **(edit['draft'] if edit and edit['value'] == v else {}))
+        row = [texts[c] for c in cells] + \
+              ['' if v == NEW_LIST_VALUE else f"{PUZ.value_uses(field, v):,}",
+               '' if v == NEW_LIST_VALUE else f"{seen.get(v, 0):,}",
+               'code' if v in PUZ.CODE_VALUES.get(field, ()) else '']
+        if edit and edit['value'] == v:
+            # the row in edit opens: an empty line above and below it, the cursor on it
+            empty = [''] * len(row)
+            rows += [empty, row, empty]
+            keys += [None, v, None]
+            tab_scope.cursor = len(rows) - 2
+        else:
+            rows.append(row)
+            keys.append(v)
+    if edit:
+        data['edit_was_open'] = values.index(edit['value']) if edit['value'] in values else max(0, len(values) - 1)
+
+    # the table leaves 2 lines: its selection line and the strip
+    tab_pos = pos
+    tab_size = UIgraph.Point(main_win_size.x - 2, max(6, min(len(rows) + 4, main_win_size.y - pos.y - 4)))
+    colors = fresh_table_colors(rows)
+    background_like = None
+    if edit:
+        # the opened row on the background of its empty lines (the other one: the rows
+        # alternate), the columns it can not change gray
+        open_idx = tab_scope.cursor
+        background_like = {open_idx: open_idx + 1}
+        for j in range(len(cells), len(legend)):
+            colors[open_idx][j] = screenState.colors["gray"]
+    if delete_mode:
+        # the rows that can not be deleted are gray
+        for i, v in enumerate(keys):
+            if v is not None and list_value_lock(field, v, seen.get(v, 0)):
+                colors[i] = [screenState.colors["gray"]] * len(legend)
+    if tab_scope.data.get('rows_shape') != (working is None, len(rows)):
+        # the columns are sized on the rows: again when they arrive (empty while classifying)
+        tab_scope.data['rows_shape'] = (working is None, len(rows))
+        tab_scope.data['column_sizes'] = tab_scope.data['cached_data_table'] = None
+    ELEMENTS.create_tab(win, screenState, main_scope, tab_name, rows, keys, colors,
+                        False, tab_pos, tab_size, keyboardState, press_list_row, True, False,
+                        legend, column_widths, no_cache=True, background_like=background_like,
+                        P_frame=screenState.colorPairs["error"] if delete_mode else None,
+                        P_row_select=screenState.colorPairs["error_white"] if delete_mode else None)
+
+    # the opened row: its cells are text fields (the color of the prompts), a frame
+    # on the selected one, the text field of create_prompt while it is edited
+    x_starts = (tab_scope.data.get('column_sizes') or (None, None, None))[1]
+    line = 3 + tab_scope.cursor - tab_scope.data.get('idx_first_element', 0)  # 3: the legend
+    row_y = tab_pos.y + line
+    if edit and x_starts and len(x_starts) >= len(cells) and tab_pos.y + 3 <= row_y < tab_pos.y + tab_size.y:
+        soft_row = line % 2 == 1  # the rows alternate from the soft background (before the inversion)
+        C_row = screenState.colors["tab_dark" if soft_row else "tab_soft"]
+        # the cells that can be changed: the text field of the prompts (not typed in: green on dark green)
+        P_cell = screenState.colorPairs["text_field"]
+
+        # the opened row is wider than the table's columns: each column 2 more (grow) and moved
+        # 1 + grow * its index to the right, less if the last column would go past the right edge
+        n_cols = len(x_starts)
+        row_texts = [str(t) for t in rows[tab_scope.cursor]] if tab_scope.cursor < len(rows) else [''] * n_cols
+        table_end = tab_size.x - 2  # the last column of the table before its scroll bar
+        room = table_end - (x_starts[-1] + len(row_texts[-1]) + 1)
+        grow = max(0, min(2, (room - 1) // max(1, n_cols - 1)))
+
+        def cell_box(c):
+            x = tab_pos.x + x_starts[c] + 1 + grow * c
+            end = tab_pos.x + (x_starts[c + 1] + 1 + grow * (c + 1) if c + 1 < n_cols else table_end)
+            return UIgraph.Point(x, row_y), max(4, end - x - 2)
+
+        # the row drawn again with the wider columns: the background, the columns that can not
+        # be changed in gray, then the fields
+        P_row = UIgraph.addCustomColorTuple((screenState.colors["chia_green"], C_row), screenState.cursesColors)
+        P_row_gray = UIgraph.addCustomColorTuple((screenState.colors["gray"], C_row), screenState.cursesColors)
+        ELEMENTS.create_text(win, UIgraph.Point(tab_pos.x, row_y), ' ' * (table_end + 1), P_row)
+        for c in range(len(cells), min(n_cols, len(row_texts))):
+            cell_pos, width = cell_box(c)
+            ELEMENTS.create_text(win, cell_pos, ' ' + row_texts[c][:width - 1], P_row_gray)
+
+        for c, cell in enumerate(cells):
+            if cell == edit['typing'] and edit_scope.cursor == 0 and c == edit_scope.cursor_x:
+                continue  # create_prompt draws it
+            cell_pos, width = cell_box(c)
+            text = edit['draft'][cell]
+            text = text if len(text) < width else text[:width - 4] + '...'
+            ELEMENTS.create_text(win, cell_pos, ' ' + text.ljust(width - 1), P_cell, True)
+        if edit_scope.cursor == 0 and edit_scope.cursor_x < len(cells):
+            cell_pos, width = cell_box(edit_scope.cursor_x)
+            if edit['typing']:
+                # the text field of the other prompts (e.g. the search of the full node view): it
+                # is drawn as selected (only for this frame: enter on the edit is not sent to it)
+                typing_scope = screenState.scopes.get(f"{edit_scope.id}_cell")
+                edit_scope.sub_scope_selected = typing_scope
+                typing_scope = ELEMENTS.create_prompt(win, screenState, keyboardState, edit_scope, 'cell',
+                                                      cell_pos + UIgraph.Point(1, 0), '', width - 1, P_cell,
+                                                      False, False, custom_scope_function=ScopeActions.press_enter)
+                edit_scope.sub_scope_selected = typing_scope
+                # the column before the field (the text of the other cells starts after a space)
+                win.addstr(cell_pos.y, cell_pos.x, ' ',
+                           curses.color_pair(screenState.colorPairs["text_field"]) | curses.A_REVERSE)
+                typing_scope.main_scope = main_scope  # create_prompt makes its parent the main scope
+                if screenState.activeScope is not typing_scope:
+                    typing_scope.data['prompt'] = edit['draft'][edit['typing']]
+                    typing_scope.data['cursor'] = len(typing_scope.data['prompt'])
+                    typing_scope.mode = TYPES.ScopeMode.INSERT  # the next key is already text
+                    screenState.activeScope = typing_scope
+                    edit['typing_open'] = True
+            ELEMENTS.draw_cell_frame(win, screenState, cell_pos, width, bool(edit['typing']), C_row)
+
+    # the strip under the table
+    strip_pos = tab_pos + UIgraph.Point(0, tab_size.y + 1)
+    active = screenState.activeScope
+    info, info_error = data.get('list_message') or '', data.get('list_error', False)
+    if edit:
+        selected = edit_scope.cursor_x if active is edit_scope and edit_scope.cursor == 1 else None
+        if not info:
+            what = 'new value' if edit['value'] == NEW_LIST_VALUE else 'modify'
+            info = f"{what}: {edit['draft']['label'] or '(no label yet)'}"
+        ELEMENTS.create_action_strip(win, screenState, strip_pos, tab_size.x, LIST_EDIT_ACTIONS, selected,
+                                     info=info, info_error=info_error)
+        if active is edit_scope:
+            if edit_scope.cursor == 0:
+                screenState.footer_text += "| next role=enter " if cells[edit_scope.cursor_x] == 'role' \
+                    else "| edit cell=enter "
+                screenState.footer_text += "| save=↓ "
+            screenState.footer_text += "| cancel=esc "
+        elif active is typing_scope:
+            screenState.footer_text += "| keep=enter | undo=esc "
+    else:
+        if delete_mode and not info and current is not None:
+            label = PUZ.value_label(field, current)
+            lock = list_value_lock(field, current, seen.get(current, 0))
+            info = f"{label}: can not be deleted, {lock}" if lock else f"{label}: not used, it can be deleted"
+        ELEMENTS.create_action_strip(win, screenState, strip_pos, tab_size.x, (), info=info, info_error=info_error)
+        if active is tab_scope:
+            screenState.footer_text += "| delete=enter | stop deleting=esc " if delete_mode else "| modify=enter "
+
+    value = data.get('delete_value')
+    if value is not None:
+        lines = [f"Delete \"{PUZ.value_label(field, value)}\" from the {title}?",
+                 "It is removed from catalog/puzzle_types.json: no code, catalog entry or puzzle seen uses it."]
+        if ELEMENTS.create_confirm_banner(win, screenState, main_scope, 'delete_value_banner', lines, 'delete it'):
+            try:
+                label = PUZ.value_label(field, value)
+                PUZ.delete_list_value(field, value)
+                message(f"deleted: {label}")
+                values = PUZ.field_values(field)
+                tab_scope.cursor = min(tab_scope.cursor, max(0, len(values) - 1))
+                data['message_row'] = values[tab_scope.cursor] if values else None
+            except ValueError as e:
+                message(f"not deleted: {e}", True)
+            data['delete_value'] = None
+            screenState.activeScope = main_scope
+
+
+FROM_THE_LAYERS = '(from the layers)'  # the first value of a list: no override
+
+
+PUZZLE_DETAIL_PAGES = ['structure', 'spends', 'example spend', 'edit']
+
+
+def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+    """One layered puzzle fingerprint: what it is on the title row, and a page for each tab
+    (PUZZLE_DETAIL_PAGES, ←→ on the screen): the layers, the spends, the example spend run, the
+    name and the values to edit"""
 
     height = screenState.screen_size.y
     width = screenState.screen_size.x
@@ -5376,6 +6465,7 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     active_scope: Scope = screenState.activeScope
     main_scope: Scope = active_scope.main_scope
     screenState.scope_exec_args = [screenState]
+    # ←→ switch the page (cursor_x), ↑↓ go through the elements of the page
     main_scope.update()
 
     win = createFullSubWin(stdscr, screenState, height, width)
@@ -5386,87 +6476,48 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
     P_text = screenState.colorPairs["body"]
     P_title = screenState.colorPairs["xch"]
 
-    pos = UIgraph.Point(1,1)
-    ELEMENTS.create_text_double_space(win, screenState, pos, 'puzzles', P_title, C_background,
+    layered_puzzle_fingerprint = main_scope.data['layered_puzzle_fingerprint']
+    entry = SCAN.CATALOG.get(layered_puzzle_fingerprint)
+    if entry is None:
+        # the counts were deleted (scan everything) since the view was opened
+        put_text(win, UIgraph.Point(1, 1), "this puzzle is not in the catalog any more: go back (esc)", P_text)
+        return
+    c = entry.classification()
+
+    ##### title, and what the puzzle is on its row (rule 1)
+    pos = UIgraph.Point(1, 1)
+    ELEMENTS.create_text_double_space(win, screenState, pos, 'puzzle', P_title, C_background,
                                       3, True, inv_color=False)
-    pos += UIgraph.Point(0,3)
+    values = ' · '.join(PUZ.value_label(field, c[field][0]) or '-'
+                        for field in ('family', 'puzzle_type', 'custody', 'project'))
+    put_text(win, pos + UIgraph.Point(len('puzzle') + 4, 1), f"{c['label']} | {c['status']} | {values}", P_text)
+    pos += UIgraph.Point(0, 4)
 
-    entries, version = SCAN.CATALOG.snapshot()
-    # derived from the layers (PUZ.classify_key): the custody walk is cached per key
-    classes = {e.puzzle_key: e.classification() for e in entries}
-    entries.sort(key=lambda e: -e.seen_count)
-    status_count = {status: 0 for status in PUZZLE_VIEWS}
-    for c in classes.values():
-        status_count[c['status']] += 1
-
-    # left/right switch between the unknown and the known puzzles (like the address viewer),
-    # enter goes into the list and esc comes back. Each list keeps its cursor
-    views = list(PUZZLE_VIEWS)
-    view = views[main_scope.cursor_x % len(views)]
-    tab_name = f"puzzles_{view}"
-
-    chain = SCAN.CHAIN_SCANNER
-    mempool = SCAN.MEMPOOL_SCANNER
-    put_text(win, pos, (f"chain scan (last {CONF.PUZZLE_SCAN_COIN_LIMIT:,} spent coins): {chain.status} | "
-                        f"blocks {chain.blocks_scanned}/{chain.blocks_total} | coins scanned {chain.coins_scanned:,}"), P_text)
-    pos += UIgraph.Point(0,1)
-    put_text(win, pos, f"mempool scan: {mempool.status} | transactions {len(mempool.txs):,}", P_text)
-    pos += UIgraph.Point(0,2)
-
-    # list selector: tabs drawn like the address viewer, touching the table below. They are
-    # drawn after the table, so the line under the selected tab joins the table border
+    page = PUZZLE_DETAIL_PAGES[main_scope.cursor_x % len(PUZZLE_DETAIL_PAGES)]
     pos_tab_title = pos
-    pos += UIgraph.Point(0, 2)
-    screenState.footer_text += "| switch list=←→ "
+    if screenState.activeScope is main_scope:
+        screenState.footer_text += "| switch page=←→ "
+    tabs_width = sum(len(f" {name.upper()} ") + 2 for name in PUZZLE_DETAIL_PAGES)
+    menu_draws = []
+    match page:
+        case 'structure':
+            puzzle_detail_layers(win, screenState, keyboardState, main_scope, entry, pos + UIgraph.Point(0, 2), main_win_size)
+        case 'spends':
+            puzzle_detail_spends(win, screenState, keyboardState, main_scope, entry, c, pos, main_win_size,
+                                 pos.x + tabs_width + HEAT_TOP_GAP)
+        case 'example spend':
+            puzzle_detail_example(win, screenState, keyboardState, main_scope, entry, pos + UIgraph.Point(0, 2), main_win_size)
+        case 'edit':
+            menu_draws = puzzle_detail_edit(win, screenState, keyboardState, main_scope, entry, c,
+                                            pos + UIgraph.Point(0, 4), main_win_size)
 
-    # name (or a label made from the classification), then the classification
-    legend = ['name', 'family', 'puzzle type', 'custody', 'project', 'layers', 'seen', 'first seen in', 'last seen']
-    column_widths = [28, 9, 14, 9, 16, 38, None, None, None]
-    rows = []
-    keys = []
-    for e in entries:
-        c = classes[e.puzzle_key]
-        if c['status'] != view:
-            continue
-        rows.append([
-            c['label'] or '-',
-            c['family'][0] or '-',
-            c['puzzle_type'][0] or '-',
-            c['custody'][0] or '-',
-            c['project'][0] or '-',
-            ' > '.join(e.sub_puzzle_names()),
-            f"{e.seen_count:,}",
-            e.source,
-            UTILS.timestamp_to_date(e.last_seen),
-        ])
-        keys.append(e.puzzle_key)
-    if rows:
-        tab_size = UIgraph.Point(main_win_size.x - 2, main_win_size.y - pos.y - 2)
-        ELEMENTS.create_tab(win,
-                            screenState,
-                            main_scope,
-                            tab_name,
-                            rows,
-                            keys,
-                            fresh_table_colors(rows),
-                            False,
-                            pos,
-                            tab_size,
-                            keyboardState,
-                            scopeAction_open_puzzle,
-                            True,
-                            False,
-                            legend,
-                            column_widths)
-    else:
-        put_text(win, pos + UIgraph.Point(0, 1), f"no {PUZZLE_VIEWS[view]} puzzles yet", P_text)
-
+    ##### the tabs, after the page: the ▀ under the selected one is the top border of the table (rule 2)
     P_tab_title = screenState.colorPairs["title"]
     P_tab_soft = screenState.colorPairs["tab_soft"]
     pos = pos_tab_title
-    for status, label in PUZZLE_VIEWS.items():
-        text = f" {label.upper()} puzzles ({status_count[status]}) "
-        selected = status == view
+    for name in PUZZLE_DETAIL_PAGES:
+        text = f" {name.upper()} "
+        selected = name == page
         P_used = P_title if selected else P_tab_title
         ELEMENTS.create_text_double_space(win, screenState, pos, text, P_used, C_background, 3, True)
         underline_pos = pos + UIgraph.Point(0, 2)
@@ -5476,58 +6527,235 @@ def screen_puzzles(stdscr, keyboardState, screenState, fullNodeState: FullNodeSt
             ELEMENTS.create_text(win, underline_pos, ' ' * (len(text) + 2), P_used, True)
         pos += UIgraph.Point(len(text) + 2, 0)
 
+    # run copy/paste action or other pending stuffs (the copy banner of a table)
+    if len(screenState.pending_action) > 0:
+        for i, fn in screenState.pending_action:
+            fn()
+        screenState.pending_action = []
+    # last, the open one at the end: its list is drawn over the rest
+    for draw in sorted(menu_draws, key=lambda draw: draw(True) is screenState.activeScope):
+        draw(False)
 
-FROM_THE_LAYERS = '(from the layers)'  # the first value of a list: no override
+
+def field_pairs_table(win, screenState: ScreenState, keyboardState, main_scope: Scope, name: str,
+                      left: list, right: list, legend: list, pos: UIgraph.Point, max_y: int) -> int:
+    """A table of two field / value pairs a row ([field, value] rows on the left and on the
+    right), the right pair from the middle; it scrolls when it is taller than max_y - pos.y.
+    y copies a value of the selected row. Return its height"""
+    rows = [(left[n] if n < len(left) else ['', '']) + (right[n] if n < len(right) else ['', ''])
+            for n in range(max(len(left), len(right)))] or [['', '', '', '']]
+    size = UIgraph.Point(win.getmaxyx()[1] - 2, min(len(rows) + 4, max(max_y - pos.y, 6)))
+    # two field columns of 13, the values share the rest (the separators and the frame take 44).
+    # create_tab shrinks a column to its text and gives the space left to all the columns: the
+    # formatters pad the left value and the right field, so the right pair starts at the middle
+    # (a formatter changes only the width, y copies the value without the spaces)
+    left_width = max((size.x - 44) // 2, 10)
+    right_width = max(size.x - 44 - left_width, 10)
+    # the right value is padded too: short values would leave space to the other columns
+    ELEMENTS.create_tab(win, screenState, main_scope, name, rows,
+                        [str(n) for n in range(len(rows))], fresh_table_colors(rows), False,
+                        pos, size, keyboardState, scopeAction_nothing, True, False, legend,
+                        column_widths=[13, left_width, 13, right_width],
+                        formatters=[None, lambda v: v.ljust(left_width), lambda v: v.ljust(13),
+                                    lambda v: v.ljust(right_width)],
+                        no_cache=True)
+    return size.y
 
 
-def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: FullNodeState, figlet=False):
+PUZZLE_SPENDS_STYLE = None  # count_style('spends'), made when the screen is first drawn
 
-    height = screenState.screen_size.y
-    width = screenState.screen_size.x
 
-    active_scope: Scope = screenState.activeScope
-    main_scope: Scope = active_scope.main_scope
-    screenState.scope_exec_args = [screenState]
-    main_scope.update_2d()
+def puzzle_spends_series(fingerprint: str, first_seen: float):
+    """The spends of a fingerprint for the heat map, each at the time of its block
+    (puzzle_spends_blocks; DB_PUZZLES, a few seconds for the busiest puzzles: run it in a thread)"""
+    conn = SCAN.CATALOG.connection()
+    try:
+        pairs = conn.execute(
+            "SELECT t.timestamp, b.spends FROM puzzles p JOIN puzzle_spends_blocks b ON b.puzzle_id = p.id "
+            "JOIN block_times t ON t.height = b.height WHERE p.layered_puzzle_fingerprint = ?",
+            (fingerprint,)).fetchall()
+    finally:
+        conn.close()
+    # before the first spend there is nothing to count: no data
+    start = (first_seen // SCAN.DAY) * SCAN.DAY if first_seen else 0
+    return HEAT.CountSeries(pairs, start)
 
-    win = createFullSubWin(stdscr, screenState, height, width)
-    win.bkgd(' ', curses.color_pair(screenState.colorPairs["body"]))
-    main_win_size = UIgraph.Point(win.getmaxyx()[1], win.getmaxyx()[0])
 
-    C_background = screenState.colors["background"]
+def puzzle_detail_spends(win, screenState: ScreenState, keyboardState, main_scope: Scope, entry, c: dict,
+                         pos: UIgraph.Point, main_win_size: UIgraph.Point, top_left: int):
+    """The spends page: the spends in time (a heat map right under the tabs, rule 10), then the
+    counts and the behaviour of its spends"""
+    global PUZZLE_SPENDS_STYLE
     P_text = screenState.colorPairs["body"]
-    P_title = screenState.colorPairs["xch"]
+    P_error = screenState.colorPairs["error"]
+    data = main_scope.data
 
-    puzzle_key = main_scope.data['puzzle_key']
-    entry = SCAN.CATALOG.get(puzzle_key)
-    c = entry.classification()
-    name, family, status = c['name'], c['family'][0], c['status']
+    left = [['spent', f"{entry.seen_count:,} times"],
+            ['first seen in', entry.source],
+            ['first seen', UTILS.timestamp_to_date(entry.first_seen)],
+            ['last seen', UTILS.timestamp_to_date(entry.last_seen)]]
+    if entry.first_height is not None:
+        left.append(['heights', f"{entry.first_height:,}-{entry.last_height:,}"])
+    left += [['example coin', f"0x{entry.example_coin_id}"],
+             ['example spend', f"at height {entry.example_height:,}" if entry.example_height else 'seen in the mempool'],
+             ['fingerprint', entry.layered_puzzle_fingerprint]]
+    right = behaviour_rows(entry.layered_puzzle_fingerprint, c['custody'][0])
+    table_rows = max(len(left), len(right)) + 4
 
-    pos = UIgraph.Point(1,1)
-    ELEMENTS.create_text_double_space(win, screenState, pos, 'puzzle', P_title, C_background,
-                                      3, True, inv_color=False)
-    pos += UIgraph.Point(0,3)
+    # the graph gets the rows the table does not need, at least GRAPH_MIN; the table scrolls
+    GRAPH_MIN = 8
+    graph_top = pos.y + 3  # the tab titles, then the half line
+    space = main_win_size.y - graph_top - 2  # the footer, and the line between the two
+    table_h = min(table_rows, max(space - GRAPH_MIN - 1, 6))
+    graph_h = space - table_h - 1
 
-    def value(field):
-        v, origin = c[field]
-        return f"{v or '-'} ({origin})"
-    lines = [
-        f"status: {status} | name: {name or '-'}" + ('' if name else f" | label: {c['label']}"),
-        f"family: {value('family')} | puzzle type: {value('puzzle_type')} | custody: {value('custody')} | "
-        f"project: {value('project')}",
-        f"seen {entry.seen_count:,} times | first seen in: {entry.source} | "
-        f"first seen: {UTILS.timestamp_to_date(entry.first_seen)} | last seen: {UTILS.timestamp_to_date(entry.last_seen)}",
-        f"example coin: 0x{entry.example_coin_id} | "
-        f"{'spent at height ' + format(entry.example_height, ',') if entry.example_height else 'seen in the mempool'}",
-        f"puzzle key: {puzzle_key}",
-    ]
-    for line in lines:
-        put_text(win, pos, line, P_text)
-        pos += UIgraph.Point(0,1)
-    pos += UIgraph.Point(0,1)
+    # the series, read in a thread when the page is opened (a second for the busiest puzzles)
+    if 'spends_series' not in data:
+        data['spends_series'] = None
+        data['spends_error'] = None
 
-    ##### name and classification: the name is text, the other values come from the lists of
-    ##### catalog/puzzle_types.json (edited there, reloaded by rototiller)
+        def load():
+            try:
+                data['spends_series'] = puzzle_spends_series(entry.layered_puzzle_fingerprint, entry.first_seen)
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"PUZZLE DETAIL spends not read: {e}")
+                data['spends_error'] = str(e)
+        thread = threading.Thread(target=load, daemon=True)
+        thread.start()
+        screenState.running_threads.append(thread)
+
+    if graph_h >= 4:
+        # the half line under the tabs goes on to the right end of the graph, which starts right under it
+        put_text(win, UIgraph.Point(pos.x, graph_top - 1), '▀' * (main_win_size.x - 2), screenState.colorPairs["tab_dark_bg"])
+        graph_pos = UIgraph.Point(pos.x, graph_top)
+        series = data['spends_series']
+        if series is not None:
+            if PUZZLE_SPENDS_STYLE is None:
+                PUZZLE_SPENDS_STYLE = count_style('spends')
+            view = data.setdefault('spends_view', HEAT.HeatmapView(HEAT.SCALE_INDEX['24h']))
+            ELEMENTS.create_time_heatmap(win, screenState, keyboardState, main_scope, "puzzle_spends_graph",
+                                         graph_pos, UIgraph.Point(main_win_size.x - 2, graph_h),
+                                         series, view, PUZZLE_SPENDS_STYLE, top_left=top_left)
+        elif data['spends_error']:
+            put_text(win, graph_pos + UIgraph.Point(0, 1), f"the spends were not read: {data['spends_error']}", P_error, bold=True)
+        else:
+            put_text(win, graph_pos + UIgraph.Point(0, 1), "reading the spends...", P_text, bold=True)
+        table_pos = UIgraph.Point(pos.x, graph_top + graph_h + 1)
+    else:
+        table_pos = UIgraph.Point(pos.x, pos.y + 2)  # no room for the graph: the table under the tabs
+    field_pairs_table(win, screenState, keyboardState, main_scope, "puzzle_spends_info", left, right,
+                      ['spends', '', 'behaviour', ''], table_pos, main_win_size.y - 2)
+
+
+def example_spend_job(coin_id: str, height: int) -> dict:
+    """The example spend, from the node (run it in a thread): the coin, its solution and the
+    conditions the puzzle outputs with it"""
+    out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=coin_id, height=height)
+    if not out:
+        return {'error': 'the node did not answer (is it running?)'}
+    puzzle = PyProgram.fromhex(out['puzzle_reveal'].removeprefix('0x'))
+    solution = PyProgram.fromhex(out['solution'].removeprefix('0x'))
+    cost, result = puzzle.run_with_cost(EXAMPLE_SPEND_MAX_COST, solution)
+    conditions = []
+    for condition in result.as_iter():
+        items = list(condition.as_iter())
+        if not items or items[0].atom is None:
+            continue
+        opcode = int.from_bytes(items[0].atom, 'big')
+        try:
+            name = PUZ.get_opcode_name(opcode)
+        except ValueError:
+            name = f"opcode {opcode}"
+        args = [disassemble(arg) for arg in items[1:]]
+        meaning = ''
+        if opcode == 51 and len(items) >= 3:  # CREATE_COIN: puzzle hash, amount, memos
+            meaning = f"{PUZ.puzzle_hash_to_address(items[1].atom)} gets {mojos(items[2].as_int())}"
+        conditions.append([name, ' '.join(args), meaning])
+    # only text and numbers leave the thread: a Program (a chia_rs LazyNode) can not be used in
+    # another thread, the app panics
+    return {'coin': out['coin'], 'solution': disassemble(solution), 'solution_hex': out['solution'].removeprefix('0x'),
+            'cost': int(cost), 'conditions': conditions}
+
+
+EXAMPLE_SPEND_MAX_COST = 11_000_000_000  # a block
+
+
+def mojos(amount: int) -> str:
+    return f"{amount:,} {'mojo' if amount == 1 else 'mojos'}"
+
+
+def puzzle_detail_example(win, screenState: ScreenState, keyboardState, main_scope: Scope, entry,
+                          pos: UIgraph.Point, main_win_size: UIgraph.Point):
+    """The example spend page: the example coin spent on chain, with its solution, run: the
+    conditions it outputs (the delegated puzzle of a standard coin is in the solution)"""
+    P_text = screenState.colorPairs["body"]
+    P_error = screenState.colorPairs["error"]
+    data = main_scope.data
+    if not entry.example_height:
+        put_text(win, pos + UIgraph.Point(0, 1), "the example was seen in the mempool, it is not spent on chain yet", P_text, bold=True)
+        return
+    # from the node, in a thread, once (rule 6)
+    if 'example_spend' not in data:
+        data['example_spend'] = None
+
+        def load():
+            try:
+                data['example_spend'] = example_spend_job(entry.example_coin_id, entry.example_height)
+            except Exception as e:
+                logging(debug_logger, "DEBUG", f"PUZZLE DETAIL example spend: {e}")
+                data['example_spend'] = {'error': str(e)}
+        thread = threading.Thread(target=load, daemon=True)
+        thread.start()
+        screenState.running_threads.append(thread)
+    spend = data['example_spend']
+    if spend is None:
+        put_text(win, pos + UIgraph.Point(0, 1), "asking the node for the example spend...", P_text, bold=True)
+        return
+    if 'error' in spend:
+        put_text(win, pos + UIgraph.Point(0, 1), f"the example spend was not read: {spend['error']}", P_error, bold=True)
+        return
+
+    coin = spend['coin']
+    puzzle_hash = coin['puzzle_hash'].removeprefix('0x')
+    left = [['coin', f"0x{entry.example_coin_id}"],
+            ['parent', coin['parent_coin_info']],
+            ['puzzle hash', f"0x{puzzle_hash}"],
+            ['address', PUZ.puzzle_hash_to_address(bytes.fromhex(puzzle_hash))]]
+    right = [['amount', mojos(coin['amount'])],
+             ['spent at', f"height {entry.example_height:,}"],
+             ['cost', f"{spend['cost']:,}"],
+             ['conditions', f"{len(spend['conditions']):,}"]]
+    left.append(['solution', spend['solution']])
+    right.append(['solution hex', spend['solution_hex']])
+    max_y = main_win_size.y - 2
+    used = field_pairs_table(win, screenState, keyboardState, main_scope, "puzzle_example_info", left, right,
+                             ['spend', '', '', ''], pos, max_y)
+    pos += UIgraph.Point(0, used + 2)
+
+    if pos.y + 7 > max_y:
+        return  # no room for the conditions
+    rows = [[str(n)] + row for n, row in enumerate(spend['conditions'])] or [['', 'no conditions', '', '']]
+    size = UIgraph.Point(main_win_size.x - 2, max(min(len(rows) + 4, max_y - pos.y), 6))
+    # args and meaning share what the number and the condition name leave (with the separators)
+    free = size.x - 3 - 6 - 26 - 3 - 3 - 3 - 3
+    args_width = max(free * 45 // 100, 10)
+    meaning_width = max(free - args_width, 10)
+    ELEMENTS.create_tab(win, screenState, main_scope, "puzzle_example_conditions", rows,
+                        [str(n) for n in range(len(rows))], fresh_table_colors(rows), False,
+                        pos, size, keyboardState, scopeAction_nothing, True, False,
+                        ['#', 'condition', 'args', 'meaning'],
+                        column_widths=[3, 26, args_width, meaning_width], no_cache=True)
+
+
+def puzzle_detail_edit(win, screenState: ScreenState, keyboardState, main_scope: Scope, entry, c: dict,
+                       pos: UIgraph.Point, main_win_size: UIgraph.Point) -> list:
+    """The edit page: the name, and the values of the lists of catalog/puzzle_types.json (edited
+    there, reloaded by rototiller) as drop-down buttons, in one column. Return the draws of the
+    drop-downs: they go last, so an open list is on top of the rest"""
+    P_text = screenState.colorPairs["body"]
+    layered_puzzle_fingerprint = entry.layered_puzzle_fingerprint
+    name = c['name']
+
     name_length = 40
     scope_name = ELEMENTS.create_prompt(win, screenState, keyboardState, main_scope, 'puzzle_name', pos,
                                         "Name: ", name_length, P_text, True, False,
@@ -5537,29 +6765,32 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
                                         custom_scope_function=ScopeActions.press_enter, button_type='execution')
     pos += UIgraph.Point(0, 3)
 
-    # drop-down buttons, two a row; the first value of each list is the one the layers give
-    # (no override). They are drawn at the end of the screen, so an open list is on top.
-    overrides_now = CONF.KNOWN_LAYERED_PUZZLES.get(puzzle_key, {})
-    derived = PUZ.classify_key(puzzle_key, None, overrides=False)
+    # drop-down buttons, one a row; the first value of each list is the one the layers give (no override)
+    overrides_now = CONF.KNOWN_LAYERED_PUZZLES.get(layered_puzzle_fingerprint, {})
+    derived = PUZ.classify_fingerprint(layered_puzzle_fingerprint, None, overrides=False)
     menus = []
-    for field, label, values in (('family', 'family', list(CONF.PUZZLE_TYPES.get('families', {}))),
-                                 ('puzzle_type', 'puzzle type', list(CONF.PUZZLE_TYPES.get('types', {}))),
-                                 ('custody', 'custody', list(CONF.PUZZLE_TYPES.get('custodies', {}))),
-                                 ('project', 'project', PUZ.known_projects())):
+    for field, label in (('family', 'family'), ('puzzle_type', 'puzzle type'), ('custody', 'custody'),
+                         ('project', 'project')):
+        values = PUZ.field_values(field)
         if overrides_now.get(field) and overrides_now[field] not in values:
             values = values + [overrides_now[field]]  # set by hand, not in the list: kept
-        menus.append((field, label, [f"{derived[field][0] or 'none'} {FROM_THE_LAYERS}"] + values))
+        # the menu shows the labels, the id is saved
+        values, first = [PUZ.value_label(field, v) for v in values], PUZ.value_label(field, derived[field][0])
+        menus.append((field, label, [f"{first or 'none'} {FROM_THE_LAYERS}"] + values))
     value_width = max(len(option) for _, _, options in menus for option in options)
-    button_width = lambda label: len(label) + 2 + value_width + 7  # see create_button_menu
-    x_column_2 = pos.x + max(button_width(menus[0][1]), button_width(menus[2][1])) + 2
+    # 4 rows a button (an empty line between them), 3 on a short terminal (the half blocks of
+    # the borders still leave a line between them); a button past the window is not drawn
+    max_y = main_win_size.y - 1
+    step = 4 if pos.y + 4 * len(menus) - 1 <= max_y else 3
     menu_scopes, menu_draws = {}, []
     for n, (field, label, options) in enumerate(menus):
-        point = UIgraph.Point(pos.x if n % 2 == 0 else x_column_2, pos.y + 4 * (n // 2))
+        point = UIgraph.Point(pos.x, pos.y + step * n)
+        if point.y + 3 > max_y:
+            break
         draw = lambda only_init, label=label, options=options, point=point: ELEMENTS.create_button_menu(
             win, screenState, main_scope, label, options, point, only_init, ScopeActions.press_enter, value_width)
         menu_scopes[field] = (draw(True), options)
         menu_draws.append(draw)
-    pos += UIgraph.Point(0, 8)
     if any(scope.selected() or scope is screenState.activeScope for scope, _ in menu_scopes.values()):
         screenState.footer_text += "| lists: catalog/puzzle_types.json "
 
@@ -5567,8 +6798,12 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
         main_scope.data['prompts_filled'] = True
         scope_name.data['prompt'] = name or ''
         scope_name.data['cursor'] = len(scope_name.data['prompt'])
-        for field, (scope, options) in menu_scopes.items():
-            now = overrides_now.get(field)
+    # each list on its saved value when it is made (a button not drawn on a short terminal is
+    # made later, when the terminal is taller)
+    for field, (scope, options) in menu_scopes.items():
+        if not scope.data.get('filled'):
+            scope.data['filled'] = True
+            now = PUZ.value_label(field, overrides_now.get(field))
             scope.cursor = options.index(now, 1) if now in options[1:] else 0
 
     # enter on the name, on the button or on a list saves everything
@@ -5579,10 +6814,12 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
             save = True
     if save:
         new_name = scope_name.data['prompt'].strip()
-        overrides = {field: options[scope.cursor] if scope.cursor else None
-                     for field, (scope, options) in menu_scopes.items()}
+        # the fields without a button (not drawn) keep their saved value
+        overrides = {field: overrides_now.get(field) for field, _, _ in menus}
+        overrides.update({field: PUZ.value_id(field, options[scope.cursor]) if scope.cursor else None
+                          for field, (scope, options) in menu_scopes.items()})
         try:
-            SCAN.CATALOG.set_classification(puzzle_key, new_name, overrides)
+            SCAN.CATALOG.set_classification(layered_puzzle_fingerprint, new_name, overrides)
             # a value is saved only when it is not the one the layers give
             set_fields = [f for f, v in overrides.items() if v and v != derived[f][0]]
             screenState.footer_message = (f"saved in layered_puzzles.json: {new_name or '(no name)'}"
@@ -5590,11 +6827,7 @@ def screen_puzzle_detail(stdscr, keyboardState, screenState, fullNodeState: Full
         except ValueError as e:
             # a catalog file edited by hand is not valid json, it is not overwritten
             screenState.footer_message = f"not saved, fix the json in resources/puzzles/catalog first: {e}"
-
-    puzzle_detail_layers(win, screenState, keyboardState, main_scope, entry, pos, main_win_size)
-    # last, the open one at the end: its list is drawn over the rest
-    for draw in sorted(menu_draws, key=lambda draw: draw(True) is screenState.activeScope):
-        draw(False)
+    return menu_draws
 
 
 def puzzle_detail_layers(win, screenState: ScreenState, keyboardState, main_scope: Scope, entry,
@@ -5614,8 +6847,12 @@ def puzzle_detail_layers(win, screenState: ScreenState, keyboardState, main_scop
             main_scope.data['nodes'] = []
     nodes = main_scope.data['nodes']
 
-    put_text(win, pos, f"layers and curried puzzles: {len(nodes)}", P_text, bold=True)
-    pos += UIgraph.Point(0,1)
+    # a table that does not fit is not drawn (a short terminal): its title, its 6 rows and the
+    # frame under it; curses can not make a window past the screen
+    def fits(y):
+        return y + 1 + 6 + 1 <= main_win_size.y - 1
+    if not fits(pos.y):
+        return
 
     legend = ['level', 'curried', 'puzzle', 'mod hash', 'curried args']
     rows = []
@@ -5708,7 +6945,9 @@ def puzzle_detail_layers(win, screenState: ScreenState, keyboardState, main_scop
     data_rows.append(['whole puzzle clvm', '', '', main_scope.data['clvm']])
     data_keys = [str(n) for n in range(len(data_rows))]
 
-    put_text(win, pos, f"level {node['level']}: {node['puzz_name']} | select a row and press y to copy", P_text, bold=True)
+    if not fits(pos.y):
+        return
+    put_text(win, pos, f"level {node['level']}: {node['puzz_name']}", P_text, bold=True)
     pos += UIgraph.Point(0,1)
     space_left = main_win_size.y - pos.y - 1
     data_tab_size = UIgraph.Point(main_win_size.x - 2, min(len(data_rows) + 5, max(space_left // 2, 6)))
@@ -5756,12 +6995,6 @@ def puzzle_detail_layers(win, screenState: ScreenState, keyboardState, main_scop
         put_text(win, pos, value[i:i + text_width], P_text)
         pos += UIgraph.Point(0,1)
 
-    # run copy/paste action or other pending stuffs
-    if len(screenState.pending_action) > 0:
-        for i, fn in screenState.pending_action:
-            fn()
-        screenState.pending_action = []
-
 
 REORG_VIEWS = ['forks', 'depth', 'by depth']
 HEAT_TOP_GAP = 2  # the columns between the tabs and the texts of a heat map on their row
@@ -5786,7 +7019,7 @@ REORG_FORK_STYLE = HEAT.HeatmapStyle(
     zero=(20, 30, 65),
     count_name='forks',
     names=[((20, 30, 65), 'no fork'), (REORG_FORK_RAMP[len(REORG_FORK_RAMP) // 2], '½ busiest'),
-           (REORG_FORK_RAMP[-1], 'busiest')])
+           (REORG_FORK_RAMP[-1], 'busiest {max}')])
 # depth 1 is the common fork, so the colors are on a fixed scale: 3 blocks and more is deep
 REORG_DEPTH_RAMP = HEAT.make_ramp([(70, 130, 200), (240, 170, 40), (235, 75, 45)], 7)
 REORG_DEPTH_STYLE = HEAT.HeatmapStyle(

@@ -2,6 +2,7 @@ import src.LOGtiller as LOG
 from enum import Enum
 from pathlib import Path
 import json
+import os
 import threading
 import src.TEXTtiller as TEXT
 
@@ -76,6 +77,8 @@ KNOWN_PUZZLES_PATH = f'{PUZZLE_CATALOG_DIR}/puzzles.json'
 KNOWN_LAYERED_PUZZLES_PATH = f'{PUZZLE_CATALOG_DIR}/layered_puzzles.json'
 PUZZLE_TYPES_PATH = f'{PUZZLE_CATALOG_DIR}/puzzle_types.json'
 UNKNOWN_LAYERED_PUZZLES_PATH = f'{PUZZLE_HARVESTING_DIR}/layered_puzzles.json'
+# the behaviour hints, made by resources/puzzles/chain_scan/behaviour.py (docs/classification.md)
+BEHAVIOUR_HINTS_PATH = './resources/puzzles/chain_scan/behaviour.json'
 
 # the found puzzles were next to the catalog before (2026-11): move them once, so a user
 # who updates keeps them
@@ -112,8 +115,8 @@ UNKNOWN_LAYERED_PUZZLES_LOCK = threading.Lock()
 LAYERED_PUZZLES_LOCK = threading.Lock()
 
 ## puzzle scanners
-PUZZLE_SCAN_COIN_LIMIT = 10_000  # the chain scanner looks only at the last N spent coins
-PUZZLE_SCAN_CHAIN_DELAY = 60  # s, wait between chain scans for new blocks
+PUZZLE_SCAN_CHAIN_DELAY = 20  # s, wait between chain scans for new blocks (a block every ~18 s)
+PUZZLE_SCAN_WORKERS = max(1, (os.cpu_count() or 2) // 2)  # processes of the full scan of the chain
 PUZZLE_SCAN_MEMPOOL_DELAY = 10  # s, wait between mempool scans
 PUZZLE_SCAN_MEMPOOL_FAST_DELAY = 1  # s, wait between mempool scans while the block or mempool view is open
 PUZZLE_CATALOG_WATCH_DELAY = 2  # s, check if layered_puzzles.json or puzzle_types.json were edited by hand

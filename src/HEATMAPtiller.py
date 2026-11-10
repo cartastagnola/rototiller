@@ -17,6 +17,7 @@ WALL_ORIGIN for the summer time changes).
 
 import bisect
 import calendar
+import itertools
 import math
 import os
 import re
@@ -207,7 +208,8 @@ class HeatmapStyle:
     expected_rate: events per second when all is fine. The count of a cell is compared with the
         expected one (ratio 1 is the last ramp color). None: compared with the busiest cell in view
     fixed_max: compared with this value instead of the busiest cell, so the colors do not change
-        with the zoom (for a value that does not grow with the column duration, e.g. a depth)
+        with the zoom (for a value that does not grow with the column duration, e.g. a depth);
+        above it the color is the last ramp color (or `over`)
     presence: only happened or not, the last ramp color or `zero`
     zero: the color of a cell without events (None: the first ramp color)
     over: the color above over_ratio times the expected count (None: the last ramp color)
@@ -264,13 +266,20 @@ class HeatmapStyle:
         level = min(len(self.ramp) - 1, int(ratio * (len(self.ramp) - 1) + 0.5))
         return self.ramp[level]
 
-    def legend(self):
+    def legend(self, view_max: int = 0):
+        """(color, label) of each legend item. view_max: the busiest cell in view, written after
+        'busiest' (in names: the '{max}' of a label)"""
         if self.names:
-            return self.names
+            return [(color, label.format(max=f"{view_max:,}")) for color, label in self.names]
         if self.presence:
             return [(self.zero, 'no event'), (self.ramp[-1], 'event'), (self.no_data, 'no data')]
-        what = 'expected' if self.expected_rate else 'busiest'
-        items = [(self.zero, f'no {self.count_name}'), (self.ramp[len(self.ramp) // 2], f'½ {what}'), (self.ramp[-1], what)]
+        if self.expected_rate:
+            half, top = '½ expected', 'expected'
+        elif self.fixed_max:  # above it the color does not change
+            half, top = f'{self.fixed_max / 2:,g}', f'{self.fixed_max:,}+'
+        else:
+            half, top = '½ busiest', f'busiest {view_max:,}'
+        items = [(self.zero, f'no {self.count_name}'), (self.ramp[len(self.ramp) // 2], half), (self.ramp[-1], top)]
         if self.over:
             items.append((self.over, f'over {self.over_ratio}x'))
         return items + [(self.no_data, 'no data')]
@@ -344,6 +353,25 @@ class TimeSeries:
     def max_value(self, t0: float, t1: float):
         i0, i1 = self.index_range(t0, t1)
         return max(self.values[i0:i1], default=0)
+
+
+class CountSeries:
+    """Counts at a time each (e.g. the spends of a day, or 1 for one spend): the times sorted, and
+    the running sum of the counts, so count() of a cell is a difference. start: see EventSeries"""
+
+    def __init__(self, pairs, start: float = 0):
+        pairs = sorted(pairs)
+        self.times = array('d', (t for t, _ in pairs))
+        self.sums = array('q', [0])
+        self.sums.extend(itertools.accumulate(n for _, n in pairs))
+        self.start = start
+        self.version = 0
+
+    def __len__(self):
+        return self.sums[-1]
+
+    def count(self, t0: float, t1: float) -> int:
+        return self.sums[bisect.bisect_left(self.times, t1)] - self.sums[bisect.bisect_left(self.times, t0)]
 
 
 LINE_HEAD = re.compile(rb'\d{4}-\d\d-\d\d[T ]\d\d:')  # a log line that starts with its time
@@ -654,16 +682,32 @@ class HeatmapView:
             self.zoom_range = None
             self.recenter = True
 
-    def zoom_in(self):
-        """The selected macro column becomes the columns of the next scale down, its first macro
-        column selected"""
+    def zoom_in(self, has_data=None, now: float = None):
+        """The selected macro column becomes the columns of the next scale down. The selected macro
+        column is the most recent one with data (has_data(t0, t1) is True), so the cursor does not
+        land in an empty part; without data (or without has_data) the most recent one up to now"""
         target = zoom_in_scale(self.scale_idx)
         if target is None:
             return False
+        now = time.time() if now is None else now
         t0, t1 = self.selection()
         self.set_scale(target)
         self.zoom_range = (t0, t1)
-        self.cursor_time = t0
+        # the macro columns of the new scale in [t0, t1), from the one that holds now or t1 back
+        newest = None
+        col = column_index(max(t0, min(t1, now) - 1e-3), self.scale_idx)
+        while True:
+            w0, w1 = self.macro_wall(col)
+            m0, m1 = max(from_wall(w0), t0), min(from_wall(w1), t1)
+            if m1 <= t0:
+                break
+            if newest is None:
+                newest = m0
+            if has_data is None or has_data(m0, m1):
+                self.cursor_time = m0
+                return True
+            col = wall_column(w0 - 0.5, self.scale_idx)  # the last column of the macro column before
+        self.cursor_time = newest if newest is not None else t0
         return True
 
     def zoom_out(self):

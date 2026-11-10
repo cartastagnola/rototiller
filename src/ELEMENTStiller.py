@@ -21,7 +21,7 @@ from typing import List, Tuple, Dict, Union, Callable
 from datetime import datetime, timedelta
 
 from src.CONFtiller import (
-    debug_logger, logging, ScopeMode, SQL_TIMEOUT, BLOCK_MAX_COST, FIGLET)
+    debug_logger, logging, ScopeMode, SQL_TIMEOUT, BLOCK_MAX_COST)
 
 from src.TYPEStiller import Scope, ScopeActions, ScreenState, KeyboardState
 from src.UTILStiller import time_ago, human_mojo, human_int, Timer, truncate
@@ -432,7 +432,10 @@ def create_prompt(stdscr, screen_state: ScreenState, keyboard_state: KeyboardSta
         scope.data["short_invalid_data_message"] = 'Invalid'
 
     scope: Scope = screen_state.scopes[name]
-    scope.visible = True
+    if scope.parent_scope is not None:
+        scope.set_visible()  # also back in the parent's sub scopes after a frame hidden
+    else:
+        scope.visible = True
     scope.base_point = pos
     scope_exec_args = [screen_state]
     prompt = scope.data["prompt"]
@@ -722,6 +725,67 @@ def text_double_space(scr, pos: UIgraph.Point, text: str,
 #        None)  # chunk_data_parser=None)
 #
 
+# the filler under the last row of a table
+TAB_END_CHAR = '\u2571'  # ╱
+
+
+def create_tab_titles(scr, screenState: ScreenState, scope: Scope, pos: UIgraph.Point, titles: list,
+                      selected: int, max_width: int, P_selected=None, P_other=None) -> int:
+    """The titles of a tab selector (docs/ui-rules.md rule 2), drawn after the table they sit on:
+    the ▀ under the selected title is the table's top border. When they do not fit max_width,
+    the titles scroll so the selected one is always visible, and an arrow at the start (◀) or at
+    the end (▶) shows on which side there are more. The first visible title is kept in
+    scope.data, so the titles move only when the selection leaves the view.
+    Returns the x after the last thing drawn (for a status next to the tabs)."""
+    P_selected = P_selected if P_selected is not None else screenState.colorPairs["xch"]
+    P_other = P_other if P_other is not None else screenState.colorPairs["title"]
+    P_tab_soft = screenState.colorPairs["tab_soft"]
+    P_arrow = screenState.colorPairs["body"]
+    C_background = screenState.colors["background"]
+
+    n = len(titles)
+    selected = selected % n
+    widths = [len(t) + 2 for t in titles]  # create_text_double_space adds a space on each side
+    key = 'tab_titles_first'
+
+    if sum(widths) <= max_width:
+        first, last, arrows = 0, n - 1, False
+    else:
+        arrows = True
+        avail = max_width - 4  # an arrow and a space on each side
+        first = min(scope.data.get(key, 0), n - 1)
+        if selected < first:
+            first = selected
+        while first < selected and sum(widths[first:selected + 1]) > avail:
+            first += 1
+        last = first
+        while last + 1 < n and sum(widths[first:last + 2]) <= avail:
+            last += 1
+        # at the end, show as many titles as fit
+        while last == n - 1 and first > 0 and sum(widths[first - 1:last + 1]) <= avail:
+            first -= 1
+    scope.data[key] = first
+
+    x = pos.x
+    if arrows:
+        create_text(scr, UIgraph.Point(x, pos.y + 1), '◀' if first > 0 else ' ', P_arrow, True)
+        x += 2
+    for i in range(first, last + 1):
+        text = titles[i]
+        P_used = P_selected if i == selected else P_other
+        p = UIgraph.Point(x, pos.y)
+        create_text_double_space(scr, screenState, p, text, P_used, C_background, 3, True)
+        if i == selected:
+            create_text(scr, p + UIgraph.Point(0, 2), '▀' * widths[i], P_tab_soft, True)
+        else:
+            create_text(scr, p + UIgraph.Point(0, 2), ' ' * widths[i], P_used, True)
+        x += widths[i]
+    if arrows:
+        create_text(scr, UIgraph.Point(x + 1, pos.y + 1), '▶' if last < n - 1 else ' ', P_arrow, True)
+        x += 2
+    return x
+
+
 def create_tab(scr,
                screenState: ScreenState,
                parent_scope: Scope,
@@ -742,14 +806,21 @@ def create_tab(scr,
                chunk_loader: WDB.DataChunkLoader = None,
                chunk_data_parser=None,
                prepped_scope=None,
-               no_cache=False):
+               no_cache=False,
+               background_like=None,
+               P_frame=None,
+               P_row_select=None):
 
     """Create a beautiful and shining tab
     dataTable: 2dim data list
     data_table_keys: key used when something is selected
     position: relative to the parent win
     size: if it fit in the parent win
-    active: if we can select elements"""
+    active: if we can select elements
+    background_like: {row index: row index} a row drawn with the background of another row (the
+    rows alternate two backgrounds), e.g. the empty lines around a row opened for an edit
+    P_frame, P_row_select: the pairs of the selection frame and of the selected row while the
+    table is active, in place of green (e.g. red while enter deletes the row)"""
 
     ### name
     tab_name = f"{parent_scope.id}_{tab_name}"
@@ -850,44 +921,49 @@ def create_tab(scr,
     width_changed = scope.data.get('tab_width') != tab_width
     scope.data['tab_width'] = tab_width
 
-    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None or no_cache:
-        if width_changed:
-            scope.data['column_sizes'] = None
+    def own_copies():
+        """calc_size_column removes the columns that do not fit, and an empty table gets a row:
+        on copies, the screen's rows (often kept between frames) stay whole"""
+        nonlocal dataTable, data_table_color, data_table_legend, column_widths, formatters
+        scope.data['cached_source'] = dataTable  # the screen's rows, to compare the next frame
+        dataTable = [list(r) for r in dataTable]
+        data_table_color = [list(r) for r in data_table_color] if data_table_color else data_table_color
+        data_table_legend = list(data_table_legend) if data_table_legend is not None else None
+        column_widths = list(column_widths) if column_widths is not None else None
+        formatters = list(formatters) if formatters is not None else None
         scope.data['cached_data_table'] = dataTable
         scope.data['cached_data_table_color'] = data_table_color
         scope.data['cached_data_table_legend'] = data_table_legend
         scope.data['cached_column_widths'] = column_widths
         scope.data['cached_formatters'] = formatters
         scope.data['chunk_first_idx'] = chunk_first_idx
+
+    if 'cached_data_table' not in scope.data or scope.data['cached_data_table'] is None or no_cache:
+        # no_cache: new copies every frame, with all their columns, so new column sizes too
+        # (sizes kept from a frame that dropped columns do not fit the copies: IndexError)
+        if width_changed or no_cache:
+            scope.data['column_sizes'] = None
+        own_copies()
     else:
-        old_data_table = scope.data['cached_data_table']
+        old_source = scope.data.get('cached_source') or []
         old_first_idx = scope.data['chunk_first_idx']
 
-        # compare only the first element and the first chunk idx
-        # TODO: check also size of the windows change
-        if (dataTable and
-            len(dataTable[0]) == len(old_data_table[0]) and
-            dataTable[0] == old_data_table[0] and
-            dataTable[-1] == old_data_table[-1] and
+        # compare only the first and the last row, and the first chunk idx
+        if (dataTable and old_source and
+            len(dataTable[0]) == len(old_source[0]) and
+            dataTable[0] == old_source[0] and
+            dataTable[-1] == old_source[-1] and
             chunk_first_idx == old_first_idx and
             not width_changed and
             not screenState.screen_resized):
 
-            dataTable = old_data_table
+            dataTable = scope.data['cached_data_table']
             data_table_color = scope.data['cached_data_table_color']
             data_table_legend = scope.data['cached_data_table_legend']
             column_widths = scope.data['cached_column_widths']
             formatters = scope.data['cached_formatters']
-            # TODO: load teh cache?
         else:
-            # TODO: implent cache filling later in the code
-            scope.data['cached_data_table'] = dataTable
-            scope.data['cached_data_table_color'] = data_table_color
-            scope.data['cached_data_table_legend'] = data_table_legend
-            scope.data['cached_column_widths'] = column_widths
-            scope.data['cached_formatters'] = formatters
-            # scope.data['transposed'] = None  # NOT IMPL
-            # scope.data['casted_data_table'] = None  # we do not cast...
+            own_copies()
             scope.data['column_sizes'] = None
 
     lapper.clocking("we chunk")
@@ -994,7 +1070,9 @@ def create_tab(scr,
     P_selected = screenState.colorPairs["tab_selected"]
     P_win_selected = screenState.colorPairs["win_selected"]
     if tab_scope_is_active:
-        P_win_selected = screenState.colorPairs["body"]
+        P_win_selected = screenState.colorPairs["body"] if P_frame is None else P_frame
+        if P_row_select is not None:
+            P_select = P_row_select
     P_win_background = screenState.colorPairs["tab_soft"]
 
     # background for custom colors
@@ -1107,8 +1185,10 @@ def create_tab(scr,
             table.addstr(row, 0, u' \u25A1 /\u25A0')
         else:
             table.addstr(row, 0, ' ')
-        for idx, leg_item in enumerate(data_table_legend):
-            table.addstr(row, x_colStart[idx], str(leg_item))
+        # only the items with a column: calc_size_column drops the columns that do not fit
+        # and trims the legend, but with the column sizes cached the legend comes in whole
+        for leg_item, x_col in zip(data_table_legend, x_colStart):
+            table.addstr(row, x_col, str(leg_item))
         table_color_pairs.reverse()  # to begin always with the soft color
         table_bk_colors.reverse()  # to begin always with the soft color
 
@@ -1126,8 +1206,11 @@ def create_tab(scr,
     sliced_dataTable = cast_table_items_to_string(sliced_raw_dataTable, formatters)
 
     for data_row, raw_data_row, data_idx in zip(sliced_dataTable, sliced_raw_dataTable, sliced_idx_dataTable):
-        C_custom_bk = table_bk_colors[row % 2]
-        P_current_attron = curses.color_pair(table_color_pairs[row % 2])  # calling it P_... is misleading
+        shade = row
+        if background_like and data_idx in background_like:
+            shade = row + background_like[data_idx] - data_idx
+        C_custom_bk = table_bk_colors[shade % 2]
+        P_current_attron = curses.color_pair(table_color_pairs[shade % 2])  # calling it P_... is misleading
         if data_idx == select and tab_scope_is_active:
             P_current_attron = curses.color_pair(P_select)
             scope_exec_args.append(data_table_keys[data_idx] if data_table_keys else None)
@@ -1222,10 +1305,8 @@ def create_tab(scr,
     table.attron(curses.color_pair(P_soft_bg) | curses.A_BOLD)
     while row <= (y_tabSize - height_low_bar):
         try:
-            # TODO: default terminal of ubuntu struggles doing a whole screen of this char
-            #table.addstr(row, 0, u'\u2571' * (x_tabSize))
-            #table.addstr(row, 0, u'\u002F' * (x_tabSize))
-            table.addstr(row, 0, '/' * (x_tabSize))
+            # TAB_END_CHAR: ╱, or / if a terminal is slow to draw it (GNOME Terminal was)
+            table.addstr(row, 0, TAB_END_CHAR * (x_tabSize))
         except:
             ### last line curses bug ###
             pass
@@ -1383,6 +1464,74 @@ def create_confirm_banner(stdscr, screenState: ScreenState, parent_scope: Scope,
         screenState.activeScope = parent_scope
         return True
     return False
+
+
+def action_strip_scope(screenState: ScreenState, parent_scope: Scope, name: str) -> Scope:
+    """Scope of an action strip (see create_action_strip): ←→ choose an action, enter sets
+    data['pressed'] (the screen reads it and runs the action at cursor_x), esc goes back to
+    the parent. It is not a sub scope of the parent: the parent activates it (e.g. enter on
+    a table row), the arrows of the parent never reach it"""
+    scope_name = f"{parent_scope.id}_{name}"
+    if scope_name not in screenState.scopes:
+        scope = Scope(scope_name, parent_scope.screen, screenState)
+        scope.parent_scope = parent_scope
+        scope.main_scope = parent_scope.main_scope
+        scope.exec = ScopeActions.activate_scope
+        scope.exec_own = lambda scope, *args: scope.data.__setitem__('pressed', True)
+    return screenState.scopes[scope_name]
+
+
+def create_action_strip(stdscr, screenState: ScreenState, pos: UIgraph.Point, width: int, actions: list,
+                        selected=None, disabled=(), info: str = '', info_error=False):
+    """A one line strip, under a table, with the actions on its selected row and a text on
+    the right (what the row is, why an action can not run, the result of the last one).
+    selected: the index of the action under the cursor while the strip is active, None otherwise;
+    disabled: the actions that can not run now, in gray"""
+    C_soft = screenState.colors["tab_soft"]
+    P_strip = screenState.colorPairs["tab_soft"]
+    P_action = screenState.colorPairs["title"]
+    P_selected = screenState.colorPairs["xch"]
+    P_disabled = UIgraph.addCustomColorTuple((screenState.colors["gray"], C_soft), screenState.cursesColors)
+    P_error = UIgraph.addCustomColorTuple((screenState.colors["red"], C_soft), screenState.cursesColors)
+    max_x = stdscr.getmaxyx()[1]
+    width = min(width, max_x - pos.x - 1)
+    if width <= 0:
+        return
+    stdscr.addstr(pos.y, pos.x, ' ' * width, curses.color_pair(P_strip))
+    x = pos.x + 1
+    for n, action in enumerate(actions):
+        text = f" {action} "
+        if x + len(text) >= pos.x + width:
+            break
+        if n == selected:
+            pair = P_selected
+        elif action in disabled:
+            pair = P_disabled
+        else:
+            pair = P_action
+        stdscr.addstr(pos.y, x, text, curses.color_pair(pair) | curses.A_BOLD)
+        x += len(text) + 2
+    x += 2
+    room = pos.x + width - x - 1
+    if info and room > 3:
+        text = info if len(info) <= room else info[:room - 3] + '...'
+        stdscr.addstr(pos.y, x, text, curses.color_pair(P_error if info_error else P_strip))
+
+
+def draw_cell_frame(stdscr, screenState: ScreenState, pos: UIgraph.Point, width: int, active: bool,
+                    C_background=None):
+    """The selection frame (bottom ▀ and right ▌, joined by ▘) around one cell of a table,
+    drawn on the table: gray while the cell is selected, green while it is being edited.
+    C_background: the background of the row under the frame (default: the screen's)"""
+    C_frame = screenState.colors["chia_green" if active else "gray"]
+    P_frame = UIgraph.addCustomColorTuple((C_frame, C_background or screenState.colors["background"]),
+                                          screenState.cursesColors)
+    max_y, max_x = stdscr.getmaxyx()
+    if pos.y + 1 >= max_y or pos.x + width >= max_x:
+        return
+    stdscr.addstr(pos.y + 1, pos.x, u'▀' * width, curses.color_pair(P_frame))
+    stdscr.addstr(pos.y, pos.x + width, u'▌', curses.color_pair(P_frame))
+    stdscr.addstr(pos.y + 1, pos.x + width, u'▘', curses.color_pair(P_frame))
 
 
 def create_save_address_banner(stdscr, screenState: ScreenState, parent_scope: Scope,
@@ -2201,7 +2350,7 @@ def create_selector(stdscr, screenState: ScreenState, parent_scope: Scope, name:
         scope.exec = ScopeActions.activate_scope
 
     scope: Scope = screenState.scopes[name]
-    scope.visible = True
+    scope.set_visible()  # also back in the parent's sub scopes after a frame hidden
     scope_exec_args = [screenState]
 
     if scope is screenState.activeScope:
@@ -2254,7 +2403,7 @@ def create_button(stdscr, screenState: ScreenState, parent_scope: Scope, name: s
         scope.exec = custom_scope_function
 
     scope: Scope = screenState.scopes[name]
-    scope.visible = True
+    scope.set_visible()  # also back in the parent's sub scopes after a frame hidden
     scope.base_point = point + UIgraph.Point(0,1)  # move base point to the text
     scope_exec_args = [screenState]
 
@@ -2465,14 +2614,16 @@ def normalize_menu(menu_list: List, scope: Scope, max_size: int) -> Tuple[List[s
         #                       f"last_idx: {last_idx} "
         #                       f"sel_orig: {selected} "
         #                       )
+        # the window follows the selection in one step (e.g. from the last item to the first)
         if selected >= last_idx:
-            first_idx += 1
-            last_idx += 1
+            first_idx = selected - max_size + 1
+            last_idx = first_idx + max_size
         elif selected < first_idx:
-            first_idx -= 1
-            last_idx -= 1
+            first_idx = selected
+            last_idx = first_idx + max_size
         if last_idx > len_menu:
-            raise 'last idx too big'
+            # more rows than before (a bigger terminal): the last items at the bottom
+            first_idx = len_menu - max_size
         scope.data['first_idx'] = first_idx
         menu_list = menu_list[first_idx:last_idx]
         selected = selected - first_idx
@@ -2582,7 +2733,7 @@ def button_menu_cancel(scope: Scope, screenState: ScreenState, *args):
 
 def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
                        name: str, menu: List[str], point: UIgraph.Point, only_init: bool = False,
-                       custom_scope_function=None, value_width: int = None):
+                       custom_scope_function=None, value_width: int = None, C_background=None):
     """A drop-down button: it shows "name: value", the value is menu[scope.cursor].
     Enter opens the list over the button, the value in its place and the others above and
     under it; ↑↓ choose, enter keeps the value (custom_scope_function, default: back to the
@@ -2591,7 +2742,8 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
     the screen, so the open list is drawn over the rest.
     value_width: the value is padded to it, so the button keeps its size.
     The button is 3 rows from point; with the selection line, len(name) + 2 + value + 7
-    columns."""
+    columns.
+    C_background: the color under the button (default: the screen background), e.g. a panel"""
 
     name_str = name
     name = f"{parent_scope.id}_{name}"
@@ -2641,10 +2793,10 @@ def create_button_menu(stdscr, screenState: ScreenState, parent_scope: Scope,
     text_color = text_color_pair[0]
     default_background = UIgraph.customColors_findByValue(
         screenState.cursesColors,
-        screenState.colors["background"])
+        C_background if C_background is not None else screenState.colors["background"])
     default_selected = UIgraph.customColors_findByValue(
         screenState.cursesColors,
-        screenState.colors["yellow_bee"])
+        screenState.colors["gray"])  # the selection line of the buttons (create_button)
     # make the color calculated here as default colors
     text_color_background_clear = tuple(int(i * 1.2) for i in text_color_background)
     text_color_background_dark = tuple(int(i * 0.8) for i in text_color_background)
@@ -4017,9 +4169,9 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     2 rows above pos (the row of the tab titles), at the right: the value of the selection, the
     color legend and the names of the scales (the length of their macro column); top_left is the
     first free column of that row (after the tabs).
-    Lines: the top bands (the day of the hours), the column bands, the grid, the bottom line (its
-    part under the selected columns is yellow). A right line closes the grid,
-    yellow on the selected row in square mode; the two lines are drawn like the frame of a table,
+    Lines: the top bands (the day of the hours), the column bands (dark on white over the
+    selected columns), the grid, the bottom line (its part under the selected columns is white). A right line closes the grid,
+    white on the selected row in square mode; the two lines are drawn like the frame of a table,
     only when the graph is selected. It uses all of size.y.
     Return (scope, lines used)"""
 
@@ -4041,12 +4193,14 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     if not active:
         view.mode = 'column'
 
-    P_selection = UIgraph.addCustomColorTuple((screenState.colors["yellow_bee"], screenState.colors["background"]),
+    P_selection = UIgraph.addCustomColorTuple((screenState.colors["white"], screenState.colors["background"]),
                                               screenState.cursesColors)
     framed = active or scope.selected()  # the frame of the tables: ▌ on the right, ▀ under it
     P_frame = screenState.colorPairs["body" if active else "win_selected"]
     value_func = getattr(series, value_method)
 
+    # enter only when it does something (rule 3)
+    enter_hint = f"| {style.count_name}=enter " if scope_activation_func else ''
     if active:
         keys = keyboardState.keys
         if view.mode == 'column':
@@ -4054,14 +4208,14 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
                 view.move(dx=-1)
             if keyboardState.moveRight:
                 view.move(dx=1)
-            if 'i' in keys:
-                view.zoom_in()
+            if 'i' in keys:  # on the most recent macro column with data
+                view.zoom_in(has_data=lambda t0, t1: series.count(t0, t1) > 0)
             if 'o' in keys:
                 view.zoom_out()
             if 's' in keys:
                 view.mode = 'square'
             screenState.footer_text += (f"| column=←→ | zoom=i o | squares=s | now=0 "
-                                        f"| {style.count_name}=enter ")
+                                        + enter_hint)
         else:
             if keyboardState.moveLeft:
                 view.move(dx=-1)
@@ -4075,7 +4229,7 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
                 if key in HEATMAP_EXTEND_KEYS:
                     view.move(*HEATMAP_EXTEND_KEYS[key], extend=True)
             screenState.footer_text += (f"| move=←→↑↓ | more squares=shift+←→↑↓ | columns=esc | now=0 "
-                                        f"| {style.count_name}=enter ")
+                                        + enter_hint)
         if keyboardState.home:
             view.go_now()
     elif selected:
@@ -4155,15 +4309,24 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     # the axis bands: the background of the tabs (tab_soft) and the same color a little lighter
     P_axis = [UIgraph.addCustomColorTuple((screenState.colors["white"], UIgraph.addCustomColor(c, colors)), colors)
               for c in background]
+    P_axis_selection = UIgraph.addCustomColorTuple((screenState.colors["tab_dark"], screenState.colors["white"]), colors)
     column_fmt, top_fmt = HEATMAP_BAND_TEXT[view.scale_name]
     day_fmt = HEATMAP_DAY_TEXT.get(view.scale_name)
+    sel0, sel1 = view.selection_columns()
+    sel_x0, sel_x1 = max(sel0, view.left_col) - view.left_col, min(sel1, view.right_col) - view.left_col
     for y, unit, fmt, first_fmt in ((pos.y, HEAT.TOP_BAND[view.scale_name], top_fmt, day_fmt),
                                     (pos.y + 1, HEAT.COLUMN_BAND[view.scale_name], column_fmt, None)):
+        row_text = ' ' * view.cols
         if unit is None:  # no band on this row
-            put(y, x0, ' ' * view.cols, P_axis[0])
-            continue
-        for b, x, width, text in heatmap_band_row(view, unit, fmt, first_fmt):
-            put(y, x0 + x, f"{text:<{width}}", P_axis[b % 2])  # a gap after it
+            put(y, x0, row_text, P_axis[0])
+        else:
+            row_text = ''
+            for b, x, width, text in heatmap_band_row(view, unit, fmt, first_fmt):
+                put(y, x0 + x, f"{text:<{width}}", P_axis[b % 2])  # a gap after it
+                row_text += f"{text:<{width}}"
+        # the row right above the grid: dark on white over the selected columns, like the bottom line
+        if y == pos.y + 1 and sel_x0 <= sel_x1:
+            put(y, x0 + sel_x0, row_text[sel_x0:sel_x1 + 1], P_axis_selection)
     # the names of all the scales (their macro column) 2 rows above the graph (the row of the tab
     # titles), at its right end, in the colors of the tab bar, the selected one in green (xch): no
     # half line above them, the half line under them (the row above the graph) in their background.
@@ -4195,16 +4358,15 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
             top = cell_color(col, line * 2)
             bottom = cell_color(col, line * 2 + 1)
             put(y, x0 + col - view.left_col, '▀', pair(top, bottom))
-        # the selected row is the right line in yellow, not another character: ncurses compares the
+        # the selected row is the right line in white, not another character: ncurses compares the
         # lines by their characters only, so a character on one line only (e.g. ◀) moving to the
         # next line looks like the grid moved, and ncurses scrolls it and repaints it (flicker)
         P_right = P_selection if square_mode and cursor_row // 2 == line else P_frame
         put(y, x_right, '▌' if framed else ' ', P_right)
 
-    # the bottom line, yellow under the selected columns
+    # the bottom line, white under the selected columns
     y_bottom = pos.y + 2 + n_lines
     put(y_bottom, x0, '▀' * view.cols + '▘' if framed else ' ' * (view.cols + 1), P_frame)
-    sel0, sel1 = view.selection_columns()
     for col in range(max(sel0, view.left_col), min(sel1, view.right_col) + 1):
         put(y_bottom, x0 + col - view.left_col, '▀', P_selection)
 
@@ -4220,7 +4382,7 @@ def create_time_heatmap(win, screenState: ScreenState, keyboardState: KeyboardSt
     if start is None or t1_sel <= start:
         value += ", no data"
     column_text = f" | column {view.scale_name}, square {HEAT.human_duration(square)}"
-    legend = style.legend()
+    legend = style.legend(view_max)
     legend_w = 1 + sum(len(label) + 2 for _, label in legend) + HEATMAP_LEGEND_SPACE * (len(legend) - 1) + 1
     x_min = pos.x if top_left is None else top_left
     x_legend = x_names - HEATMAP_INFO_GAP - legend_w

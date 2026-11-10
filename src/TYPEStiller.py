@@ -104,12 +104,17 @@ class CacheCoinRecordType(IntEnum):
 
 
 class PuzzleStatus(StrEnum):
-    """Is the layer combination of a puzzle in the catalog (resources/puzzles/catalog)?
+    """How much of a puzzle's layer combination the catalog (resources/puzzles/catalog) knows:
+    UNKNOWN: a layer is not in catalog/puzzles.json;
+    RECOGNIZED: every layer is, the classification comes from the layers (nobody checked it);
+    VERIFIED: a person saved the combination in catalog/layered_puzzles.json (named it in roto,
+    or approved it on the review page) and is sure of its values.
     The names, puzzle types and families of the catalog are for people: they are edited by
     hand and can be renamed at any time, so the code never decides anything from them. To
     know what a coin is, the code checks the mod hashes of its layers."""
-    KNOWN = 'known'
     UNKNOWN = 'unknown'
+    RECOGNIZED = 'recognized'
+    VERIFIED = 'verified'
 
 
 @dataclass
@@ -669,7 +674,10 @@ class Scope():
             XY_sorted.append(row)
 
         if len(self.sub_scopes) > 0:
-            y = self.cursor % len(XY_sorted)
+            # keep the cursor a row index: ↑ from the first row would make it negative, and a
+            # row more or less (an element shown or hidden) would then move the selection
+            self.cursor %= len(XY_sorted)
+            y = self.cursor
             row_len = len(XY_sorted[y])
             if self.cursor_x >= row_len:
                 self.cursor_x = row_len - 1

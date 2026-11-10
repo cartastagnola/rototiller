@@ -201,6 +201,19 @@ def create_cache_blockchain_db(conn):
             "puzzle_hash BLOB PRIMARY KEY);"
         )
 
+        # the type of a puzzle hash that coins hinted to an address use (a CAT, an NFT...),
+        # classified once: the type of a puzzle hash never changes. metadata: the CAT tail or
+        # the NFT launcher id; verified: 1 when the hint was checked (a CAT hash rebuilt from
+        # the tail and the hint)
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS cached_hinted_puzzle_type ("
+            "puzzle_hash BLOB PRIMARY KEY, "
+            "puzzle_type TEXT, "
+            "metadata BLOB, "
+            "layered_name TEXT, "
+            "verified INT);"
+        )
+
         logging(debug_logger, "DEBUG", "WDB cached error C")
         # indexes
         ## puzzle hash
@@ -405,7 +418,58 @@ def retrive_cache_db_stats(conn, db_path: Path):
 
 
 CACHE_DATA_TABLES = ("cached_coin_record", "cached_address_info", "cached_memo_progress",
-                     "cached_sync_state", "cached_followed")
+                     "cached_sync_state", "cached_followed", "cached_hinted_puzzle_type")
+
+
+def load_hinted_puzzle_types(conn) -> dict:
+    """puzzle_hash -> (puzzle_type, metadata, layered_name, verified) of the hinted puzzle
+       hashes already classified (classify_hinted_group)"""
+    rows = conn.execute("SELECT puzzle_hash, puzzle_type, metadata, layered_name, verified "
+                        "FROM cached_hinted_puzzle_type").fetchall()
+    return {bytes(r[0]): (r[1], bytes(r[2]) if r[2] is not None else None, r[3], r[4]) for r in rows}
+
+
+def save_hinted_puzzle_type(conn, puzzle_hash, puzzle_type, metadata, layered_name, verified):
+    conn.execute("INSERT OR REPLACE INTO cached_hinted_puzzle_type "
+                 "(puzzle_hash, puzzle_type, metadata, layered_name, verified) VALUES (?,?,?,?,?)",
+                 (bytes(puzzle_hash), puzzle_type, metadata, layered_name, int(verified)))
+    conn.commit()
+
+
+def classify_hinted_group(hint, group: dict):
+    """(puzzle_type, metadata, layered_name, verified) of a puzzle hash of coins hinted to an
+       address (a group of FetchMaker.get_hinted_groups), with one RPC call: the puzzle of a
+       spent coin of the group, else the puzzle of the parent of one of its coins (a CAT comes
+       from a CAT, an NFT from its previous state). puzzle_type is the catalog type id ('CAT',
+       'NFT', 'VAULT'...) or None; metadata the CAT tail or the NFT launcher id; verified is True
+       when the CAT hash rebuilt from the tail and the hint is the puzzle hash"""
+    from chia.wallet.cat_wallet.cat_utils import CAT_MOD_HASH, CAT_MOD_HASH_HASH
+    from chia.wallet.util.curry_and_treehash import (curry_and_treehash, calculate_hash_of_quoted_mod_hash,
+                                                     shatree_atom)
+    if group['spent_coin'] is not None:
+        coin_id, height = group['spent_coin']
+    else:
+        coin_id, height = group['coin']
+    out = RPC.call_rpc_node('get_puzzle_and_solution', coin_id=coin_id.hex(), height=height)
+    program = PyProgram.fromhex(out['puzzle_reveal'])
+    names, hashes = PUZ.unroll_puzzle_to_names(program)
+    puzzle_type = PUZ.classify_fingerprint('|'.join(hashes), program)['puzzle_type'][0] or None
+    layered_name = PUZ.compare_unrolled_puzzle_to_known_layered_puzzles(hashes, program)[1]
+
+    metadata, verified = None, False
+    try:
+        _, args = program.uncurry()
+        if puzzle_type in ('CAT', 'REVOCABLE_CAT'):
+            metadata = args.at('rf').as_atom()  # (MOD_HASH TAIL_HASH INNER_PUZZLE)
+            if puzzle_type == 'CAT':
+                rebuilt = curry_and_treehash(calculate_hash_of_quoted_mod_hash(CAT_MOD_HASH), CAT_MOD_HASH_HASH,
+                                             shatree_atom(metadata), bytes32(bytes(hint)))
+                verified = bytes(rebuilt) == bytes(group['puzzle_hash'])
+        elif puzzle_type == 'NFT':
+            metadata = args.first().at('rf').as_atom()  # SINGLETON_STRUCT (MOD_HASH LAUNCHER_ID . LAUNCHER_PH)
+    except Exception:
+        UTILS.logging_traceback("HINTED CLASSIFY metadata")
+    return puzzle_type, metadata, layered_name, verified
 
 
 def clear_cache_db(conn):
@@ -2840,11 +2904,47 @@ class FetchMaker:
         return balance, unspent_coin_count, total_coin_count, peak_height
 
     @staticmethod
+    def get_hinted_groups(path: str, hint: bytes) -> list:
+        """The puzzle hashes of the coins hinted to an address (a CAT, an NFT...): one dict per
+           puzzle hash, the most recent first, with its counts and the coins to classify it.
+           Not its own coins: a wallet hints also the XCH it sends to itself.
+           Not a fetcher: read from the node DB with its hint index, fast also with thousands
+           of hinted coins"""
+        query = ("SELECT cr.puzzle_hash, cr.coin_name, cr.coin_parent, cr.confirmed_index, "
+                 "cr.spent_index, cr.amount FROM coin_record cr "
+                 "JOIN hints h ON cr.coin_name = h.coin_id WHERE h.hint = ? AND cr.puzzle_hash != h.hint")
+        conn = sqlite3.connect(path, uri=True, timeout=SQL_TIMEOUT)
+        try:
+            rows = conn.execute(query, (bytes(hint),)).fetchall()
+        finally:
+            conn.close()
+
+        groups = {}
+        for puzzle_hash, coin_name, coin_parent, confirmed_index, spent_index, amount in rows:
+            puzzle_hash = bytes(puzzle_hash)
+            g = groups.setdefault(puzzle_hash, {
+                'puzzle_hash': puzzle_hash, 'coins': 0, 'unspent': 0, 'unspent_amount': 0,
+                'last_height': 0, 'coin': None, 'spent_coin': None})
+            g['coins'] += 1
+            g['last_height'] = max(g['last_height'], confirmed_index, spent_index)
+            if spent_index <= 0:
+                g['unspent'] += 1
+                g['unspent_amount'] += int_from_bytes(amount)
+            # to classify it: a spent coin shows the puzzle of the puzzle hash itself, else the
+            # parent of a coin (the same kind of coin, a CAT or the NFT before)
+            if spent_index > 0 and g['spent_coin'] is None:
+                g['spent_coin'] = (bytes(coin_name), spent_index)
+            if g['coin'] is None or confirmed_index > g['coin'][1]:
+                g['coin'] = (bytes(coin_parent), confirmed_index)
+        return sorted(groups.values(), key=lambda g: -g['last_height'])
+
+    @staticmethod
     def get_hinted_amount_and_type_count_from_puzzle_hash(path: str, puzzle_hash: bytes):
         """Not a fetcher"""
 
-        query_unspent_hinted_coin_count = """ SELECT COUNT(*) FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE spent_index <= 0 AND h.hint = ? """
-        query_total_hinted_coin_count = """ SELECT COUNT(*) FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE h.hint = ? """
+        # not the coins of the address itself: a wallet hints also the XCH it sends to itself
+        query_unspent_hinted_coin_count = """ SELECT COUNT(*) FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE spent_index <= 0 AND h.hint = ? AND cr.puzzle_hash != h.hint """
+        query_total_hinted_coin_count = """ SELECT COUNT(*) FROM coin_record cr JOIN hints h ON cr.coin_name = h.coin_id WHERE h.hint = ? AND cr.puzzle_hash != h.hint """
 
         conn = sqlite3.connect(path, uri=True, timeout=SQL_TIMEOUT)
 
